@@ -51,6 +51,12 @@ class IntegrationProfileEndToEndTest extends IntegrationApplicationTest {
                 IntegrationProfileResponse.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
         assertThat(exchange(secondTenantId, HttpMethod.DELETE, BASE_PATH + "/" + firstProfile.id(), null,
                 Void.class).getStatusCode()).isEqualTo(HttpStatus.NOT_FOUND);
+        assertThat(exchange(firstTenantId, HttpMethod.GET, BASE_PATH + "/" + firstProfile.id(), null,
+                IntegrationProfileResponse.class).getBody()).isNotNull().satisfies(profile -> {
+                    assertThat(profile.businessDomain()).isEqualTo("orders");
+                    assertThat(profile.externalSource()).isEqualTo("erp");
+                    assertThat(profile.active()).isTrue();
+                });
 
         assertThat(exchange(firstTenantId, HttpMethod.DELETE, BASE_PATH + "/" + firstProfile.id(), null,
                 Void.class).getStatusCode()).isEqualTo(HttpStatus.NO_CONTENT);
