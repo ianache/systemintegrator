@@ -47,8 +47,8 @@ class IntegrationProfileServiceTest {
 
     @Test
     void listsProfilesUsingTheSuppliedTenantAndActiveFilter() {
-        repository.save(profile(TENANT_ID, "orders", "erp"));
-        repository.save(profile(TENANT_ID, "catalog", "crm").deactivate());
+        repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        repository.save(TENANT_ID, profile(TENANT_ID, "catalog", "crm").deactivate());
 
         List<IntegrationProfileView> profiles = service.list(TENANT_ID, true);
 
@@ -58,7 +58,7 @@ class IntegrationProfileServiceTest {
 
     @Test
     void getsAProfileUsingTheSuppliedTenant() {
-        IntegrationProfile profile = repository.save(profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
         IntegrationProfileView found = service.get(TENANT_ID, profile.id());
 
@@ -68,7 +68,7 @@ class IntegrationProfileServiceTest {
 
     @Test
     void updatesAProfileUsingTheSuppliedTenant() {
-        IntegrationProfile profile = repository.save(profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
         IntegrationProfileView updated = service.update(TENANT_ID, profile.id(),
                 new UpdateIntegrationProfileCommand("catalog", "crm", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, 0));
@@ -84,7 +84,7 @@ class IntegrationProfileServiceTest {
 
     @Test
     void deactivatesAProfileUsingTheSuppliedTenant() {
-        IntegrationProfile profile = repository.save(profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
         service.deactivate(TENANT_ID, profile.id());
 
@@ -95,7 +95,7 @@ class IntegrationProfileServiceTest {
 
     @Test
     void rejectsCreationOfADuplicateActiveProfile() {
-        repository.save(profile(TENANT_ID, "orders", "erp"));
+        repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
         assertThatThrownBy(() -> service.create(TENANT_ID, createCommand("orders", "erp")))
                 .isInstanceOf(IntegrationProfileConflictException.class);
@@ -105,8 +105,8 @@ class IntegrationProfileServiceTest {
 
     @Test
     void rejectsUpdatingAnActiveProfileToAnotherActiveProfilesDomainAndSource() {
-        repository.save(profile(TENANT_ID, "orders", "erp"));
-        IntegrationProfile profile = repository.save(profile(TENANT_ID, "catalog", "crm"));
+        repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "catalog", "crm"));
         repository.clearRecordedTenantIds();
 
         assertThatThrownBy(() -> service.update(TENANT_ID, profile.id(),
@@ -128,7 +128,7 @@ class IntegrationProfileServiceTest {
 
     @Test
     void doesNotExposeAProfileFromAnotherTenant() {
-        IntegrationProfile profile = repository.save(profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
         repository.clearRecordedTenantIds();
 
         assertThatThrownBy(() -> service.get(OTHER_TENANT_ID, profile.id()))
@@ -153,8 +153,11 @@ class IntegrationProfileServiceTest {
         private final List<IntegrationProfile> savedProfiles = new ArrayList<>();
 
         @Override
-        public IntegrationProfile save(IntegrationProfile profile) {
-            requestedTenantIds.add(profile.tenantId());
+        public IntegrationProfile save(UUID tenantId, IntegrationProfile profile) {
+            requestedTenantIds.add(tenantId);
+            if (!tenantId.equals(profile.tenantId())) {
+                throw new IllegalArgumentException("tenantId must match the profile tenantId");
+            }
             savedProfiles.add(profile);
             profiles.put(profile.id(), profile);
             return profile;

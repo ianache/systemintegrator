@@ -6,6 +6,7 @@ import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import jakarta.persistence.EntityManager;
 import java.util.List;
+import java.util.Objects;
 import java.util.UUID;
 import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
@@ -25,7 +26,12 @@ class IntegrationProfilePersistenceAdapter implements IntegrationProfileReposito
 
     @Override
     @Transactional
-    public IntegrationProfile save(IntegrationProfile profile) {
+    public IntegrationProfile save(UUID tenantId, IntegrationProfile profile) {
+        Objects.requireNonNull(tenantId, "tenantId must not be null");
+        Objects.requireNonNull(profile, "profile must not be null");
+        if (!tenantId.equals(profile.tenantId())) {
+            throw new IllegalArgumentException("tenantId must match the profile tenantId");
+        }
         try {
             if (profile.version() == 0) {
                 IntegrationProfileJpaEntity entity = IntegrationProfileJpaEntity.from(profile);

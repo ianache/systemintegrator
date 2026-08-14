@@ -6,7 +6,7 @@ import java.util.UUID;
 
 public interface IntegrationProfileRepository {
 
-    IntegrationProfile save(IntegrationProfile profile);
+    IntegrationProfile save(UUID tenantId, IntegrationProfile profile);
 
     IntegrationProfile findById(UUID tenantId, UUID id);
 

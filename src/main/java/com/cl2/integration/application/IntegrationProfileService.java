@@ -26,7 +26,7 @@ public class IntegrationProfileService {
         }
         IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), tenantId, command.businessDomain(),
                 command.externalSource(), command.direction(), command.sourceOfTruth());
-        return toView(repository.save(profile));
+        return toView(repository.save(tenantId, profile));
     }
 
     @Transactional(readOnly = true)
@@ -48,13 +48,13 @@ public class IntegrationProfileService {
         }
         IntegrationProfile updated = profile.update(command.businessDomain(), command.externalSource(), command.direction(),
                 command.sourceOfTruth(), command.expectedVersion());
-        return toView(repository.save(updated));
+        return toView(repository.save(tenantId, updated));
     }
 
     @Transactional
     public void deactivate(UUID tenantId, UUID profileId) {
         IntegrationProfile profile = repository.findById(tenantId, profileId);
-        repository.save(profile.deactivate());
+        repository.save(tenantId, profile.deactivate());
     }
 
     private IntegrationProfileView toView(IntegrationProfile profile) {
