@@ -1,0 +1,9 @@
+target/
+.worktrees/
+.superpowers/
+.idea/
+*.iml
+.vscode/
+*.log
+.env
+docker-data/
