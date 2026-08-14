@@ -64,16 +64,22 @@ class IntegrationProfileControllerTest {
 
     @Test
     void rejectsARequestWithoutATenantHeaderBeforeTheController() throws Exception {
-        mockMvc.perform(get(BASE_PATH))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(get(BASE_PATH).header("X-Correlation-ID", "missing-tenant-request"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("TENANT_HEADER_MISSING"))
+                .andExpect(jsonPath("$.correlationId").value("missing-tenant-request"));
 
         then(service).shouldHaveNoInteractions();
     }
 
     @Test
     void rejectsARequestWithAMalformedTenantHeaderBeforeTheController() throws Exception {
-        mockMvc.perform(get(BASE_PATH).header("X-Tenant-ID", "not-a-uuid"))
-                .andExpect(status().isBadRequest());
+        mockMvc.perform(get(BASE_PATH)
+                        .header("X-Tenant-ID", "not-a-uuid")
+                        .header("X-Correlation-ID", "malformed-tenant-request"))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("TENANT_HEADER_MALFORMED"))
+                .andExpect(jsonPath("$.correlationId").value("malformed-tenant-request"));
 
         then(service).shouldHaveNoInteractions();
     }
@@ -135,6 +141,34 @@ class IntegrationProfileControllerTest {
                 .andExpect(jsonPath("$.version").value(1));
 
         then(service).should().update(eq(TENANT_ID), eq(PROFILE_ID), any(UpdateIntegrationProfileCommand.class));
+    }
+
+    @Test
+    void rejectsAnUpdateWithoutAnExpectedVersion() throws Exception {
+        mockMvc.perform(put(BASE_PATH + "/{profileId}", PROFILE_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"businessDomain":"catalog","externalSource":"crm","syncDirection":"OUTBOUND","sourceOfTruth":"EXTERNAL"}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
+
+        then(service).shouldHaveNoInteractions();
+    }
+
+    @Test
+    void rejectsAnUpdateWithANegativeExpectedVersion() throws Exception {
+        mockMvc.perform(put(BASE_PATH + "/{profileId}", PROFILE_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"businessDomain":"catalog","externalSource":"crm","syncDirection":"OUTBOUND","sourceOfTruth":"EXTERNAL","expectedVersion":-1}
+                                """))
+                .andExpect(status().isBadRequest())
+                .andExpect(jsonPath("$.errorCode").value("VALIDATION_FAILED"));
+
+        then(service).shouldHaveNoInteractions();
     }
 
     @Test

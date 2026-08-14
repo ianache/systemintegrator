@@ -1,6 +1,7 @@
 package com.cl2.integration.infrastructure.tenant;
 
 import com.cl2.integration.application.exception.TenantRequiredException;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -29,7 +30,7 @@ import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.
 @Import(TenantFilterTest.TestControllerConfiguration.class)
 class TenantFilterTest {
 
-    private final TenantFilter tenantFilter = new TenantFilter();
+    private final TenantFilter tenantFilter = new TenantFilter(new ObjectMapper());
 
     @Autowired
     private MockMvc mockMvc;
