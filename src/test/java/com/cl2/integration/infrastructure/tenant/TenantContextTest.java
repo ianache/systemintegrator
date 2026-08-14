@@ -39,4 +39,10 @@ class TenantContextTest {
         assertThatThrownBy(TenantContext::requireTenantId)
                 .isInstanceOf(TenantRequiredException.class);
     }
+
+    @Test
+    void setRejectsANullTenant() {
+        assertThatThrownBy(() -> TenantContext.set(null))
+                .isInstanceOf(NullPointerException.class);
+    }
 }

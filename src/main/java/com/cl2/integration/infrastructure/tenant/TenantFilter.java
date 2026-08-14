@@ -20,22 +20,22 @@ public class TenantFilter extends OncePerRequestFilter {
             HttpServletRequest request,
             HttpServletResponse response,
             FilterChain filterChain) throws ServletException, IOException {
-        String tenantHeader = request.getHeader(TENANT_HEADER);
-        if (tenantHeader == null) {
-            response.sendError(HttpStatus.BAD_REQUEST.value(), "X-Tenant-ID is required");
-            return;
-        }
-
-        UUID tenantId;
         try {
-            tenantId = UUID.fromString(tenantHeader);
-        } catch (IllegalArgumentException exception) {
-            response.sendError(HttpStatus.BAD_REQUEST.value(), "X-Tenant-ID must be a valid UUID");
-            return;
-        }
+            String tenantHeader = request.getHeader(TENANT_HEADER);
+            if (tenantHeader == null) {
+                response.sendError(HttpStatus.BAD_REQUEST.value(), "X-Tenant-ID is required");
+                return;
+            }
 
-        TenantContext.set(tenantId);
-        try {
+            UUID tenantId;
+            try {
+                tenantId = UUID.fromString(tenantHeader);
+            } catch (IllegalArgumentException exception) {
+                response.sendError(HttpStatus.BAD_REQUEST.value(), "X-Tenant-ID must be a valid UUID");
+                return;
+            }
+
+            TenantContext.set(tenantId);
             filterChain.doFilter(request, response);
         } finally {
             TenantContext.clear();

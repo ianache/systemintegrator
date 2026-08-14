@@ -1,6 +1,7 @@
 package com.cl2.integration.infrastructure.tenant;
 
 import com.cl2.integration.application.exception.TenantRequiredException;
+import java.util.Objects;
 import java.util.UUID;
 
 public final class TenantContext {
@@ -11,7 +12,7 @@ public final class TenantContext {
     }
 
     public static void set(UUID tenantId) {
-        TENANT_ID.set(tenantId);
+        TENANT_ID.set(Objects.requireNonNull(tenantId, "tenantId must not be null"));
     }
 
     public static UUID requireTenantId() {
