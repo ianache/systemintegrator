@@ -60,3 +60,26 @@
 | `mvn -Dtest=IntegrationProfileControllerTest,IntegrationProfileJpaEntityTest,SpringDataIntegrationProfileRepositoryTest,IntegrationProfileServiceTest,IntegrationProfileTest,TenantContextTest,TenantFilterTest test` | Pass: 45 tests, 0 failures, 0 errors. |
 | `mvn test` | Blocked only by Docker discovery: `IntegrationProfilePersistenceAdapterTest` and `IntegrationProfileEndToEndTest` cannot start MySQL Testcontainers. TenantFilterTest passes in the same full-suite run. |
 | `git diff --check` | Pass: no whitespace errors before the fix commit. |
+
+## Fix round 2
+
+### Commit
+
+- `e98f84c test: explicitly register tenant filter slice`
+
+### Changes
+
+- Made the MVC-slice dependency explicit: automatic `TenantFilter` discovery is excluded and the real production `TenantFilter` is imported exactly once alongside the boundary controller.
+- Added a regression assertion that the slice contains exactly one `TenantFilter`; the existing MockMvc tests continue to prove the registered filter rejects a missing header and permits a valid header.
+
+### Verification
+
+| Command | Result |
+| --- | --- |
+| `mvn -Dtest=TenantFilterTest test` | Pass: 8 tests, 0 failures, 0 errors. The test proves exactly one real TenantFilter is registered in the MVC slice. |
+| `mvn -Dtest=IntegrationProfileControllerTest,IntegrationProfileJpaEntityTest,SpringDataIntegrationProfileRepositoryTest,IntegrationProfileServiceTest,IntegrationProfileTest,TenantContextTest,TenantFilterTest test` | Pass: 46 tests, 0 failures, 0 errors. |
+| `git diff --check` | Pass: no whitespace errors before the fix commit. |
+
+### Environment blocker
+
+- Docker remains unavailable on this machine. The latest full-suite execution from fix round 1 reached the Testcontainers tests and failed only because Docker discovery could not start MySQL containers; no non-container test requires a local MySQL instance.
