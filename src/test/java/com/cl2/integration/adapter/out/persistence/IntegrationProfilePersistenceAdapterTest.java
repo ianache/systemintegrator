@@ -1,6 +1,7 @@
 package com.cl2.integration.adapter.out.persistence;
 
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
+import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
@@ -82,25 +83,37 @@ class IntegrationProfilePersistenceAdapterTest {
 
         IntegrationProfile saved = adapter.save(profile);
 
-        assertThat(adapter.findById(TENANT_ID, saved.id()))
-                .hasValueSatisfying(found -> {
-                    assertThat(found.tenantId()).isEqualTo(TENANT_ID);
-                    assertThat(found.businessDomain()).isEqualTo("orders");
-                    assertThat(found.externalSource()).isEqualTo("erp");
-                    assertThat(found.direction()).isEqualTo(SyncDirection.BIDIRECTIONAL);
-                    assertThat(found.sourceOfTruth()).isEqualTo(SourceOfTruth.PLATFORM);
-                    assertThat(found.active()).isTrue();
-                    assertThat(found.version()).isZero();
-                });
+        IntegrationProfile found = adapter.findById(TENANT_ID, saved.id());
+
+        assertThat(found.tenantId()).isEqualTo(TENANT_ID);
+        assertThat(found.businessDomain()).isEqualTo("orders");
+        assertThat(found.externalSource()).isEqualTo("erp");
+        assertThat(found.direction()).isEqualTo(SyncDirection.BIDIRECTIONAL);
+        assertThat(found.sourceOfTruth()).isEqualTo(SourceOfTruth.PLATFORM);
+        assertThat(found.active()).isTrue();
+        assertThat(found.version()).isZero();
     }
 
     @Test
     void doesNotExposeProfilesAcrossTenants() {
         IntegrationProfile profile = adapter.save(profile(TENANT_ID, "orders", "erp"));
 
-        assertThat(adapter.findById(OTHER_TENANT_ID, profile.id())).isEmpty();
+        assertThatThrownBy(() -> adapter.findById(OTHER_TENANT_ID, profile.id()))
+                .isInstanceOf(IntegrationProfileNotFoundException.class);
         assertThat(adapter.findAll(OTHER_TENANT_ID, false)).isEmpty();
         assertThat(adapter.existsActive(OTHER_TENANT_ID, "orders", "erp")).isFalse();
+    }
+
+    @Test
+    void preservesPersistedTimestampsWhenReadingAProfile() {
+        IntegrationProfile saved = adapter.save(profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile updated = adapter.save(saved.update(
+                "invoices", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, saved.version()));
+
+        IntegrationProfile found = adapter.findById(TENANT_ID, updated.id());
+
+        assertThat(found.createdAt()).isEqualTo(saved.createdAt());
+        assertThat(found.updatedAt()).isEqualTo(updated.updatedAt());
     }
 
     @Test
@@ -133,6 +146,21 @@ class IntegrationProfilePersistenceAdapterTest {
         assertThat(adapter.findAll(TENANT_ID, false))
                 .extracting(IntegrationProfile::active)
                 .containsExactlyInAnyOrder(false, true);
+    }
+
+    @Test
+    void rejectsAStaleMutationAfterAnotherCallerUpdatesTheSameVersion() {
+        IntegrationProfile saved = adapter.save(profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile firstMutation = saved.update(
+                "invoices", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, saved.version());
+        IntegrationProfile staleMutation = saved.update(
+                "payments", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, saved.version());
+
+        adapter.save(firstMutation);
+
+        assertThatThrownBy(() -> adapter.save(staleMutation))
+                .isInstanceOf(IntegrationProfileConflictException.class);
+        assertThat(adapter.findById(TENANT_ID, saved.id()).businessDomain()).isEqualTo("invoices");
     }
 
     private IntegrationProfile profile(UUID tenantId, String businessDomain, String externalSource) {

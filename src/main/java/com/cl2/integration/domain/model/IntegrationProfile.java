@@ -40,6 +40,13 @@ public final class IntegrationProfile {
                 true, now, now, 0);
     }
 
+    public static IntegrationProfile rehydrate(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                               SyncDirection direction, SourceOfTruth sourceOfTruth, boolean active,
+                                               Instant createdAt, Instant updatedAt, long version) {
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                active, createdAt, updatedAt, version);
+    }
+
     public IntegrationProfile update(String businessDomain, String externalSource, SyncDirection direction,
                                      SourceOfTruth sourceOfTruth, long expectedVersion) {
         requireExpectedVersion(expectedVersion);

@@ -46,3 +46,31 @@
 
 - The MySQL Testcontainers suite remains unexecuted in this environment because no Docker CLI/daemon is available. It must be run on a Docker-capable worker.
 - The Task 4 brief asks for absence to become `IntegrationProfileNotFoundException`, but the Task 3 repository port explicitly returns `Optional<IntegrationProfile>`. The adapter preserves the established port contract; if exception-on-absence is required, the port needs an approved contract change.
+
+## Fix round 1
+
+### Resolved findings
+
+- Changed `IntegrationProfileRepository.findById` to return `IntegrationProfile`; an absent tenant-scoped row now raises `IntegrationProfileNotFoundException` in the adapter.
+- Replaced reload-and-merge updates with a tenant-scoped JPQL update whose `WHERE` clause includes the caller's expected database version (`profile.version() - 1`). The statement increments the version atomically, and a zero-row result becomes `IntegrationProfileConflictException`.
+- Added `IntegrationProfile.rehydrate` and made the JPA entity use it directly. This preserves persisted active state, version, `createdAt`, and `updatedAt` rather than replaying domain transitions. MySQL timestamp values are normalized to microsecond precision before persistence.
+- Replaced the `JpaRepository` inheritance with the marker `Repository` plus explicit tenant-scoped methods and update query, preventing inherited unscoped `findById`, `findAll`, and similar operations.
+- Added focused tests for rehydration timestamp fidelity, the scoped repository surface, not-found reads, timestamp round trips after update, and stale concurrent mutations.
+
+### Root cause and self-review
+
+- The original adapter reread the row before every save and allowed a caller's target version to equal either the reloaded version or the next version. Two mutations derived from version 0 could therefore both succeed: the second was treated as a valid version-1 update and became version 2.
+- The original entity-to-domain mapper called `create`, `update`, and `deactivate`, which generated new timestamps and reconstructed state indirectly. Direct domain rehydration removes that behavior.
+- Confirmed every repository lookup and update method requires a `UUID tenantId`, and the adapter performs no unscoped entity lookup.
+- Confirmed the port and adapter now consistently represent lookup absence as `IntegrationProfileNotFoundException`.
+
+### Fix-round tests
+
+1. `mvn test -Dtest=IntegrationProfileTest` initially failed as expected because `IntegrationProfile.rehydrate` was absent; it passed after the minimal domain factory was added.
+2. `mvn test -Dtest=IntegrationProfileJpaEntityTest` initially failed as expected because entity rehydration produced a new timestamp; it passed after direct rehydration was implemented.
+3. `mvn test -Dtest=IntegrationProfileTest,IntegrationProfileJpaEntityTest,SpringDataIntegrationProfileRepositoryTest` passed with 12 tests, 0 failures, and 0 errors.
+4. `mvn test -Dtest=IntegrationProfilePersistenceAdapterTest` compiled production and test sources but did not execute test methods because Testcontainers could not find a Docker environment.
+
+### Remaining concern
+
+- The database-backed evidence for stale-write rejection, timestamp round trips, duplicate-key translation, and the new not-found path remains unverified until this suite runs on a Docker-capable worker.

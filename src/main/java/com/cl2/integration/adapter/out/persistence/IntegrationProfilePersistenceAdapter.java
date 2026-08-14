@@ -1,13 +1,14 @@
 package com.cl2.integration.adapter.out.persistence;
 
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
+import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
+import jakarta.persistence.EntityManager;
 import java.util.List;
-import java.util.Optional;
 import java.util.UUID;
+import org.hibernate.exception.ConstraintViolationException;
 import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.orm.ObjectOptimisticLockingFailureException;
 import org.springframework.stereotype.Repository;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -15,31 +16,44 @@ import org.springframework.transaction.annotation.Transactional;
 class IntegrationProfilePersistenceAdapter implements IntegrationProfileRepository {
 
     private final SpringDataIntegrationProfileRepository repository;
+    private final EntityManager entityManager;
 
-    IntegrationProfilePersistenceAdapter(SpringDataIntegrationProfileRepository repository) {
+    IntegrationProfilePersistenceAdapter(SpringDataIntegrationProfileRepository repository, EntityManager entityManager) {
         this.repository = repository;
+        this.entityManager = entityManager;
     }
 
     @Override
     @Transactional
     public IntegrationProfile save(IntegrationProfile profile) {
         try {
-            IntegrationProfileJpaEntity entity = repository.findByTenantIdAndId(profile.tenantId(), profile.id())
-                    .map(existing -> {
-                        existing.apply(profile);
-                        return existing;
-                    })
-                    .orElseGet(() -> IntegrationProfileJpaEntity.from(profile));
-            return repository.saveAndFlush(entity).toDomain();
-        } catch (DataIntegrityViolationException | ObjectOptimisticLockingFailureException exception) {
+            if (profile.version() == 0) {
+                IntegrationProfileJpaEntity entity = IntegrationProfileJpaEntity.from(profile);
+                entityManager.persist(entity);
+                entityManager.flush();
+                return entity.toDomain();
+            }
+
+            int updatedRows = repository.updateIfVersionMatches(
+                    profile.tenantId(), profile.id(), profile.version() - 1,
+                    profile.businessDomain(), profile.externalSource(), profile.direction(), profile.sourceOfTruth(),
+                    profile.active(), profile.updatedAt());
+            if (updatedRows == 0) {
+                throw new IntegrationProfileConflictException("Integration profile version is stale");
+            }
+            return IntegrationProfileJpaEntity.from(profile).toDomain();
+        } catch (DataIntegrityViolationException | ConstraintViolationException exception) {
             throw new IntegrationProfileConflictException("Integration profile conflicts with an existing profile");
         }
     }
 
     @Override
     @Transactional(readOnly = true)
-    public Optional<IntegrationProfile> findById(UUID tenantId, UUID id) {
-        return repository.findByTenantIdAndId(tenantId, id).map(IntegrationProfileJpaEntity::toDomain);
+    public IntegrationProfile findById(UUID tenantId, UUID id) {
+        return repository.findByTenantIdAndId(tenantId, id)
+                .map(IntegrationProfileJpaEntity::toDomain)
+                .orElseThrow(() -> new IntegrationProfileNotFoundException(
+                        "Integration profile " + id + " was not found for tenant " + tenantId));
     }
 
     @Override

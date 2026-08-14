@@ -1,6 +1,5 @@
 package com.cl2.integration.adapter.out.persistence;
 
-import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
@@ -13,6 +12,7 @@ import jakarta.persistence.Table;
 import jakarta.persistence.Version;
 import java.sql.Types;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
 
@@ -68,37 +68,21 @@ class IntegrationProfileJpaEntity {
         this.sourceOfTruth = profile.sourceOfTruth();
         this.active = profile.active();
         this.version = profile.version();
-        this.createdAt = profile.createdAt();
-        this.updatedAt = profile.updatedAt();
+        this.createdAt = toMysqlTimestamp(profile.createdAt());
+        this.updatedAt = toMysqlTimestamp(profile.updatedAt());
     }
 
     static IntegrationProfileJpaEntity from(IntegrationProfile profile) {
         return new IntegrationProfileJpaEntity(profile);
     }
 
-    void apply(IntegrationProfile profile) {
-        if (!tenantId.equals(profile.tenantId()) || !id.equals(profile.id())) {
-            throw new IllegalArgumentException("Profile identity cannot change");
-        }
-        if (profile.version() != version && profile.version() != version + 1) {
-            throw new IntegrationProfileConflictException("Integration profile version is stale");
-        }
-        this.businessDomain = profile.businessDomain();
-        this.externalSource = profile.externalSource();
-        this.direction = profile.direction();
-        this.sourceOfTruth = profile.sourceOfTruth();
-        this.active = profile.active();
-        this.updatedAt = profile.updatedAt();
+    IntegrationProfile toDomain() {
+        return IntegrationProfile.rehydrate(
+                id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                active, createdAt, updatedAt, version);
     }
 
-    IntegrationProfile toDomain() {
-        IntegrationProfile profile = IntegrationProfile.create(
-                id, tenantId, businessDomain, externalSource, direction, sourceOfTruth);
-        long updatesBeforeDeactivation = active ? version : version - 1;
-        for (long currentVersion = 0; currentVersion < updatesBeforeDeactivation; currentVersion++) {
-            profile = profile.update(
-                    businessDomain, externalSource, direction, sourceOfTruth, profile.version());
-        }
-        return active ? profile : profile.deactivate();
+    private static Instant toMysqlTimestamp(Instant timestamp) {
+        return timestamp.truncatedTo(ChronoUnit.MICROS);
     }
 }

@@ -1,6 +1,7 @@
 package com.cl2.integration.domain.model;
 
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -95,6 +96,21 @@ class IntegrationProfileTest {
         assertThatThrownBy(() -> createProfile().update(
                 "invoices", "billing", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, 1))
                 .isInstanceOf(IntegrationProfileConflictException.class);
+    }
+
+    @Test
+    void rehydratePreservesPersistedStateWithoutApplyingTransitions() {
+        Instant createdAt = Instant.parse("2026-08-14T19:20:30.123456Z");
+        Instant updatedAt = Instant.parse("2026-08-15T01:02:03.654321Z");
+
+        IntegrationProfile profile = IntegrationProfile.rehydrate(
+                PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM,
+                false, createdAt, updatedAt, 7);
+
+        assertThat(profile.active()).isFalse();
+        assertThat(profile.createdAt()).isEqualTo(createdAt);
+        assertThat(profile.updatedAt()).isEqualTo(updatedAt);
+        assertThat(profile.version()).isEqualTo(7);
     }
 
     private IntegrationProfile createProfile() {
