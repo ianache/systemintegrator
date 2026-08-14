@@ -1,5 +1,6 @@
 package com.cl2.integration.domain.model;
 
+import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import java.time.Instant;
 import java.util.Objects;
 import java.util.UUID;
@@ -96,7 +97,7 @@ public final class IntegrationProfile {
 
     private void requireExpectedVersion(long expectedVersion) {
         if (version != expectedVersion) {
-            throw new IllegalStateException("Integration profile version does not match expected version");
+            throw new IntegrationProfileConflictException("Integration profile version does not match expected version");
         }
     }
 

@@ -1,5 +1,6 @@
 package com.cl2.integration.domain.model;
 
+import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -20,7 +21,7 @@ class IntegrationProfileTest {
         assertThat(profile.businessDomain()).isEqualTo("orders");
         assertThat(profile.externalSource()).isEqualTo("erp");
         assertThat(profile.direction()).isEqualTo(SyncDirection.BIDIRECTIONAL);
-        assertThat(profile.sourceOfTruth()).isEqualTo(SourceOfTruth.INTERNAL);
+        assertThat(profile.sourceOfTruth()).isEqualTo(SourceOfTruth.PLATFORM);
         assertThat(profile.active()).isTrue();
         assertThat(profile.createdAt()).isNotNull();
         assertThat(profile.updatedAt()).isNotNull();
@@ -59,6 +60,12 @@ class IntegrationProfileTest {
     }
 
     @Test
+    void sourceOfTruthDefinesTheApprovedValues() {
+        assertThat(SourceOfTruth.values())
+                .containsExactly(SourceOfTruth.PLATFORM, SourceOfTruth.EXTERNAL, SourceOfTruth.SHARED);
+    }
+
+    @Test
     void deactivateReturnsAnInactiveProfileAndIsIdempotent() {
         IntegrationProfile deactivated = createProfile().deactivate();
 
@@ -87,11 +94,11 @@ class IntegrationProfileTest {
     void updateRejectsAMismatchedExpectedVersion() {
         assertThatThrownBy(() -> createProfile().update(
                 "invoices", "billing", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, 1))
-                .isInstanceOf(IllegalStateException.class);
+                .isInstanceOf(IntegrationProfileConflictException.class);
     }
 
     private IntegrationProfile createProfile() {
         return IntegrationProfile.create(
-                PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.INTERNAL);
+                PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM);
     }
 }

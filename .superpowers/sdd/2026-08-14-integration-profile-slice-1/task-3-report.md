@@ -43,3 +43,20 @@ Completed.
 ## Concerns
 
 - The full existing test suite emits pre-existing Mockito dynamic-agent/JDK warnings. All tests pass; no Task 3 behavior is affected.
+
+## Fix Round 1
+
+### Changes
+
+- Replaced `SourceOfTruth.INTERNAL` with the approved `PLATFORM` value and added `SHARED`, leaving the enum with exactly `PLATFORM`, `EXTERNAL`, and `SHARED`.
+- Updated profile creation test fixtures and assertions to use `PLATFORM`; added a test that verifies the complete, ordered enum contract.
+- Changed optimistic-version mismatch handling in `IntegrationProfile.update` from `IllegalStateException` to `IntegrationProfileConflictException`.
+- Updated the mismatch test to assert the typed conflict exception.
+
+### TDD and verification
+
+1. Updated the domain tests first. The first focused run failed to compile because `PLATFORM` and `SHARED` were absent.
+2. Added the required enum values. The next focused run failed because the implementation threw `IllegalStateException` instead of `IntegrationProfileConflictException`.
+3. Changed the mismatch exception type and reran the focused suite: 9 tests passed with 0 failures or errors.
+4. Ran `mvn test`: 21 tests passed with 0 failures or errors.
+5. Re-ran the domain forbidden-import scan: no Spring, JPA, or HTTP imports found. `git diff --check` passed.
