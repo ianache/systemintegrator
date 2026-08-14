@@ -2,6 +2,7 @@ package com.cl2.integration.infrastructure.tenant;
 
 import com.cl2.integration.application.exception.TenantRequiredException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import java.util.List;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicBoolean;
 import java.util.concurrent.atomic.AtomicReference;
@@ -9,6 +10,8 @@ import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
+import org.springframework.context.annotation.ComponentScan;
+import org.springframework.context.annotation.FilterType;
 import org.springframework.context.annotation.Import;
 import org.springframework.mock.web.MockHttpServletRequest;
 import org.springframework.mock.web.MockHttpServletResponse;
@@ -22,14 +25,19 @@ import static org.springframework.test.web.servlet.request.MockMvcRequestBuilder
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.content;
 import static org.springframework.test.web.servlet.result.MockMvcResultMatchers.status;
 
-@WebMvcTest(TenantFilterTest.TenantBoundaryController.class)
-@Import(TenantFilterTest.TenantBoundaryController.class)
+@WebMvcTest(
+        controllers = TenantFilterTest.TenantBoundaryController.class,
+        excludeFilters = @ComponentScan.Filter(type = FilterType.ASSIGNABLE_TYPE, classes = TenantFilter.class))
+@Import({TenantFilterTest.TenantBoundaryController.class, TenantFilter.class})
 class TenantFilterTest {
 
     private final TenantFilter tenantFilter = new TenantFilter(new ObjectMapper());
 
     @Autowired
     private MockMvc mockMvc;
+
+    @Autowired
+    private List<TenantFilter> registeredTenantFilters;
 
     @AfterEach
     void clearTenantContext() {
@@ -108,6 +116,11 @@ class TenantFilterTest {
     void registeredFilterRejectsARequestBeforeTheControllerCanRespond() throws Exception {
         mockMvc.perform(get("/tenant-filter-test"))
                 .andExpect(status().isBadRequest());
+    }
+
+    @Test
+    void registersExactlyOneProductionTenantFilterInTheMvcSlice() {
+        assertThat(registeredTenantFilters).singleElement().isInstanceOf(TenantFilter.class);
     }
 
     @Test
