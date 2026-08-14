@@ -36,3 +36,33 @@ Complete.
 
 - Structural command validation remains intentionally at the upcoming web boundary, as required; domain validation continues to enforce business invariants.
 - The targeted unit suite does not require Docker. Docker-backed persistence verification remains outside this task.
+
+## Fix round 1: Explicit tenant-scoped saves
+
+### Finding addressed
+
+`IntegrationProfileRepository.save` accepted only an `IntegrationProfile`, allowing write callers to omit the explicit tenant ID required by the global tenant-isolation contract.
+
+### Changes
+
+- Changed the port to `save(UUID tenantId, IntegrationProfile profile)`.
+- Updated all application-service and persistence-test save calls to pass the use-case or fixture tenant explicitly.
+- Updated the persistence adapter to reject a null tenant/profile and reject any tenant ID that differs from `profile.tenantId()` before persistence.
+- Updated the service fake repository to enforce the same tenant/profile relationship.
+- Added the persistence mismatch test: saving a profile with another tenant ID throws `IllegalArgumentException` and leaves the tenant's data empty.
+
+### Commit
+
+- `bea8374f3f55183c999be58339cecc02c9bd23c4 fix: scope integration profile saves by tenant`
+
+### Verification
+
+1. TDD red: after tests were changed to use `save(UUID, IntegrationProfile)`, compilation failed as expected because the port and adapter still exposed only `save(IntegrationProfile)`.
+2. `mvn test-compile` passed, compiling the complete service, domain, and persistence test sources.
+3. `mvn test "-Dtest=IntegrationProfileServiceTest,IntegrationProfileTest"` passed: 19 tests, 0 failures, 0 errors.
+4. `mvn test "-Dtest=IntegrationProfileServiceTest,IntegrationProfilePersistenceAdapterTest,IntegrationProfileTest"` compiled all test sources and passed the service/domain tests, but the Testcontainers persistence class could not run because no Docker environment is available.
+
+### Self-review and deferred finding
+
+- Repository write calls in production now all supply `tenantId`; the adapter checks the supplied tenant before any persistence operation.
+- The minor DTO enum-coupling finding is deferred as requested and was not changed in this fix round.
