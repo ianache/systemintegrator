@@ -103,6 +103,22 @@ $env:ACCESS_TOKEN = $token.access_token
 
 El usuario debe tener un claim `tenant_id` con formato UUID. Si no lo tiene, los casos autenticados deben marcarse `BLOCKED` por precondición de Keycloak, no como fallo del API.
 
+### Diagnóstico `invalid_grant` / `Invalid user credentials`
+
+`user/welcome1` no necesariamente es un usuario del realm `microservicios`. En Keycloak, una cuenta administrativa creada durante la instalación suele pertenecer al realm `master`; esa cuenta no puede solicitar tokens usando el endpoint de `microservicios`.
+
+Verificar en la consola de Keycloak:
+
+1. Cambiar explícitamente al realm `microservicios`.
+2. Ir a `Users` y confirmar que existe el usuario que se usará para la prueba.
+3. Confirmar que el usuario está habilitado, tiene contraseña definida y que la contraseña no está marcada como temporal.
+4. Confirmar que el cliente indicado por `KEYCLOAK_CLIENT_ID` existe en `microservicios` y tiene `Direct Access Grants` habilitado.
+5. Confirmar que el usuario tiene un mapper o atributo que emite `tenant_id` como UUID.
+
+Si `user/welcome1` solo existe en `master`, usar un usuario QA creado en `microservicios` y asignarlo a `KEYCLOAK_USERNAME`; no cambiar el issuer del Gateway a `master`, porque el Gateway debe validar tokens cuyo issuer sea `microservicios`.
+
+La cuenta administrativa de `master` puede servir para administrar el realm, pero no debe utilizarse directamente como usuario de negocio del E2E. No registrar contraseñas ni tokens en la evidencia.
+
 ### SEC-01 — Health público del Gateway
 
 ```powershell
