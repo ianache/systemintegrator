@@ -3,11 +3,6 @@ server:
 spring:
   application:
     name: integration-gateway
-  security:
-    oauth2:
-      resourceserver:
-        jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI:}
   cloud:
     gateway:
       routes:
@@ -15,10 +10,20 @@ spring:
           uri: ${APP_URI:http://localhost:8080}
           predicates:
             - Path=/api/**
-keycloak:
-  issuer-uri: ${KEYCLOAK_ISSUER_URI:}
 management:
   endpoints:
     web:
       exposure:
         include: health
+---
+spring:
+  config:
+    activate:
+      on-profile: qa-e2e
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+keycloak:
+  issuer-uri: ${KEYCLOAK_ISSUER_URI}

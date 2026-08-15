@@ -5,9 +5,9 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.env.Environment;
 import org.springframework.boot.test.context.SpringBootTest;
 
-import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.junit.jupiter.api.Assertions.assertNull;
 
-@SpringBootTest(properties = "KEYCLOAK_ISSUER_URI=https://issuer.example.test/realms/integration")
+@SpringBootTest
 class GatewayApplicationTest {
 
     @Autowired
@@ -17,9 +17,7 @@ class GatewayApplicationTest {
     void contextLoads() { }
 
     @Test
-    void exposesKeycloakIssuerUriFromEnvironment() {
-        assertEquals(
-                "https://issuer.example.test/realms/integration",
-                environment.getProperty("keycloak.issuer-uri"));
+    void defaultContextDoesNotConfigureAnExternalResourceServerIssuer() {
+        assertNull(environment.getProperty("spring.security.oauth2.resourceserver.jwt.issuer-uri"));
     }
 }

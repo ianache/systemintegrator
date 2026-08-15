@@ -51,3 +51,33 @@ Result: passed — 7 tests, 0 failures, 0 errors, 0 skipped.
 
 - Spring Security 6.4 marks `OAuth2ResourceServerSpec.jwt()` deprecated for a future release; it is retained because it is the interface explicitly required for this task.
 - Maven emitted existing JDK/Mockito dynamic-agent warnings during tests. They do not affect the passing offline test results.
+
+## Fix round 1: Profile-scoped issuer configuration
+
+Review found that the default YAML document always bound `spring.security.oauth2.resourceserver.jwt.issuer-uri` to an empty value. Removing that binding alone revealed the related root cause: the always-active JWT security chain then failed the default context because no `ReactiveJwtDecoder` exists without an issuer.
+
+The resource-server property and `GatewaySecurityConfig` are now active only for `qa-e2e`. The profile requires `KEYCLOAK_ISSUER_URI` without an empty fallback. `GatewaySecurityTest` explicitly enables `qa-e2e` and retains its local rejecting decoder, so it remains offline. `GatewayApplicationTest` now proves the default context starts and has no resource-server issuer property.
+
+### RED
+
+Command:
+
+```powershell
+mvn -f gateway/pom.xml test '-Dtest=GatewayApplicationTest'
+```
+
+Result: failed as expected before the profile split. The default context had no decoder once the issuer was absent, while the security chain still attempted to enable JWT resource-server support.
+
+### GREEN
+
+Commands:
+
+```powershell
+mvn -f gateway/pom.xml test '-Dtest=GatewayApplicationTest'
+mvn -f gateway/pom.xml test '-Dtest=GatewaySecurityTest,TenantClaimGatewayFilterTest'
+```
+
+Results:
+
+- Default offline context: 2 tests, 0 failures, 0 errors, 0 skipped.
+- Focused QA-profile security and tenant suite: 5 tests, 0 failures, 0 errors, 0 skipped.
