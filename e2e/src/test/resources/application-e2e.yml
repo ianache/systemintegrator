@@ -1,0 +1,7 @@
+spring:
+  kafka:
+    admin:
+      fail-fast: true
+
+integration-profile:
+  events: integration-profile.events
