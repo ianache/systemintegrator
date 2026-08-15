@@ -1,0 +1,16 @@
+spring:
+  application:
+    name: integration
+  profiles:
+    default: local
+
+---
+spring:
+  config:
+    activate:
+      on-profile: qa-e2e
+
+integration:
+  qa:
+    enabled: true
+    keycloak-issuer-uri: ${KEYCLOAK_ISSUER_URI:}
