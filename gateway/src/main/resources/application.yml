@@ -24,6 +24,6 @@ spring:
     oauth2:
       resourceserver:
         jwt:
-          issuer-uri: ${KEYCLOAK_ISSUER_URI}
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:https://oauth2.qa.comsatel.com.pe/realms/microservicios}
 keycloak:
-  issuer-uri: ${KEYCLOAK_ISSUER_URI}
+  issuer-uri: ${KEYCLOAK_ISSUER_URI:https://oauth2.qa.comsatel.com.pe/realms/microservicios}

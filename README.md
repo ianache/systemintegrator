@@ -34,7 +34,7 @@ The non-sensitive local override variables are:
 
 ```bash
 SPRING_PROFILES_ACTIVE=qa-e2e \
-KEYCLOAK_ISSUER_URI=https://issuer.example.test/realms/integration \
+KEYCLOAK_ISSUER_URI=https://oauth2.qa.comsatel.com.pe/realms/microservicios \
 docker compose up -d --build mysql redis kafka app middleware
 ```
 
@@ -42,7 +42,7 @@ PowerShell equivalent:
 
 ```powershell
 $env:SPRING_PROFILES_ACTIVE = 'qa-e2e'
-$env:KEYCLOAK_ISSUER_URI = 'https://issuer.example.test/realms/integration'
+$env:KEYCLOAK_ISSUER_URI = 'https://oauth2.qa.comsatel.com.pe/realms/microservicios'
 docker compose up -d --build mysql redis kafka app middleware
 ```
 
@@ -100,4 +100,4 @@ Run the suite, including the MySQL Testcontainers end-to-end verification:
 mvn test
 ```
 
-Docker must be available to run the MySQL/Kafka Testcontainers end-to-end tests. This environment does not have Docker locally, so those tests are pending; unit, MVC and compile checks remain runnable without containers. For a direct, non-Gateway application run only, the application still validates a caller-provided `X-Tenant-ID`; that header is not a Gateway client contract.
+Docker must be available to run the MySQL/Kafka Testcontainers end-to-end tests. The Gateway tests pass locally; the full Compose/Testcontainers verification remains pending where Docker API permissions or container startup prevent execution. For a direct, non-Gateway application run only, the application still validates a caller-provided `X-Tenant-ID`; that header is not a Gateway client contract.

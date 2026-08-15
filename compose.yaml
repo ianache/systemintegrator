@@ -85,7 +85,7 @@ services:
     networks:
       - integration-internal
     healthcheck:
-      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS -H 'X-Tenant-ID: 00000000-0000-0000-0000-000000000000' 'http://localhost:8080/api/v1/integration-profiles?activeOnly=true' >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 12

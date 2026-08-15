@@ -26,16 +26,15 @@ public class TenantClaimGatewayFilter implements GlobalFilter, Ordered {
                 .cast(JwtAuthenticationToken.class)
                 .map(JwtAuthenticationToken::getToken)
                 .flatMap(this::tenantId)
+                .switchIfEmpty(Mono.defer(() -> forbidden(exchange).then(Mono.<UUID>empty())))
                 .flatMap(tenantId -> chain.filter(exchange.mutate()
                         .request(request -> request.headers(headers -> {
                             headers.remove(TENANT_HEADER);
                             headers.add(TENANT_HEADER, tenantId.toString());
                         }))
                         .build()))
-                .switchIfEmpty(Mono.error(new InvalidTenantClaimException()))
                 .onErrorResume(InvalidTenantClaimException.class, exception -> {
-                    exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
-                    return exchange.getResponse().setComplete();
+                    return forbidden(exchange);
                 });
     }
 
@@ -53,5 +52,10 @@ public class TenantClaimGatewayFilter implements GlobalFilter, Ordered {
                         return Mono.error(new InvalidTenantClaimException());
                     }
                 });
+    }
+
+    private Mono<Void> forbidden(ServerWebExchange exchange) {
+        exchange.getResponse().setStatusCode(HttpStatus.FORBIDDEN);
+        return Mono.empty();
     }
 }

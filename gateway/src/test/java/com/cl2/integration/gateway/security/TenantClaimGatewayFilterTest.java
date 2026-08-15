@@ -14,6 +14,7 @@ import java.util.UUID;
 import java.util.concurrent.atomic.AtomicReference;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
+import static org.springframework.http.HttpStatus.OK;
 import static org.springframework.security.core.context.ReactiveSecurityContextHolder.withAuthentication;
 
 class TenantClaimGatewayFilterTest {
@@ -28,6 +29,7 @@ class TenantClaimGatewayFilterTest {
         AtomicReference<List<String>> forwardedTenantHeaders = new AtomicReference<>();
         GatewayFilterChain downstream = forwarded -> {
             forwardedTenantHeaders.set(forwarded.getRequest().getHeaders().get("X-Tenant-ID"));
+            forwarded.getResponse().setStatusCode(OK);
             return Mono.empty();
         };
 
@@ -36,6 +38,7 @@ class TenantClaimGatewayFilterTest {
                 .block();
 
         assertEquals(List.of(tenantId.toString()), forwardedTenantHeaders.get());
+        assertEquals(OK, exchange.getResponse().getStatusCode());
     }
 
     private Jwt jwtWithTenant(UUID tenantId) {
