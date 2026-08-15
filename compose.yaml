@@ -61,6 +61,57 @@ services:
       retries: 12
       start_period: 30s
 
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    environment:
+      SPRING_PROFILES_ACTIVE: compose
+      SPRING_DATASOURCE_URL: jdbc:mysql://mysql:3306/${MYSQL_DATABASE:-integration}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true
+      SPRING_DATASOURCE_USERNAME: ${MYSQL_USER:-integration}
+      SPRING_DATASOURCE_PASSWORD: ${MYSQL_PASSWORD:-integration}
+      SPRING_DATA_REDIS_HOST: redis
+      SPRING_DATA_REDIS_PORT: 6379
+      KAFKA_BOOTSTRAP_SERVERS: kafka:9092
+    expose:
+      - "8080"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+      kafka:
+        condition: service_healthy
+    networks:
+      - integration-internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sS http://localhost:8080/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 45s
+
+  middleware:
+    build:
+      context: ./gateway
+      dockerfile: Dockerfile
+    environment:
+      APP_URI: http://app:8080
+      KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-}
+    ports:
+      - "${GATEWAY_PORT:-8081}:8081"
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - integration-internal
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8081/actuator/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
+
 volumes:
   mysql-data:
   redis-data:
