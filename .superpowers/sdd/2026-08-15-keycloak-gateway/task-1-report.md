@@ -29,3 +29,21 @@
 
 - `KEYCLOAK_ISSUER_URI` is intentionally not activated in this baseline configuration; issuer-backed resource-server security is deferred to the later security task so default tests remain offline.
 - Maven emitted the standard Mockito dynamic-agent/JDK warning during the test; it did not affect the result.
+
+## Fix round 1 report
+
+### Change
+
+- Added `keycloak.issuer-uri: ${KEYCLOAK_ISSUER_URI:}` to `gateway/src/main/resources/application.yml`.
+- Extended `GatewayApplicationTest` with an offline assertion that the property resolves from `KEYCLOAK_ISSUER_URI`.
+- The empty default exposes the configuration property without activating an external Keycloak issuer in the default context.
+
+### Verification
+
+Command:
+
+`mvn -f gateway/pom.xml test -Dtest=GatewayApplicationTest`
+
+- RED before the YAML change: failed with the expected value present but actual value `null`.
+- GREEN after the YAML change: `Tests run: 2, Failures: 0, Errors: 0, Skipped: 0`; Maven reported `BUILD SUCCESS`.
+- No external Keycloak service was contacted.

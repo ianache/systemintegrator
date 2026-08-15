@@ -10,6 +10,8 @@ spring:
           uri: ${APP_URI:http://localhost:8080}
           predicates:
             - Path=/api/**
+keycloak:
+  issuer-uri: ${KEYCLOAK_ISSUER_URI:}
 management:
   endpoints:
     web:
