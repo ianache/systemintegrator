@@ -12,6 +12,11 @@ docker compose config --quiet
 docker compose up --build -d mysql redis kafka app middleware
 ```
 
+Troubleshooting: if Compose reports `bitnami/kafka:3.9: not found`, the configured
+Kafka image tag is unavailable and the stack cannot start. Update the image reference
+through the normal configuration-change process, then rerun the Compose verification;
+a successful `docker compose build app middleware` alone does not validate the full stack.
+
 Compose starts MySQL, Redis, Kafka, the integration application, and the Gateway middleware. Only the Gateway publishes a host port (`http://localhost:8081`); it routes `/api/**` internally to `app:8080`. The application port remains on the internal Compose network.
 
 The Gateway starts with the safe `local` profile by default. This profile does not activate the Keycloak resource-server configuration and does not contact an external issuer. The `qa-e2e` profile activates JWT validation with `KEYCLOAK_ISSUER_URI`; it accepts a Bearer token, reads its `tenant_id` claim, and replaces any caller-supplied `X-Tenant-ID` before proxying the request. Callers must not send or trust `X-Tenant-ID` through the Gateway.
