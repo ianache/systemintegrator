@@ -1,6 +1,7 @@
 package com.cl2.integration.e2e;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 import com.cl2.integration.integration.profile.IntegrationProfileEvent;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -44,6 +45,30 @@ class KafkaEventObserverTest {
             assertThat(event.profileId()).isEqualTo(PROFILE_ID);
             assertThat(event.tenantId()).isEqualTo(TENANT_ID);
         }
+    }
+
+    @Test
+    void failsWithFilterCriteriaWhenNoMatchingEventArrivesBeforeTimeout() {
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+
+        try (KafkaEventObserver observer = new KafkaEventObserver(consumer, new ObjectMapper().findAndRegisterModules())) {
+            assertThatThrownBy(() -> observer.await(
+                    PROFILE_ID, TENANT_ID, "IntegrationProfileCreated", Duration.ofMillis(50)))
+                    .isInstanceOf(AssertionError.class)
+                    .hasMessageContaining(PROFILE_ID.toString())
+                    .hasMessageContaining(TENANT_ID.toString())
+                    .hasMessageContaining("IntegrationProfileCreated");
+        }
+    }
+
+    @Test
+    void closeClosesTheUnderlyingConsumer() {
+        MockConsumer<String, String> consumer = new MockConsumer<>(OffsetResetStrategy.EARLIEST);
+        KafkaEventObserver observer = new KafkaEventObserver(consumer, new ObjectMapper().findAndRegisterModules());
+
+        observer.close();
+
+        assertThat(consumer.closed()).isTrue();
     }
 
     private ConsumerRecord<String, String> record(long offset, UUID profileId, UUID tenantId, String eventType) {
