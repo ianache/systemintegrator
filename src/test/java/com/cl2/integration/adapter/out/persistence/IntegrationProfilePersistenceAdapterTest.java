@@ -14,6 +14,7 @@ import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
+import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
@@ -73,7 +74,7 @@ class IntegrationProfilePersistenceAdapterTest {
             }
         }
 
-        assertThat(flyway.info().applied()).hasSize(1);
+        assertThat(flyway.info().applied()).hasSize(2);
         assertThat(columns).contains("tenant_id", "active", "version", "created_at", "updated_at");
     }
 
@@ -168,7 +169,8 @@ class IntegrationProfilePersistenceAdapterTest {
         IntegrationProfile profile = profile(TENANT_ID, "orders", "erp");
 
         assertThatThrownBy(() -> adapter.save(OTHER_TENANT_ID, profile))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(InvalidDataAccessApiUsageException.class)
+                .hasRootCauseInstanceOf(IllegalArgumentException.class);
 
         assertThat(adapter.findAll(TENANT_ID, false)).isEmpty();
     }
