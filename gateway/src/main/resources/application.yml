@@ -1,0 +1,29 @@
+server:
+  port: ${GATEWAY_PORT:8081}
+spring:
+  application:
+    name: integration-gateway
+  cloud:
+    gateway:
+      routes:
+        - id: integration-api
+          uri: ${APP_URI:http://localhost:8080}
+          predicates:
+            - Path=/api/**
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health
+---
+spring:
+  config:
+    activate:
+      on-profile: qa-e2e
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:https://oauth2.qa.comsatel.com.pe/realms/microservicios}
+keycloak:
+  issuer-uri: ${KEYCLOAK_ISSUER_URI:https://oauth2.qa.comsatel.com.pe/realms/microservicios}

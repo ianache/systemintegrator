@@ -74,3 +74,19 @@
 ### Remaining concern
 
 - The database-backed evidence for stale-write rejection, timestamp round trips, duplicate-key translation, and the new not-found path remains unverified until this suite runs on a Docker-capable worker.
+
+## Kafka Compose blocker fix
+
+- Replaced the unavailable `bitnami/kafka:3.9` lineage with `apache/kafka:3.8.1`, an available official Apache Kafka image.
+- Kept the official-image environment variable names (`KAFKA_*`) and the KRaft listener topology: internal clients use `kafka:9092`; host clients use `${KAFKA_PORT:-29092}` mapped to the external `29092` listener.
+- Retained the official image healthcheck command at `/opt/kafka/bin/kafka-broker-api-versions.sh`; the path exists in `apache/kafka:3.8.1`.
+
+### Verification
+
+1. `docker compose config --quiet`
+   - Passed (`exit 0`).
+2. `docker compose -p task5kafka381health up --wait --wait-timeout 60 kafka` with `KAFKA_PORT=39092`
+   - Passed (`exit 0`). The isolated container reported `HEALTH=healthy IMAGE=apache/kafka:3.8.1` after 12 seconds.
+   - Kafka logs confirmed `INTERNAL` on `0.0.0.0:9092`, `EXTERNAL` on `0.0.0.0:29092`, and Kafka version `3.8.1`.
+3. `docker compose -p task5kafka381health down --volumes --remove-orphans`
+   - Passed (`exit 0`); the temporary container, network, and volume were removed.
