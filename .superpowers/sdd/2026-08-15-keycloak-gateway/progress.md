@@ -9,3 +9,4 @@ Task 3: complete (commits 13d6b4c..e84244e, review clean; image build parked pen
 Task 4: fix round 1/5 (3 addressed, 0 open; commits 33674c3..c73db3f)
 Task 4: complete (commits e84244e..c73db3f, review clean; full-stack/Testcontainers evidence documented as environment-blocked or inconclusive)
 Task 5: fix round 2/5 (4 addressed, 0 open; working-tree fixes after c73db3f)
+Task 5: complete (commits c73db3f..52a9f43, final review clean; full-stack/Testcontainers evidence remains environment-limited)
