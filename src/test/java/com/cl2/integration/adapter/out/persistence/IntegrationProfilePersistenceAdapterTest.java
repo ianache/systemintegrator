@@ -3,6 +3,8 @@ package com.cl2.integration.adapter.out.persistence;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
+import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 import java.sql.SQLException;
@@ -74,8 +76,13 @@ class IntegrationProfilePersistenceAdapterTest {
             }
         }
 
-        assertThat(flyway.info().applied()).hasSize(2);
-        assertThat(columns).contains("tenant_id", "active", "version", "created_at", "updated_at");
+        assertThat(flyway.info().applied()).hasSize(3);
+        assertThat(columns).contains(
+                "tenant_id", "active", "version", "created_at", "updated_at",
+                "protocol", "connector", "adapter", "endpoint", "credential_ref",
+                "mapping_json", "transformation_json", "sync_policy_json",
+                "retry_policy_json", "rate_limit_policy_json"
+        );
     }
 
     @Test
@@ -93,6 +100,25 @@ class IntegrationProfilePersistenceAdapterTest {
         assertThat(found.sourceOfTruth()).isEqualTo(SourceOfTruth.PLATFORM);
         assertThat(found.active()).isTrue();
         assertThat(found.version()).isZero();
+        assertThat(found.configuration()).isNull();
+    }
+
+    @Test
+    void savesAndReadsAProfileWithConfiguration() {
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
+                "{\"vin\":\"vehicle.vin\"}", "{\"status\":\"MAP_STATUS\"}", "{\"mode\":\"INCREMENTAL\"}",
+                "{\"maxAttempts\":3,\"initialBackoffMs\":100}", "{\"requestsPerSecond\":10}"
+        );
+        IntegrationProfile profile = IntegrationProfile.create(
+                UUID.randomUUID(), TENANT_ID, "orders", "erp",
+                SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, config);
+
+        IntegrationProfile saved = adapter.save(TENANT_ID, profile);
+
+        IntegrationProfile found = adapter.findById(TENANT_ID, saved.id());
+
+        assertThat(found.configuration()).isEqualTo(config);
     }
 
     @Test

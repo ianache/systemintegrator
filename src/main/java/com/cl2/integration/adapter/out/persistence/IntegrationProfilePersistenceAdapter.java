@@ -3,6 +3,7 @@ package com.cl2.integration.adapter.out.persistence;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
+import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -40,9 +41,20 @@ class IntegrationProfilePersistenceAdapter implements IntegrationProfileReposito
                 return entity.toDomain();
             }
 
+            IntegrationProfileConfiguration config = profile.configuration();
             int updatedRows = repository.updateIfVersionMatches(
                     profile.tenantId(), profile.id(), profile.version() - 1,
                     profile.businessDomain(), profile.externalSource(), profile.direction(), profile.sourceOfTruth(),
+                    config != null ? config.protocol() : null,
+                    config != null ? config.connector() : null,
+                    config != null ? config.adapter() : null,
+                    config != null ? config.endpoint() : null,
+                    config != null ? config.credentialRef() : null,
+                    config != null ? config.mapping() : null,
+                    config != null ? config.transformation() : null,
+                    config != null ? config.syncPolicy() : null,
+                    config != null ? config.retryPolicy() : null,
+                    config != null ? config.rateLimitPolicy() : null,
                     profile.active(), profile.updatedAt());
             if (updatedRows == 0) {
                 throw new IntegrationProfileConflictException("Integration profile version is stale");

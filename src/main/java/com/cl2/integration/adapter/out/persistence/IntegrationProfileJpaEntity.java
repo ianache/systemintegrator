@@ -1,6 +1,8 @@
 package com.cl2.integration.adapter.out.persistence;
 
 import com.cl2.integration.domain.model.IntegrationProfile;
+import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 import jakarta.persistence.Column;
@@ -43,6 +45,42 @@ class IntegrationProfileJpaEntity {
     @Column(name = "source_of_truth", nullable = false, length = 20)
     private SourceOfTruth sourceOfTruth;
 
+    @Enumerated(EnumType.STRING)
+    @Column(name = "protocol", length = 20)
+    private IntegrationProtocol protocol;
+
+    @Column(name = "connector", length = 100)
+    private String connector;
+
+    @Column(name = "adapter", length = 100)
+    private String adapter;
+
+    @Column(name = "endpoint", length = 500)
+    private String endpoint;
+
+    @Column(name = "credential_ref", length = 255)
+    private String credentialRef;
+
+    @JdbcTypeCode(Types.LONGVARCHAR)
+    @Column(name = "mapping_json", columnDefinition = "JSON")
+    private String mappingJson;
+
+    @JdbcTypeCode(Types.LONGVARCHAR)
+    @Column(name = "transformation_json", columnDefinition = "JSON")
+    private String transformationJson;
+
+    @JdbcTypeCode(Types.LONGVARCHAR)
+    @Column(name = "sync_policy_json", columnDefinition = "JSON")
+    private String syncPolicyJson;
+
+    @JdbcTypeCode(Types.LONGVARCHAR)
+    @Column(name = "retry_policy_json", columnDefinition = "JSON")
+    private String retryPolicyJson;
+
+    @JdbcTypeCode(Types.LONGVARCHAR)
+    @Column(name = "rate_limit_policy_json", columnDefinition = "JSON")
+    private String rateLimitPolicyJson;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -66,6 +104,19 @@ class IntegrationProfileJpaEntity {
         this.externalSource = profile.externalSource();
         this.direction = profile.direction();
         this.sourceOfTruth = profile.sourceOfTruth();
+        if (profile.configuration() != null) {
+            IntegrationProfileConfiguration config = profile.configuration();
+            this.protocol = config.protocol();
+            this.connector = config.connector();
+            this.adapter = config.adapter();
+            this.endpoint = config.endpoint();
+            this.credentialRef = config.credentialRef();
+            this.mappingJson = config.mapping();
+            this.transformationJson = config.transformation();
+            this.syncPolicyJson = config.syncPolicy();
+            this.retryPolicyJson = config.retryPolicy();
+            this.rateLimitPolicyJson = config.rateLimitPolicy();
+        }
         this.active = profile.active();
         this.version = profile.version();
         this.createdAt = toMysqlTimestamp(profile.createdAt());
@@ -77,9 +128,18 @@ class IntegrationProfileJpaEntity {
     }
 
     IntegrationProfile toDomain() {
+        IntegrationProfileConfiguration config = null;
+        if (protocol != null || connector != null || adapter != null || endpoint != null
+                || credentialRef != null || mappingJson != null || transformationJson != null
+                || syncPolicyJson != null || retryPolicyJson != null || rateLimitPolicyJson != null) {
+            config = new IntegrationProfileConfiguration(
+                    protocol, connector, adapter, endpoint, credentialRef,
+                    mappingJson, transformationJson, syncPolicyJson, retryPolicyJson, rateLimitPolicyJson
+            );
+        }
         return IntegrationProfile.rehydrate(
                 id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                active, createdAt, updatedAt, version);
+                config, active, createdAt, updatedAt, version);
     }
 
     private static Instant toMysqlTimestamp(Instant timestamp) {
