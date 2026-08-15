@@ -50,6 +50,13 @@ For a non-Compose local application run, start dependencies and then run the app
 
 ```bash
 docker compose up -d mysql redis kafka
+KAFKA_BOOTSTRAP_SERVERS=localhost:29092 mvn spring-boot:run
+```
+
+The `KAFKA_BOOTSTRAP_SERVERS` override is required for an application running on the host: Compose publishes Kafka on `localhost:29092`. The Compose `app` service runs inside the integration network and therefore uses `kafka:9092` instead. PowerShell equivalent:
+
+```powershell
+$env:KAFKA_BOOTSTRAP_SERVERS = 'localhost:29092'
 mvn spring-boot:run
 ```
 
