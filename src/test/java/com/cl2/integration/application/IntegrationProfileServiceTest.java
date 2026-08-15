@@ -1,5 +1,8 @@
 package com.cl2.integration.application;
 
+import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
+
 import com.cl2.integration.application.command.CreateIntegrationProfileCommand;
 import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
@@ -12,164 +15,184 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
-
-import static org.assertj.core.api.Assertions.assertThat;
-import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
 class IntegrationProfileServiceTest {
 
-    @Test
-    void createSavesAnActiveProfileForTheCallingTenant() {
-        UUID tenantId = UUID.randomUUID();
-        InMemoryRepository repository = new InMemoryRepository();
-        IntegrationProfileService service = new IntegrationProfileService(repository);
+    private static final UUID TENANT_ID = UUID.fromString("71923e5e-a4cb-4956-91fd-a492fcab5715");
+    private static final UUID OTHER_TENANT_ID = UUID.fromString("b129386f-2ec1-4f2a-8d09-f2aed3b154c2");
 
-        IntegrationProfileView view = service.create(tenantId, createCommand("customer", "sap"));
+    private FakeIntegrationProfileRepository repository;
+    private IntegrationProfileService service;
 
-        assertThat(view.tenantId()).isEqualTo(tenantId);
-        assertThat(view.businessDomain()).isEqualTo("customer");
-        assertThat(view.externalSource()).isEqualTo("sap");
-        assertThat(view.active()).isTrue();
-        assertThat(view.version()).isZero();
-        assertThat(repository.existsActiveTenantIds).containsExactly(tenantId);
-        assertThat(repository.saveTenantIds).containsExactly(tenantId);
+    @BeforeEach
+    void setUp() {
+        repository = new FakeIntegrationProfileRepository();
+        service = new IntegrationProfileService(repository);
     }
 
     @Test
-    void createRejectsADuplicateActiveProfileWithinTheSameTenant() {
-        UUID tenantId = UUID.randomUUID();
-        InMemoryRepository repository = new InMemoryRepository();
-        repository.save(tenantId, profile(tenantId, "customer", "sap"));
-        IntegrationProfileService service = new IntegrationProfileService(repository);
+    void createsAnActiveProfileForTheSuppliedTenant() {
+        IntegrationProfileView created = service.create(TENANT_ID, createCommand("orders", "erp"));
 
-        assertThatThrownBy(() -> service.create(tenantId, createCommand("customer", "sap")))
-            .isInstanceOf(IntegrationProfileConflictException.class);
-
-        assertThat(repository.existsActiveTenantIds).containsExactly(tenantId);
-        assertThat(repository.profiles).hasSize(1);
+        assertThat(created.tenantId()).isEqualTo(TENANT_ID);
+        assertThat(created.businessDomain()).isEqualTo("orders");
+        assertThat(created.externalSource()).isEqualTo("erp");
+        assertThat(created.active()).isTrue();
+        assertThat(repository.savedProfiles).singleElement().extracting(IntegrationProfile::tenantId).isEqualTo(TENANT_ID);
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
     }
 
     @Test
-    void getTreatsAnotherTenantsProfileAsNotFound() {
-        UUID ownerTenantId = UUID.randomUUID();
-        UUID requestingTenantId = UUID.randomUUID();
-        InMemoryRepository repository = new InMemoryRepository();
-        IntegrationProfile profile = profile(ownerTenantId, "customer", "sap");
-        repository.save(ownerTenantId, profile);
-        IntegrationProfileService service = new IntegrationProfileService(repository);
+    void listsProfilesUsingTheSuppliedTenantAndActiveFilter() {
+        repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        repository.save(TENANT_ID, profile(TENANT_ID, "catalog", "crm").deactivate());
 
-        assertThatThrownBy(() -> service.get(requestingTenantId, profile.id()))
-            .isInstanceOf(IntegrationProfileNotFoundException.class);
+        List<IntegrationProfileView> profiles = service.list(TENANT_ID, true);
 
-        assertThat(repository.findByIdTenantIds).containsExactly(requestingTenantId);
+        assertThat(profiles).extracting(IntegrationProfileView::businessDomain).containsExactly("orders");
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
     }
 
     @Test
-    void getReportsNotFoundWhenNoTenantScopedProfileExists() {
-        UUID tenantId = UUID.randomUUID();
-        IntegrationProfileService service = new IntegrationProfileService(new InMemoryRepository());
+    void getsAProfileUsingTheSuppliedTenant() {
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
-        assertThatThrownBy(() -> service.get(tenantId, UUID.randomUUID()))
-            .isInstanceOf(IntegrationProfileNotFoundException.class);
+        IntegrationProfileView found = service.get(TENANT_ID, profile.id());
+
+        assertThat(found.id()).isEqualTo(profile.id());
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
     }
 
     @Test
-    void updateSavesTheChangedProfileUsingTheCallingTenant() {
-        UUID tenantId = UUID.randomUUID();
-        InMemoryRepository repository = new InMemoryRepository();
-        IntegrationProfile profile = profile(tenantId, "customer", "sap");
-        repository.save(tenantId, profile);
-        IntegrationProfileService service = new IntegrationProfileService(repository);
+    void updatesAProfileUsingTheSuppliedTenant() {
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
-        IntegrationProfileView view = service.update(tenantId, profile.id(),
-            new UpdateIntegrationProfileCommand("vehicle", "sigo", SyncDirection.INBOUND, SourceOfTruth.PLATFORM, 0));
+        IntegrationProfileView updated = service.update(TENANT_ID, profile.id(),
+                new UpdateIntegrationProfileCommand("catalog", "crm", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, 0));
 
-        assertThat(view.businessDomain()).isEqualTo("vehicle");
-        assertThat(view.version()).isEqualTo(1);
-        assertThat(repository.findByIdTenantIds).containsExactly(tenantId);
-        assertThat(repository.saveTenantIds).containsExactly(tenantId, tenantId);
-        assertThat(repository.existsActiveTenantIds).containsExactly(tenantId);
+        assertThat(updated.businessDomain()).isEqualTo("catalog");
+        assertThat(updated.externalSource()).isEqualTo("crm");
+        assertThat(updated.direction()).isEqualTo(SyncDirection.OUTBOUND);
+        assertThat(updated.sourceOfTruth()).isEqualTo(SourceOfTruth.EXTERNAL);
+        assertThat(updated.version()).isEqualTo(1);
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
+        assertThat(repository.savedProfiles).allSatisfy(saved -> assertThat(saved.tenantId()).isEqualTo(TENANT_ID));
     }
 
     @Test
-    void deactivatePersistsLogicalDeactivationUsingTheCallingTenant() {
-        UUID tenantId = UUID.randomUUID();
-        InMemoryRepository repository = new InMemoryRepository();
-        IntegrationProfile profile = profile(tenantId, "customer", "sap");
-        repository.save(tenantId, profile);
-        IntegrationProfileService service = new IntegrationProfileService(repository);
+    void deactivatesAProfileUsingTheSuppliedTenant() {
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
-        service.deactivate(tenantId, profile.id());
+        service.deactivate(TENANT_ID, profile.id());
 
-        assertThat(repository.profiles.get(profile.id()).active()).isFalse();
-        assertThat(repository.findByIdTenantIds).containsExactly(tenantId);
-        assertThat(repository.saveTenantIds).containsExactly(tenantId, tenantId);
+        assertThat(repository.findById(TENANT_ID, profile.id()).active()).isFalse();
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
+        assertThat(repository.savedProfiles).allSatisfy(saved -> assertThat(saved.tenantId()).isEqualTo(TENANT_ID));
     }
 
     @Test
-    void listUsesTheCallingTenantForTheRepositoryQuery() {
-        UUID tenantId = UUID.randomUUID();
-        InMemoryRepository repository = new InMemoryRepository();
-        repository.save(tenantId, profile(tenantId, "customer", "sap"));
-        IntegrationProfileService service = new IntegrationProfileService(repository);
+    void rejectsCreationOfADuplicateActiveProfile() {
+        repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
-        List<IntegrationProfileView> profiles = service.list(tenantId, true);
+        assertThatThrownBy(() -> service.create(TENANT_ID, createCommand("orders", "erp")))
+                .isInstanceOf(IntegrationProfileConflictException.class);
 
-        assertThat(profiles).hasSize(1);
-        assertThat(repository.findAllTenantIds).containsExactly(tenantId);
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
+    }
+
+    @Test
+    void rejectsUpdatingAnActiveProfileToAnotherActiveProfilesDomainAndSource() {
+        repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "catalog", "crm"));
+        repository.clearRecordedTenantIds();
+
+        assertThatThrownBy(() -> service.update(TENANT_ID, profile.id(),
+                new UpdateIntegrationProfileCommand("orders", "erp", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, 0)))
+                .isInstanceOf(IntegrationProfileConflictException.class);
+
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
+    }
+
+    @Test
+    void propagatesNotFoundWhenTheProfileDoesNotExistForTheSuppliedTenant() {
+        UUID profileId = UUID.fromString("7b4fe930-a3ce-43c1-9297-ff7a3c60f80c");
+
+        assertThatThrownBy(() -> service.get(TENANT_ID, profileId))
+                .isInstanceOf(IntegrationProfileNotFoundException.class);
+
+        assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
+    }
+
+    @Test
+    void doesNotExposeAProfileFromAnotherTenant() {
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        repository.clearRecordedTenantIds();
+
+        assertThatThrownBy(() -> service.get(OTHER_TENANT_ID, profile.id()))
+                .isInstanceOf(IntegrationProfileNotFoundException.class);
+
+        assertThat(repository.requestedTenantIds).containsOnly(OTHER_TENANT_ID);
     }
 
     private CreateIntegrationProfileCommand createCommand(String businessDomain, String externalSource) {
-        return new CreateIntegrationProfileCommand(
-            businessDomain, externalSource, SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL);
+        return new CreateIntegrationProfileCommand(businessDomain, externalSource, SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
     }
 
     private IntegrationProfile profile(UUID tenantId, String businessDomain, String externalSource) {
-        return IntegrationProfile.create(
-            UUID.randomUUID(), tenantId, businessDomain, externalSource, SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL);
+        return IntegrationProfile.create(UUID.randomUUID(), tenantId, businessDomain, externalSource,
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
     }
 
-    private static final class InMemoryRepository implements IntegrationProfileRepository {
+    private static final class FakeIntegrationProfileRepository implements IntegrationProfileRepository {
 
         private final Map<UUID, IntegrationProfile> profiles = new HashMap<>();
-        private final List<UUID> saveTenantIds = new ArrayList<>();
-        private final List<UUID> findByIdTenantIds = new ArrayList<>();
-        private final List<UUID> findAllTenantIds = new ArrayList<>();
-        private final List<UUID> existsActiveTenantIds = new ArrayList<>();
+        private final List<UUID> requestedTenantIds = new ArrayList<>();
+        private final List<IntegrationProfile> savedProfiles = new ArrayList<>();
 
         @Override
         public IntegrationProfile save(UUID tenantId, IntegrationProfile profile) {
-            saveTenantIds.add(tenantId);
+            requestedTenantIds.add(tenantId);
+            if (!tenantId.equals(profile.tenantId())) {
+                throw new IllegalArgumentException("tenantId must match the profile tenantId");
+            }
+            savedProfiles.add(profile);
             profiles.put(profile.id(), profile);
             return profile;
         }
 
         @Override
-        public Optional<IntegrationProfile> findById(UUID tenantId, UUID id) {
-            findByIdTenantIds.add(tenantId);
-            return Optional.ofNullable(profiles.get(id)).filter(profile -> profile.tenantId().equals(tenantId));
+        public IntegrationProfile findById(UUID tenantId, UUID id) {
+            requestedTenantIds.add(tenantId);
+            IntegrationProfile profile = profiles.get(id);
+            if (profile == null || !profile.tenantId().equals(tenantId)) {
+                throw new IntegrationProfileNotFoundException("Integration profile was not found");
+            }
+            return profile;
         }
 
         @Override
         public List<IntegrationProfile> findAll(UUID tenantId, boolean activeOnly) {
-            findAllTenantIds.add(tenantId);
+            requestedTenantIds.add(tenantId);
             return profiles.values().stream()
-                .filter(profile -> profile.tenantId().equals(tenantId))
-                .filter(profile -> !activeOnly || profile.active())
-                .toList();
+                    .filter(profile -> profile.tenantId().equals(tenantId))
+                    .filter(profile -> !activeOnly || profile.active())
+                    .toList();
         }
 
         @Override
         public boolean existsActive(UUID tenantId, String businessDomain, String externalSource) {
-            existsActiveTenantIds.add(tenantId);
-            return profiles.values().stream().anyMatch(profile ->
-                profile.tenantId().equals(tenantId)
-                    && profile.active()
+            requestedTenantIds.add(tenantId);
+            return profiles.values().stream().anyMatch(profile -> profile.tenantId().equals(tenantId)
                     && profile.businessDomain().equals(businessDomain)
-                    && profile.externalSource().equals(externalSource));
+                    && profile.externalSource().equals(externalSource)
+                    && profile.active());
+        }
+
+        private void clearRecordedTenantIds() {
+            requestedTenantIds.clear();
         }
     }
 }

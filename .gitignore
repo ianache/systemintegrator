@@ -6,4 +6,5 @@ target/
 .vscode/
 *.log
 .env
+.env.*
 docker-data/

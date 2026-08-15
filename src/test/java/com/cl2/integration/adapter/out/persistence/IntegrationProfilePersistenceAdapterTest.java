@@ -1,20 +1,22 @@
 package com.cl2.integration.adapter.out.persistence;
 
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
+import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
-import java.util.List;
+import java.sql.SQLException;
+import java.util.Set;
 import java.util.UUID;
+import javax.sql.DataSource;
+import org.flywaydb.core.Flyway;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.boot.test.autoconfigure.jdbc.AutoConfigureTestDatabase;
-import org.springframework.boot.test.autoconfigure.orm.jpa.DataJpaTest;
-import org.springframework.context.annotation.Import;
+import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.jdbc.core.JdbcTemplate;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
-import org.springframework.test.context.TestPropertySource;
 import org.testcontainers.containers.MySQLContainer;
 import org.testcontainers.junit.jupiter.Container;
 import org.testcontainers.junit.jupiter.Testcontainers;
@@ -22,162 +24,158 @@ import org.testcontainers.junit.jupiter.Testcontainers;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
-@DataJpaTest
-@AutoConfigureTestDatabase(replace = AutoConfigureTestDatabase.Replace.NONE)
-@Import(IntegrationProfilePersistenceAdapter.class)
-@Testcontainers(disabledWithoutDocker = true)
-@TestPropertySource(properties = {
-    "spring.flyway.enabled=true",
-    "spring.jpa.hibernate.ddl-auto=validate",
-    "spring.jpa.properties.hibernate.jdbc.time_zone=UTC"
-})
+@SpringBootTest
+@Testcontainers
 class IntegrationProfilePersistenceAdapterTest {
 
-    @Container
-    static final MySQLContainer<?> mysql = new MySQLContainer<>("mysql:8.4")
-        .withDatabaseName("integration_test")
-        .withUsername("integration")
-        .withPassword("integration");
+    private static final UUID TENANT_ID = UUID.fromString("71923e5e-a4cb-4956-91fd-a492fcab5715");
+    private static final UUID OTHER_TENANT_ID = UUID.fromString("22965df9-e1f2-4375-943d-2df67a4c2e26");
 
-    @DynamicPropertySource
-    static void mysqlProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", mysql::getJdbcUrl);
-        registry.add("spring.datasource.username", mysql::getUsername);
-        registry.add("spring.datasource.password", mysql::getPassword);
-        registry.add("spring.datasource.driver-class-name", mysql::getDriverClassName);
-    }
+    @Container
+    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
+            .withDatabaseName("integration")
+            .withUsername("integration")
+            .withPassword("integration");
+
+    @Autowired
+    private IntegrationProfilePersistenceAdapter adapter;
+
+    @Autowired
+    private Flyway flyway;
 
     @Autowired
     private JdbcTemplate jdbcTemplate;
 
     @Autowired
-    private IntegrationProfilePersistenceAdapter adapter;
+    private DataSource dataSource;
 
-    @Test
-    void flywayCreatesTheIntegrationProfileSchemaFromAnEmptyDatabase() {
-        List<String> columns = jdbcTemplate.queryForList("""
-            select column_name
-            from information_schema.columns
-            where table_schema = database()
-              and table_name = 'integration_profile'
-            """, String.class);
+    @DynamicPropertySource
+    static void databaseProperties(DynamicPropertyRegistry registry) {
+        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
+        registry.add("spring.datasource.username", MYSQL::getUsername);
+        registry.add("spring.datasource.password", MYSQL::getPassword);
+    }
 
-        assertThat(columns).contains(
-            "id",
-            "tenant_id",
-            "business_domain",
-            "external_source",
-            "sync_direction",
-            "source_of_truth",
-            "active",
-            "created_at",
-            "updated_at",
-            "version");
+    @BeforeEach
+    void clearProfiles() {
+        jdbcTemplate.update("DELETE FROM integration_profile");
     }
 
     @Test
-    void saveAndReadMapsAllDomainFieldsForTheCallingTenant() {
-        UUID tenantId = UUID.randomUUID();
-        IntegrationProfile profile = profile(tenantId, "customer", "sap");
+    void migratesTheIntegrationProfileSchema() throws SQLException {
+        Set<String> columns;
+        try (var connection = dataSource.getConnection();
+             var resultSet = connection.getMetaData().getColumns(connection.getCatalog(), null,
+                     "integration_profile", null)) {
+            columns = new java.util.HashSet<>();
+            while (resultSet.next()) {
+                columns.add(resultSet.getString("COLUMN_NAME"));
+            }
+        }
 
-        IntegrationProfile saved = adapter.save(tenantId, profile);
-        IntegrationProfile found = adapter.findById(tenantId, profile.id()).orElseThrow();
+        assertThat(flyway.info().applied()).hasSize(1);
+        assertThat(columns).contains("tenant_id", "active", "version", "created_at", "updated_at");
+    }
 
-        assertThat(found.id()).isEqualTo(saved.id());
-        assertThat(found.tenantId()).isEqualTo(tenantId);
-        assertThat(found.businessDomain()).isEqualTo("customer");
-        assertThat(found.externalSource()).isEqualTo("sap");
-        assertThat(found.direction()).isEqualTo(SyncDirection.OUTBOUND);
-        assertThat(found.sourceOfTruth()).isEqualTo(SourceOfTruth.EXTERNAL);
+    @Test
+    void savesAndReadsAProfileWithinItsTenant() {
+        IntegrationProfile profile = profile(TENANT_ID, "orders", "erp");
+
+        IntegrationProfile saved = adapter.save(TENANT_ID, profile);
+
+        IntegrationProfile found = adapter.findById(TENANT_ID, saved.id());
+
+        assertThat(found.tenantId()).isEqualTo(TENANT_ID);
+        assertThat(found.businessDomain()).isEqualTo("orders");
+        assertThat(found.externalSource()).isEqualTo("erp");
+        assertThat(found.direction()).isEqualTo(SyncDirection.BIDIRECTIONAL);
+        assertThat(found.sourceOfTruth()).isEqualTo(SourceOfTruth.PLATFORM);
         assertThat(found.active()).isTrue();
-        assertThat(found.version()).isEqualTo(saved.version());
+        assertThat(found.version()).isZero();
+    }
+
+    @Test
+    void doesNotExposeProfilesAcrossTenants() {
+        IntegrationProfile profile = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+
+        assertThatThrownBy(() -> adapter.findById(OTHER_TENANT_ID, profile.id()))
+                .isInstanceOf(IntegrationProfileNotFoundException.class);
+        assertThat(adapter.findAll(OTHER_TENANT_ID, false)).isEmpty();
+        assertThat(adapter.existsActive(OTHER_TENANT_ID, "orders", "erp")).isFalse();
+    }
+
+    @Test
+    void preservesPersistedTimestampsWhenReadingAProfile() {
+        IntegrationProfile saved = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile updated = adapter.save(TENANT_ID, saved.update(
+                "invoices", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, saved.version()));
+
+        IntegrationProfile found = adapter.findById(TENANT_ID, updated.id());
+
         assertThat(found.createdAt()).isEqualTo(saved.createdAt());
-        assertThat(found.updatedAt()).isEqualTo(saved.updatedAt());
+        assertThat(found.updatedAt()).isEqualTo(updated.updatedAt());
     }
 
     @Test
-    void tenantScopedQueriesHideRecordsOwnedByAnotherTenant() {
-        UUID ownerTenantId = UUID.randomUUID();
-        UUID otherTenantId = UUID.randomUUID();
-        IntegrationProfile profile = adapter.save(ownerTenantId, profile(ownerTenantId, "customer", "sap"));
+    void persistsLogicalDeactivationAndExcludesItFromActiveLists() {
+        IntegrationProfile saved = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
-        assertThat(adapter.findById(otherTenantId, profile.id())).isEmpty();
-        assertThat(adapter.findAll(otherTenantId, false)).isEmpty();
-        assertThat(adapter.existsActive(otherTenantId, "customer", "sap")).isFalse();
+        adapter.save(TENANT_ID, saved.deactivate());
+
+        assertThat(adapter.findAll(TENANT_ID, true)).isEmpty();
+        assertThat(adapter.findAll(TENANT_ID, false))
+                .singleElement()
+                .satisfies(found -> {
+                    assertThat(found.active()).isFalse();
+                    assertThat(found.version()).isEqualTo(1);
+                });
+        assertThat(adapter.existsActive(TENANT_ID, "orders", "erp")).isFalse();
     }
 
     @Test
-    void logicalDeactivationRemovesTheProfileFromActiveQueries() {
-        UUID tenantId = UUID.randomUUID();
-        IntegrationProfile profile = adapter.save(tenantId, profile(tenantId, "customer", "sap"));
-        profile.deactivate();
+    void rejectsDuplicateActiveProfilesButAllowsInactiveHistory() {
+        IntegrationProfile original = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
-        IntegrationProfile saved = adapter.save(tenantId, profile);
+        assertThatThrownBy(() -> adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp")))
+                .isInstanceOf(IntegrationProfileConflictException.class);
 
-        assertThat(saved.active()).isFalse();
-        assertThat(adapter.existsActive(tenantId, "customer", "sap")).isFalse();
-        assertThat(adapter.findAll(tenantId, true)).isEmpty();
-        assertThat(adapter.findAll(tenantId, false)).extracting(IntegrationProfile::id).containsExactly(profile.id());
-    }
-
-    @Test
-    void saveRejectsAConcurrentUpdateMadeAfterTheCallerLoadedTheProfile() {
-        UUID tenantId = UUID.randomUUID();
-        IntegrationProfile saved = adapter.save(tenantId, profile(tenantId, "customer", "sap"));
-        IntegrationProfile firstCaller = copyOf(saved);
-        IntegrationProfile staleCaller = copyOf(saved);
-        firstCaller.update("vehicle", "sap", SyncDirection.INBOUND, SourceOfTruth.PLATFORM, saved.version());
-        staleCaller.update("contract", "sap", SyncDirection.BIDIRECTIONAL, SourceOfTruth.SHARED, saved.version());
-
-        IntegrationProfile winningUpdate = adapter.save(tenantId, firstCaller);
-
-        assertThat(winningUpdate.version()).isEqualTo(1);
-        assertThatThrownBy(() -> adapter.save(tenantId, staleCaller))
-            .isInstanceOf(IntegrationProfileConflictException.class);
-        assertThat(adapter.findById(tenantId, saved.id()).orElseThrow().businessDomain()).isEqualTo("vehicle");
-    }
-
-    @Test
-    void activeUniquenessRejectsOnlyADuplicateActiveProfileWithinTheSameTenant() {
-        UUID tenantId = UUID.randomUUID();
-        IntegrationProfile active = adapter.save(tenantId, profile(tenantId, "customer", "sap"));
-
-        assertThatThrownBy(() -> adapter.save(tenantId, profile(tenantId, "customer", "sap")))
-            .isInstanceOf(IntegrationProfileConflictException.class);
-
-        active.deactivate();
-        adapter.save(tenantId, active);
-
-        IntegrationProfile replacement = adapter.save(tenantId, profile(tenantId, "customer", "sap"));
-        UUID otherTenantId = UUID.randomUUID();
-        IntegrationProfile anotherTenant = adapter.save(
-            otherTenantId, profile(otherTenantId, "customer", "sap"));
+        adapter.save(TENANT_ID, original.deactivate());
+        IntegrationProfile replacement = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
 
         assertThat(replacement.active()).isTrue();
-        assertThat(anotherTenant.active()).isTrue();
+        assertThat(adapter.findAll(TENANT_ID, false))
+                .extracting(IntegrationProfile::active)
+                .containsExactlyInAnyOrder(false, true);
+    }
+
+    @Test
+    void rejectsAStaleMutationAfterAnotherCallerUpdatesTheSameVersion() {
+        IntegrationProfile saved = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile firstMutation = saved.update(
+                "invoices", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, saved.version());
+        IntegrationProfile staleMutation = saved.update(
+                "payments", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM, saved.version());
+
+        adapter.save(TENANT_ID, firstMutation);
+
+        assertThatThrownBy(() -> adapter.save(TENANT_ID, staleMutation))
+                .isInstanceOf(IntegrationProfileConflictException.class);
+        assertThat(adapter.findById(TENANT_ID, saved.id()).businessDomain()).isEqualTo("invoices");
+    }
+
+    @Test
+    void rejectsSavingAProfileForADifferentTenant() {
+        IntegrationProfile profile = profile(TENANT_ID, "orders", "erp");
+
+        assertThatThrownBy(() -> adapter.save(OTHER_TENANT_ID, profile))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThat(adapter.findAll(TENANT_ID, false)).isEmpty();
     }
 
     private IntegrationProfile profile(UUID tenantId, String businessDomain, String externalSource) {
         return IntegrationProfile.create(
-            UUID.randomUUID(),
-            tenantId,
-            businessDomain,
-            externalSource,
-            SyncDirection.OUTBOUND,
-            SourceOfTruth.EXTERNAL);
-    }
-
-    private IntegrationProfile copyOf(IntegrationProfile profile) {
-        return IntegrationProfile.restore(
-            profile.id(),
-            profile.tenantId(),
-            profile.businessDomain(),
-            profile.externalSource(),
-            profile.direction(),
-            profile.sourceOfTruth(),
-            profile.active(),
-            profile.version(),
-            profile.createdAt(),
-            profile.updatedAt());
+                UUID.randomUUID(), tenantId, businessDomain, externalSource,
+                SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM);
     }
 }

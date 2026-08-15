@@ -4,10 +4,9 @@ import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 
 public record UpdateIntegrationProfileCommand(
-    String businessDomain,
-    String externalSource,
-    SyncDirection direction,
-    SourceOfTruth sourceOfTruth,
-    long expectedVersion
-) {
+        String businessDomain,
+        String externalSource,
+        SyncDirection direction,
+        SourceOfTruth sourceOfTruth,
+        long expectedVersion) {
 }
