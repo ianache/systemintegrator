@@ -90,14 +90,15 @@ docker compose up -d --force-recreate middleware
 Obtener el token de forma interactiva. No imprimir ni guardar la respuesta completa:
 
 ```powershell
-$env:KEYCLOAK_CLIENT_ID = 'admin-cli'
+$env:KEYCLOAK_CLIENT_ID = 'cl2integration'
+$env:KEYCLOAK_CLIENT_SECRET = '<secret-local-no-versionar>'
 $env:KEYCLOAK_USERNAME = 'user'
 $securePassword = Read-Host 'Keycloak password' -AsSecureString
 $env:KEYCLOAK_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
 $token = Invoke-RestMethod -Method Post `
   -Uri "$env:KEYCLOAK_ISSUER_URI/protocol/openid-connect/token" `
   -ContentType 'application/x-www-form-urlencoded' `
-  -Body @{ grant_type='password'; client_id=$env:KEYCLOAK_CLIENT_ID; username=$env:KEYCLOAK_USERNAME; password=$env:KEYCLOAK_PASSWORD }
+  -Body @{ grant_type='password'; client_id=$env:KEYCLOAK_CLIENT_ID; client_secret=$env:KEYCLOAK_CLIENT_SECRET; username=$env:KEYCLOAK_USERNAME; password=$env:KEYCLOAK_PASSWORD }
 $env:ACCESS_TOKEN = $token.access_token
 ```
 

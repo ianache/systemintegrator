@@ -65,21 +65,21 @@ Usar otro UUID para un segundo usuario/tenant, por ejemplo:
 
 ## 4. Crear el cliente OAuth2 para pruebas manuales
 
-Se recomienda crear un cliente separado para pruebas manuales en lugar de reutilizar `admin-cli`.
+Se configuró el cliente confidencial `cl2integration` para las pruebas manuales. No reutilizar `admin-cli` como cliente de negocio.
 
 1. En el realm `microservicios`, ir a **Clients** → **Create client**.
 2. Configurar:
 
    - Client type: `OpenID Connect`
-   - Client ID: `integration-manual`
+   - Client ID: `cl2integration`
    - Name: `Integration Manual Tests`
-   - Client authentication: `Off` para cliente público de pruebas locales
+   - Client authentication: `On` para cliente confidencial
    - Authorization: `Off`
    - Standard flow: puede quedar `Off`
    - Direct access grants: `On`
 
 3. Guardar el cliente.
-4. No crear ni versionar un client secret para este flujo público.
+4. En la pestaña **Credentials**, copiar el secret únicamente a una variable de entorno local. No versionarlo ni incluirlo en evidencias.
 
 Si la política del realm exige cliente confidencial, activar **Client authentication**, generar el secret y proporcionarlo únicamente mediante una variable de entorno local `KEYCLOAK_CLIENT_SECRET`.
 
@@ -89,7 +89,7 @@ El atributo del usuario no aparece automáticamente en el access token. Debe agr
 
 ### Opción recomendada: mapper dedicado del cliente
 
-1. Abrir **Clients** → `integration-manual`.
+1. Abrir **Clients** → `cl2integration`.
 2. Ir a **Client scopes**.
 3. Abrir **Dedicated scopes** del cliente.
 4. Seleccionar **Configure a new mapper** → **By configuration** → **User Attribute**.
@@ -137,7 +137,7 @@ Esperado: HTTP `200` y `{"status":"UP"}`.
 Definir la contraseña solo en memoria durante la sesión:
 
 ```powershell
-$env:KEYCLOAK_CLIENT_ID = 'integration-manual'
+$env:KEYCLOAK_CLIENT_ID = 'cl2integration'
 $env:KEYCLOAK_USERNAME = 'integracion'
 $securePassword = Read-Host 'Keycloak password' -AsSecureString
 $env:KEYCLOAK_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
@@ -159,7 +159,13 @@ $env:ACCESS_TOKEN = $tokenResponse.access_token
 
 No ejecutar `$tokenResponse` ni `Write-Host $env:ACCESS_TOKEN`, porque imprimiría el token.
 
-Si el cliente es confidencial, incluir:
+Como `cl2integration` es confidencial, incluir el secret obtenido en la pestaña **Credentials** únicamente en la sesión local:
+
+```powershell
+$env:KEYCLOAK_CLIENT_SECRET = '<secret-local-no-versionar>'
+```
+
+Y agregarlo al cuerpo de la solicitud:
 
 ```powershell
 client_secret = $env:KEYCLOAK_CLIENT_SECRET
@@ -261,7 +267,7 @@ Esperado: `404` o la respuesta de aislamiento definida por el contrato; nunca de
 Si el host no tiene salida HTTPS al dominio QA, solicitar el token desde el contenedor middleware, sin mostrarlo:
 
 ```powershell
-$response = docker compose exec -T middleware sh -c "curl -skS -X POST https://oauth2.qa.comsatel.com.pe/realms/microservicios/protocol/openid-connect/token -H 'Content-Type: application/x-www-form-urlencoded' --data 'grant_type=password&client_id=integration-manual&username=integracion&password=<PASSWORD>'"
+$response = docker compose exec -T middleware sh -c "curl -skS -X POST https://oauth2.qa.comsatel.com.pe/realms/microservicios/protocol/openid-connect/token -H 'Content-Type: application/x-www-form-urlencoded' --data 'grant_type=password&client_id=cl2integration&client_secret=<CLIENT_SECRET>&username=user&password=<PASSWORD>'"
 ```
 
 No guardar `$response` en archivos ni imprimirlo. La contraseña debe reemplazarse en la sesión local y no debe quedar en el historial compartido.
@@ -273,6 +279,7 @@ Remove-Item Env:ACCESS_TOKEN -ErrorAction SilentlyContinue
 Remove-Item Env:KEYCLOAK_PASSWORD -ErrorAction SilentlyContinue
 Remove-Item Env:KEYCLOAK_USERNAME -ErrorAction SilentlyContinue
 Remove-Item Env:KEYCLOAK_CLIENT_ID -ErrorAction SilentlyContinue
+Remove-Item Env:KEYCLOAK_CLIENT_SECRET -ErrorAction SilentlyContinue
 ```
 
 Detener el entorno conservando datos:
