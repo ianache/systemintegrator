@@ -16,22 +16,33 @@ class TenantContextTest {
     }
 
     @Test
-    void requireTenantIdRejectsOperationsWithoutAnActiveTenant() {
+    void requireTenantIdThrowsWhenNoTenantHasBeenSet() {
         assertThatThrownBy(TenantContext::requireTenantId)
-            .isInstanceOf(TenantRequiredException.class);
+                .isInstanceOf(TenantRequiredException.class);
     }
 
     @Test
-    void setMakesTheTenantAvailableOnlyUntilItIsCleared() {
-        UUID tenantId = UUID.randomUUID();
+    void requireTenantIdReturnsTheTenantThatWasSet() {
+        UUID tenantId = UUID.fromString("71923e5e-a4cb-4956-91fd-a492fcab5715");
 
         TenantContext.set(tenantId);
 
         assertThat(TenantContext.requireTenantId()).isEqualTo(tenantId);
+    }
+
+    @Test
+    void clearRemovesTheActiveTenant() {
+        TenantContext.set(UUID.fromString("71923e5e-a4cb-4956-91fd-a492fcab5715"));
 
         TenantContext.clear();
 
         assertThatThrownBy(TenantContext::requireTenantId)
-            .isInstanceOf(TenantRequiredException.class);
+                .isInstanceOf(TenantRequiredException.class);
+    }
+
+    @Test
+    void setRejectsANullTenant() {
+        assertThatThrownBy(() -> TenantContext.set(null))
+                .isInstanceOf(NullPointerException.class);
     }
 }

@@ -10,22 +10,22 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.Id;
 import jakarta.persistence.Table;
 import jakarta.persistence.Version;
+import java.sql.Types;
 import java.time.Instant;
-import java.util.Objects;
+import java.time.temporal.ChronoUnit;
 import java.util.UUID;
 import org.hibernate.annotations.JdbcTypeCode;
-import org.hibernate.type.SqlTypes;
 
 @Entity
 @Table(name = "integration_profile")
 class IntegrationProfileJpaEntity {
 
     @Id
-    @JdbcTypeCode(SqlTypes.BINARY)
-    @Column(name = "id", nullable = false, columnDefinition = "BINARY(16)")
+    @JdbcTypeCode(Types.BINARY)
+    @Column(nullable = false, columnDefinition = "BINARY(16)")
     private UUID id;
 
-    @JdbcTypeCode(SqlTypes.BINARY)
+    @JdbcTypeCode(Types.BINARY)
     @Column(name = "tenant_id", nullable = false, columnDefinition = "BINARY(16)")
     private UUID tenantId;
 
@@ -36,77 +36,53 @@ class IntegrationProfileJpaEntity {
     private String externalSource;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "sync_direction", nullable = false, length = 32)
+    @Column(name = "sync_direction", nullable = false, length = 20)
     private SyncDirection direction;
 
     @Enumerated(EnumType.STRING)
-    @Column(name = "source_of_truth", nullable = false, length = 32)
+    @Column(name = "source_of_truth", nullable = false, length = 20)
     private SourceOfTruth sourceOfTruth;
 
-    @Column(name = "active", nullable = false)
+    @Column(nullable = false)
     private boolean active;
 
-    @Column(name = "created_at", nullable = false, columnDefinition = "DATETIME(6)")
+    @Version
+    @Column(nullable = false)
+    private long version;
+
+    @Column(name = "created_at", nullable = false, updatable = false, columnDefinition = "TIMESTAMP(6)")
     private Instant createdAt;
 
-    @Column(name = "updated_at", nullable = false, columnDefinition = "DATETIME(6)")
+    @Column(name = "updated_at", nullable = false, columnDefinition = "TIMESTAMP(6)")
     private Instant updatedAt;
-
-    @Version
-    @Column(name = "version", nullable = false)
-    private long version;
 
     protected IntegrationProfileJpaEntity() {
     }
 
     private IntegrationProfileJpaEntity(IntegrationProfile profile) {
-        id = profile.id();
-        tenantId = profile.tenantId();
-        businessDomain = profile.businessDomain();
-        externalSource = profile.externalSource();
-        direction = profile.direction();
-        sourceOfTruth = profile.sourceOfTruth();
-        active = profile.active();
-        createdAt = profile.createdAt();
-        updatedAt = profile.updatedAt();
-        version = profile.version();
+        this.id = profile.id();
+        this.tenantId = profile.tenantId();
+        this.businessDomain = profile.businessDomain();
+        this.externalSource = profile.externalSource();
+        this.direction = profile.direction();
+        this.sourceOfTruth = profile.sourceOfTruth();
+        this.active = profile.active();
+        this.version = profile.version();
+        this.createdAt = toMysqlTimestamp(profile.createdAt());
+        this.updatedAt = toMysqlTimestamp(profile.updatedAt());
     }
 
-    static IntegrationProfileJpaEntity fromNewProfile(IntegrationProfile profile) {
+    static IntegrationProfileJpaEntity from(IntegrationProfile profile) {
         return new IntegrationProfileJpaEntity(profile);
     }
 
-    void updateFrom(IntegrationProfile profile) {
-        requireSameIdentity(profile);
-        businessDomain = profile.businessDomain();
-        externalSource = profile.externalSource();
-        direction = profile.direction();
-        sourceOfTruth = profile.sourceOfTruth();
-        active = profile.active();
-        updatedAt = profile.updatedAt();
-    }
-
-    long version() {
-        return version;
-    }
-
     IntegrationProfile toDomain() {
-        return IntegrationProfile.restore(
-            id,
-            tenantId,
-            businessDomain,
-            externalSource,
-            direction,
-            sourceOfTruth,
-            active,
-            version,
-            createdAt,
-            updatedAt);
+        return IntegrationProfile.rehydrate(
+                id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                active, createdAt, updatedAt, version);
     }
 
-    private void requireSameIdentity(IntegrationProfile profile) {
-        if (!Objects.equals(id, profile.id()) || !Objects.equals(tenantId, profile.tenantId())) {
-            throw new IllegalArgumentException("profile identity cannot change");
-        }
+    private static Instant toMysqlTimestamp(Instant timestamp) {
+        return timestamp.truncatedTo(ChronoUnit.MICROS);
     }
 }

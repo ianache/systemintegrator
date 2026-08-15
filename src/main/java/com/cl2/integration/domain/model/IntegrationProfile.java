@@ -9,93 +9,57 @@ public final class IntegrationProfile {
 
     private final UUID id;
     private final UUID tenantId;
+    private final String businessDomain;
+    private final String externalSource;
+    private final SyncDirection direction;
+    private final SourceOfTruth sourceOfTruth;
+    private final boolean active;
     private final Instant createdAt;
-    private String businessDomain;
-    private String externalSource;
-    private SyncDirection direction;
-    private SourceOfTruth sourceOfTruth;
-    private boolean active;
-    private long version;
-    private Instant updatedAt;
+    private final Instant updatedAt;
+    private final long version;
 
-    private IntegrationProfile(
-        UUID id,
-        UUID tenantId,
-        String businessDomain,
-        String externalSource,
-        SyncDirection direction,
-        SourceOfTruth sourceOfTruth,
-        boolean active,
-        long version,
-        Instant createdAt,
-        Instant updatedAt
-    ) {
-        this.id = Objects.requireNonNull(id, "id is required");
-        this.tenantId = Objects.requireNonNull(tenantId, "tenantId is required");
-        this.businessDomain = requireText(businessDomain, "businessDomain");
-        this.externalSource = requireText(externalSource, "externalSource");
-        this.direction = Objects.requireNonNull(direction, "direction is required");
-        this.sourceOfTruth = Objects.requireNonNull(sourceOfTruth, "sourceOfTruth is required");
+    private IntegrationProfile(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                               SyncDirection direction, SourceOfTruth sourceOfTruth, boolean active,
+                               Instant createdAt, Instant updatedAt, long version) {
+        this.id = requireId(id, "id");
+        this.tenantId = requireId(tenantId, "tenantId");
+        this.businessDomain = requireNonBlank(businessDomain, "businessDomain");
+        this.externalSource = requireNonBlank(externalSource, "externalSource");
+        this.direction = Objects.requireNonNull(direction, "direction must not be null");
+        this.sourceOfTruth = Objects.requireNonNull(sourceOfTruth, "sourceOfTruth must not be null");
         this.active = active;
+        this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
+        this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         this.version = version;
-        this.createdAt = Objects.requireNonNull(createdAt, "createdAt is required");
-        this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt is required");
     }
 
-    public static IntegrationProfile create(
-        UUID id,
-        UUID tenantId,
-        String businessDomain,
-        String externalSource,
-        SyncDirection direction,
-        SourceOfTruth sourceOfTruth
-    ) {
+    public static IntegrationProfile create(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                            SyncDirection direction, SourceOfTruth sourceOfTruth) {
         Instant now = Instant.now();
-        return new IntegrationProfile(
-            id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, true, 0, now, now);
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                true, now, now, 0);
     }
 
-    public static IntegrationProfile restore(
-        UUID id,
-        UUID tenantId,
-        String businessDomain,
-        String externalSource,
-        SyncDirection direction,
-        SourceOfTruth sourceOfTruth,
-        boolean active,
-        long version,
-        Instant createdAt,
-        Instant updatedAt
-    ) {
-        return new IntegrationProfile(
-            id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, active, version, createdAt,
-            updatedAt);
+    public static IntegrationProfile rehydrate(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                               SyncDirection direction, SourceOfTruth sourceOfTruth, boolean active,
+                                               Instant createdAt, Instant updatedAt, long version) {
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                active, createdAt, updatedAt, version);
     }
 
-    public void update(
-        String businessDomain,
-        String externalSource,
-        SyncDirection direction,
-        SourceOfTruth sourceOfTruth,
-        long expectedVersion
-    ) {
-        if (version != expectedVersion) {
-            throw new IntegrationProfileConflictException("Integration profile version does not match");
+    public IntegrationProfile update(String businessDomain, String externalSource, SyncDirection direction,
+                                     SourceOfTruth sourceOfTruth, long expectedVersion) {
+        requireExpectedVersion(expectedVersion);
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                active, createdAt, Instant.now(), version + 1);
+    }
+
+    public IntegrationProfile deactivate() {
+        if (!active) {
+            return this;
         }
-        this.businessDomain = requireText(businessDomain, "businessDomain");
-        this.externalSource = requireText(externalSource, "externalSource");
-        this.direction = Objects.requireNonNull(direction, "direction is required");
-        this.sourceOfTruth = Objects.requireNonNull(sourceOfTruth, "sourceOfTruth is required");
-        this.version++;
-        this.updatedAt = Instant.now();
-    }
-
-    public void deactivate() {
-        if (active) {
-            active = false;
-            version++;
-            updatedAt = Instant.now();
-        }
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                false, createdAt, Instant.now(), version + 1);
     }
 
     public UUID id() {
@@ -126,10 +90,6 @@ public final class IntegrationProfile {
         return active;
     }
 
-    public long version() {
-        return version;
-    }
-
     public Instant createdAt() {
         return createdAt;
     }
@@ -138,11 +98,22 @@ public final class IntegrationProfile {
         return updatedAt;
     }
 
-    private static String requireText(String value, String fieldName) {
-        if (value == null) {
-            throw new NullPointerException(fieldName + " is required");
+    public long version() {
+        return version;
+    }
+
+    private void requireExpectedVersion(long expectedVersion) {
+        if (version != expectedVersion) {
+            throw new IntegrationProfileConflictException("Integration profile version does not match expected version");
         }
-        if (value.isBlank()) {
+    }
+
+    private static UUID requireId(UUID id, String fieldName) {
+        return Objects.requireNonNull(id, fieldName + " must not be null");
+    }
+
+    private static String requireNonBlank(String value, String fieldName) {
+        if (value == null || value.isBlank()) {
             throw new IllegalArgumentException(fieldName + " must not be blank");
         }
         return value;

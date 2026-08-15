@@ -6,17 +6,17 @@ import java.util.UUID;
 
 public final class TenantContext {
 
-    private static final ThreadLocal<UUID> CURRENT_TENANT = new ThreadLocal<>();
+    private static final ThreadLocal<UUID> TENANT_ID = new ThreadLocal<>();
 
     private TenantContext() {
     }
 
     public static void set(UUID tenantId) {
-        CURRENT_TENANT.set(Objects.requireNonNull(tenantId, "tenantId is required"));
+        TENANT_ID.set(Objects.requireNonNull(tenantId, "tenantId must not be null"));
     }
 
     public static UUID requireTenantId() {
-        UUID tenantId = CURRENT_TENANT.get();
+        UUID tenantId = TENANT_ID.get();
         if (tenantId == null) {
             throw new TenantRequiredException();
         }
@@ -24,6 +24,6 @@ public final class TenantContext {
     }
 
     public static void clear() {
-        CURRENT_TENANT.remove();
+        TENANT_ID.remove();
     }
 }
