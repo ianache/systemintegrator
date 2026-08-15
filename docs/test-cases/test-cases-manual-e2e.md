@@ -289,6 +289,18 @@ curl.exe -i 'http://localhost:8081/api/v1/integration-profiles?activeOnly=false'
 
 **Esperado:** `404`, `errorCode = INTEGRATION_PROFILE_NOT_FOUND`.
 
+### IP-15 — Crear perfil con configuración declarativa extendida
+
+```powershell
+$body = '{"businessDomain":"orders","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM","protocol":"REST","connector":"sigo","adapter":"sigo-vehicle-http","endpoint":"https://sigo.test/api","credentialRef":"secret/sigo/orders","mapping":{"vin":"vehicle.vin"},"retryPolicy":{"maxAttempts":3,"initialBackoffMs":100},"rateLimitPolicy":{"requestsPerSecond":10}}'
+curl.exe -i -X POST http://localhost:8081/api/v1/integration-profiles `
+  -H "Authorization: Bearer $env:ACCESS_TOKEN" `
+  -H 'Content-Type: application/json' `
+  --data $body
+```
+
+**Esperado:** `201`; el response incluye el objeto `configuration` con protocolo `REST`, `credentialRef` sin secretos y mapeos definidos. Validar que no se activan reintentos en tiempo de ejecución.
+
 ## 5. Aislamiento multitenant
 
 ### TEN-01 — Tenant B no lista perfiles de tenant A

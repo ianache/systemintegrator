@@ -76,6 +76,18 @@ curl -i -X POST http://localhost:8081/api/v1/integration-profiles \
   --data '{"businessDomain":"orders","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM"}'
 ```
 
+Create a profile with declarative configuration (PowerShell example):
+
+```powershell
+$body = '{"businessDomain":"orders","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM","protocol":"REST","connector":"sigo","adapter":"sigo-vehicle-http","endpoint":"https://sigo.test/api","credentialRef":"secret/sigo/orders","mapping":{"vin":"vehicle.vin"},"retryPolicy":{"maxAttempts":3,"initialBackoffMs":100},"rateLimitPolicy":{"requestsPerSecond":10}}'
+curl.exe -i -X POST http://localhost:8081/api/v1/integration-profiles `
+  -H "Authorization: Bearer $env:ACCESS_TOKEN" `
+  -H 'Content-Type: application/json' `
+  --data $body
+```
+
+> **Note on Security & Runtime Execution:** Plaintext passwords are strictly rejected; secrets must be referenced using `credentialRef`. Declarative retry and rate-limit policies stored in profile configuration are not actively executed at runtime in this phase.
+
 List active profiles:
 
 ```bash

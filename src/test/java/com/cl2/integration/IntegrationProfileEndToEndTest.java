@@ -56,6 +56,7 @@ class IntegrationProfileEndToEndTest extends IntegrationApplicationTest {
                     assertThat(profile.businessDomain()).isEqualTo("orders");
                     assertThat(profile.externalSource()).isEqualTo("erp");
                     assertThat(profile.active()).isTrue();
+                    assertThat(profile.configuration()).isNull();
                 });
 
         assertThat(exchange(firstTenantId, HttpMethod.DELETE, BASE_PATH + "/" + firstProfile.id(), null,
@@ -67,6 +68,61 @@ class IntegrationProfileEndToEndTest extends IntegrationApplicationTest {
             assertThat(profile.id()).isEqualTo(firstProfile.id());
             assertThat(profile.active()).isFalse();
         });
+    }
+
+    @Test
+    void supportsConfiguredIntegrationProfileLifecycle() {
+        UUID tenantId = UUID.randomUUID();
+
+        String createPayload = """
+                {"businessDomain":"orders","externalSource":"erp",
+                 "syncDirection":"INBOUND","sourceOfTruth":"PLATFORM",
+                 "protocol":"REST","connector":"sigo",
+                 "adapter":"sigo-vehicle-http","endpoint":"https://sigo.test/api",
+                 "credentialRef":"secret/sigo/orders",
+                 "mapping":{"vin":"vehicle.vin"},
+                 "retryPolicy":{"maxAttempts":3,"initialBackoffMs":100},
+                 "rateLimitPolicy":{"requestsPerSecond":10}}
+                """;
+
+        ResponseEntity<IntegrationProfileResponse> createdResponse = exchange(
+                tenantId, HttpMethod.POST, BASE_PATH, createPayload, IntegrationProfileResponse.class);
+
+        assertThat(createdResponse.getStatusCode()).isEqualTo(HttpStatus.CREATED);
+        IntegrationProfileResponse created = createdResponse.getBody();
+        assertThat(created).isNotNull();
+        assertThat(created.configuration()).isNotNull();
+        assertThat(created.configuration().protocol().name()).isEqualTo("REST");
+        assertThat(created.configuration().credentialRef()).isEqualTo("secret/sigo/orders");
+        assertThat(created.configuration().mapping().get("vin").asText()).isEqualTo("vehicle.vin");
+
+        // Conflict on wrong expectedVersion
+        String staleUpdatePayload = """
+                {"businessDomain":"orders","externalSource":"erp",
+                 "syncDirection":"OUTBOUND","sourceOfTruth":"PLATFORM",
+                 "expectedVersion":99}
+                """;
+        ResponseEntity<String> conflictResponse = exchange(
+                tenantId, HttpMethod.PUT, BASE_PATH + "/" + created.id(), staleUpdatePayload, String.class);
+        assertThat(conflictResponse.getStatusCode()).isEqualTo(HttpStatus.CONFLICT);
+
+        // Successful update with new configuration
+        String updatePayload = """
+                {"businessDomain":"orders","externalSource":"erp",
+                 "syncDirection":"OUTBOUND","sourceOfTruth":"PLATFORM",
+                 "protocol":"KAFKA","connector":"kafka-conn",
+                 "adapter":"kafka-adapter","endpoint":"localhost:9092",
+                 "credentialRef":"secret/kafka",
+                 "expectedVersion":0}
+                """;
+        ResponseEntity<IntegrationProfileResponse> updatedResponse = exchange(
+                tenantId, HttpMethod.PUT, BASE_PATH + "/" + created.id(), updatePayload, IntegrationProfileResponse.class);
+        assertThat(updatedResponse.getStatusCode()).isEqualTo(HttpStatus.OK);
+        IntegrationProfileResponse updated = updatedResponse.getBody();
+        assertThat(updated).isNotNull();
+        assertThat(updated.version()).isEqualTo(1);
+        assertThat(updated.configuration().protocol().name()).isEqualTo("KAFKA");
+        assertThat(updated.configuration().credentialRef()).isEqualTo("secret/kafka");
     }
 
     private IntegrationProfileResponse createProfile(UUID tenantId, String businessDomain, String externalSource) {
