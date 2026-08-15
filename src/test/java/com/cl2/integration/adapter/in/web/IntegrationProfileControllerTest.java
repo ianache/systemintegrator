@@ -18,6 +18,8 @@ import com.cl2.integration.application.command.CreateIntegrationProfileCommand;
 import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
+import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 import java.time.Instant;
@@ -60,6 +62,65 @@ class IntegrationProfileControllerTest {
                 .andExpect(jsonPath("$.syncDirection").value("INBOUND"));
 
         then(service).should().create(eq(TENANT_ID), any(CreateIntegrationProfileCommand.class));
+    }
+
+    @Test
+    void createsAndReturnsAnExtendedProfile() throws Exception {
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
+                "{\"vin\":\"vehicle.vin\"}", null, null, "{\"maxAttempts\":3,\"initialBackoffMs\":100}",
+                "{\"requestsPerSecond\":10}");
+        IntegrationProfileView view = new IntegrationProfileView(PROFILE_ID, TENANT_ID, "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM, config, true, Instant.parse("2026-08-14T12:00:00Z"),
+                Instant.parse("2026-08-14T12:00:00Z"), 0);
+
+        given(service.create(eq(TENANT_ID), any(CreateIntegrationProfileCommand.class))).willReturn(view);
+
+        mockMvc.perform(post(BASE_PATH)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"businessDomain":"orders","externalSource":"erp",
+                                 "syncDirection":"INBOUND","sourceOfTruth":"PLATFORM",
+                                 "protocol":"REST","connector":"sigo",
+                                 "adapter":"sigo-vehicle-http","endpoint":"https://sigo.test/api",
+                                 "credentialRef":"secret/sigo/orders",
+                                 "mapping":{"vin":"vehicle.vin"},
+                                 "retryPolicy":{"maxAttempts":3,"initialBackoffMs":100},
+                                 "rateLimitPolicy":{"requestsPerSecond":10}}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.configuration.protocol").value("REST"))
+                .andExpect(jsonPath("$.configuration.credentialRef").value("secret/sigo/orders"))
+                .andExpect(jsonPath("$.configuration.mapping.vin").value("vehicle.vin"));
+    }
+
+    @Test
+    void acceptsALegacyProfileWithoutConfiguration() throws Exception {
+        given(service.create(eq(TENANT_ID), any(CreateIntegrationProfileCommand.class))).willReturn(profileView(TENANT_ID));
+
+        mockMvc.perform(post(BASE_PATH)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"businessDomain":"orders","externalSource":"erp",
+                                 "syncDirection":"INBOUND","sourceOfTruth":"PLATFORM"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.configuration").doesNotExist());
+    }
+
+    @Test
+    void rejectsMalformedConfigurationJson() throws Exception {
+        mockMvc.perform(post(BASE_PATH)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"businessDomain":"orders","externalSource":"erp",
+                                 "syncDirection":"INBOUND","sourceOfTruth":"PLATFORM",
+                                 "mapping":{"vin":}}
+                                """))
+                .andExpect(status().isBadRequest());
     }
 
     @Test
@@ -126,7 +187,7 @@ class IntegrationProfileControllerTest {
     @Test
     void updatesAProfileForTheTenantFromTheHeader() throws Exception {
         IntegrationProfileView updated = new IntegrationProfileView(PROFILE_ID, TENANT_ID, "catalog", "crm",
-                SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, true, Instant.parse("2026-08-14T12:00:00Z"),
+                SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, null, true, Instant.parse("2026-08-14T12:00:00Z"),
                 Instant.parse("2026-08-14T12:01:00Z"), 1);
         given(service.update(eq(TENANT_ID), eq(PROFILE_ID), any(UpdateIntegrationProfileCommand.class))).willReturn(updated);
 
@@ -219,7 +280,7 @@ class IntegrationProfileControllerTest {
 
     private IntegrationProfileView profileView(UUID tenantId) {
         return new IntegrationProfileView(PROFILE_ID, tenantId, "orders", "erp", SyncDirection.INBOUND,
-                SourceOfTruth.PLATFORM, true, Instant.parse("2026-08-14T12:00:00Z"),
+                SourceOfTruth.PLATFORM, null, true, Instant.parse("2026-08-14T12:00:00Z"),
                 Instant.parse("2026-08-14T12:00:00Z"), 0);
     }
 }

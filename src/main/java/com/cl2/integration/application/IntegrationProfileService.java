@@ -30,7 +30,7 @@ public class IntegrationProfileService {
             throw new IntegrationProfileConflictException("An active integration profile already exists for this domain and source");
         }
         IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), tenantId, command.businessDomain(),
-                command.externalSource(), command.direction(), command.sourceOfTruth());
+                command.externalSource(), command.direction(), command.sourceOfTruth(), command.configuration());
         IntegrationProfileView created = toView(repository.save(tenantId, profile));
         publishEvent("IntegrationProfileCreated", created);
         return created;
@@ -54,7 +54,7 @@ public class IntegrationProfileService {
             throw new IntegrationProfileConflictException("An active integration profile already exists for this domain and source");
         }
         IntegrationProfile updated = profile.update(command.businessDomain(), command.externalSource(), command.direction(),
-                command.sourceOfTruth(), command.expectedVersion());
+                command.sourceOfTruth(), command.configuration(), command.expectedVersion());
         IntegrationProfileView saved = toView(repository.save(tenantId, updated));
         publishEvent("IntegrationProfileUpdated", saved);
         return saved;
@@ -69,8 +69,8 @@ public class IntegrationProfileService {
 
     private IntegrationProfileView toView(IntegrationProfile profile) {
         return new IntegrationProfileView(profile.id(), profile.tenantId(), profile.businessDomain(), profile.externalSource(),
-                profile.direction(), profile.sourceOfTruth(), profile.active(), profile.createdAt(), profile.updatedAt(),
-                profile.version());
+                profile.direction(), profile.sourceOfTruth(), profile.configuration(), profile.active(), profile.createdAt(),
+                profile.updatedAt(), profile.version());
     }
 
     private boolean identifiesDifferentActiveProfile(IntegrationProfile profile, UpdateIntegrationProfileCommand command) {

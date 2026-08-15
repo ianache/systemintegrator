@@ -8,6 +8,8 @@ import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
+import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
@@ -46,6 +48,17 @@ class IntegrationProfileServiceTest {
     }
 
     @Test
+    void createsAnActiveProfileWithConfiguration() {
+        IntegrationProfileConfiguration configuration = sampleConfiguration();
+        CreateIntegrationProfileCommand command = new CreateIntegrationProfileCommand(
+                "orders", "erp", SyncDirection.INBOUND, SourceOfTruth.PLATFORM, configuration);
+
+        IntegrationProfileView created = service.create(TENANT_ID, command);
+
+        assertThat(created.configuration()).isEqualTo(configuration);
+    }
+
+    @Test
     void listsProfilesUsingTheSuppliedTenantAndActiveFilter() {
         repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
         repository.save(TENANT_ID, profile(TENANT_ID, "catalog", "crm").deactivate());
@@ -80,6 +93,18 @@ class IntegrationProfileServiceTest {
         assertThat(updated.version()).isEqualTo(1);
         assertThat(repository.requestedTenantIds).containsOnly(TENANT_ID);
         assertThat(repository.savedProfiles).allSatisfy(saved -> assertThat(saved.tenantId()).isEqualTo(TENANT_ID));
+    }
+
+    @Test
+    void updatesAProfileWithConfigurationAndIncrementsVersion() {
+        IntegrationProfile profile = repository.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfileConfiguration updatedConfig = sampleConfiguration();
+
+        IntegrationProfileView updated = service.update(TENANT_ID, profile.id(),
+                new UpdateIntegrationProfileCommand("catalog", "crm", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, updatedConfig, 0));
+
+        assertThat(updated.configuration()).isEqualTo(updatedConfig);
+        assertThat(updated.version()).isEqualTo(1);
     }
 
     @Test
@@ -144,6 +169,13 @@ class IntegrationProfileServiceTest {
     private IntegrationProfile profile(UUID tenantId, String businessDomain, String externalSource) {
         return IntegrationProfile.create(UUID.randomUUID(), tenantId, businessDomain, externalSource,
                 SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
+    }
+
+    private IntegrationProfileConfiguration sampleConfiguration() {
+        return new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
+                "{\"vin\":\"vehicle.vin\"}", null, null, "{\"maxAttempts\":3,\"initialBackoffMs\":100}",
+                "{\"requestsPerSecond\":10}");
     }
 
     private static final class FakeIntegrationProfileRepository implements IntegrationProfileRepository {

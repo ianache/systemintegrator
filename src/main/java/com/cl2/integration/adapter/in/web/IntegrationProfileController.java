@@ -6,7 +6,9 @@ import com.cl2.integration.adapter.in.web.dto.UpdateIntegrationProfileRequest;
 import com.cl2.integration.application.IntegrationProfileService;
 import com.cl2.integration.application.command.CreateIntegrationProfileCommand;
 import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
+import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
 import com.cl2.integration.infrastructure.tenant.TenantContext;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import java.util.List;
 import java.util.UUID;
@@ -27,38 +29,42 @@ import org.springframework.web.bind.annotation.RestController;
 public class IntegrationProfileController {
 
     private final IntegrationProfileService service;
+    private final ObjectMapper objectMapper;
 
-    public IntegrationProfileController(IntegrationProfileService service) {
+    public IntegrationProfileController(IntegrationProfileService service, ObjectMapper objectMapper) {
         this.service = service;
+        this.objectMapper = objectMapper;
     }
 
     @PostMapping
     @ResponseStatus(HttpStatus.CREATED)
     public IntegrationProfileResponse create(@Valid @RequestBody CreateIntegrationProfileRequest request) {
+        IntegrationProfileConfiguration configuration = request.configurationRequest().toDomain(objectMapper);
         return IntegrationProfileResponse.from(service.create(TenantContext.requireTenantId(),
                 new CreateIntegrationProfileCommand(request.businessDomain(), request.externalSource(), request.syncDirection(),
-                        request.sourceOfTruth())));
+                        request.sourceOfTruth(), configuration)), objectMapper);
     }
 
     @GetMapping
     public List<IntegrationProfileResponse> list(@RequestParam(defaultValue = "true") boolean activeOnly) {
         return service.list(TenantContext.requireTenantId(), activeOnly).stream()
-                .map(IntegrationProfileResponse::from)
+                .map(view -> IntegrationProfileResponse.from(view, objectMapper))
                 .toList();
     }
 
     @GetMapping("/{profileId}")
     public IntegrationProfileResponse get(@PathVariable UUID profileId) {
-        return IntegrationProfileResponse.from(service.get(TenantContext.requireTenantId(), profileId));
+        return IntegrationProfileResponse.from(service.get(TenantContext.requireTenantId(), profileId), objectMapper);
     }
 
     @PutMapping("/{profileId}")
     public IntegrationProfileResponse update(
             @PathVariable UUID profileId,
             @Valid @RequestBody UpdateIntegrationProfileRequest request) {
+        IntegrationProfileConfiguration configuration = request.configurationRequest().toDomain(objectMapper);
         return IntegrationProfileResponse.from(service.update(TenantContext.requireTenantId(), profileId,
                 new UpdateIntegrationProfileCommand(request.businessDomain(), request.externalSource(), request.syncDirection(),
-                        request.sourceOfTruth(), request.expectedVersion())));
+                        request.sourceOfTruth(), configuration, request.expectedVersion())), objectMapper);
     }
 
     @DeleteMapping("/{profileId}")
