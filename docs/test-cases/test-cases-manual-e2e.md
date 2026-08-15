@@ -105,7 +105,7 @@ El usuario debe tener un claim `tenant_id` con formato UUID. Si no lo tiene, los
 
 ### Diagnóstico `invalid_grant` / `Invalid user credentials`
 
-`user/welcome1` no necesariamente es un usuario del realm `microservicios`. En Keycloak, una cuenta administrativa creada durante la instalación suele pertenecer al realm `master`; esa cuenta no puede solicitar tokens usando el endpoint de `microservicios`.
+`USUARIO/PASSWORD` no necesariamente es un usuario del realm `microservicios`. En Keycloak, una cuenta administrativa creada durante la instalación suele pertenecer al realm `master`; esa cuenta no puede solicitar tokens usando el endpoint de `microservicios`.
 
 Verificar en la consola de Keycloak:
 
