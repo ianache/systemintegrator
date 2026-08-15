@@ -91,8 +91,8 @@ Obtener el token de forma interactiva. No imprimir ni guardar la respuesta compl
 
 ```powershell
 $env:KEYCLOAK_CLIENT_ID = 'cl2integration'
-$env:KEYCLOAK_CLIENT_SECRET = '<secret-local-no-versionar>'
-$env:KEYCLOAK_USERNAME = 'user'
+$env:KEYCLOAK_CLIENT_SECRET = 'lMFdDxHeSb4BwQIVJXtAK21ujlTp6yTS'
+$env:KEYCLOAK_USERNAME = 'integracion'
 $securePassword = Read-Host 'Keycloak password' -AsSecureString
 $env:KEYCLOAK_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
 $token = Invoke-RestMethod -Method Post `
