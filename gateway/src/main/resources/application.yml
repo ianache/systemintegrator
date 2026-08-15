@@ -3,6 +3,11 @@ server:
 spring:
   application:
     name: integration-gateway
+  security:
+    oauth2:
+      resourceserver:
+        jwt:
+          issuer-uri: ${KEYCLOAK_ISSUER_URI:}
   cloud:
     gateway:
       routes:
