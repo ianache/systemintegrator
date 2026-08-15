@@ -121,6 +121,23 @@ class IntegrationProfilePersistenceAdapterTest {
     }
 
     @Test
+    void saveRejectsAConcurrentUpdateMadeAfterTheCallerLoadedTheProfile() {
+        UUID tenantId = UUID.randomUUID();
+        IntegrationProfile saved = adapter.save(tenantId, profile(tenantId, "customer", "sap"));
+        IntegrationProfile firstCaller = copyOf(saved);
+        IntegrationProfile staleCaller = copyOf(saved);
+        firstCaller.update("vehicle", "sap", SyncDirection.INBOUND, SourceOfTruth.PLATFORM, saved.version());
+        staleCaller.update("contract", "sap", SyncDirection.BIDIRECTIONAL, SourceOfTruth.SHARED, saved.version());
+
+        IntegrationProfile winningUpdate = adapter.save(tenantId, firstCaller);
+
+        assertThat(winningUpdate.version()).isEqualTo(1);
+        assertThatThrownBy(() -> adapter.save(tenantId, staleCaller))
+            .isInstanceOf(IntegrationProfileConflictException.class);
+        assertThat(adapter.findById(tenantId, saved.id()).orElseThrow().businessDomain()).isEqualTo("vehicle");
+    }
+
+    @Test
     void activeUniquenessRejectsOnlyADuplicateActiveProfileWithinTheSameTenant() {
         UUID tenantId = UUID.randomUUID();
         IntegrationProfile active = adapter.save(tenantId, profile(tenantId, "customer", "sap"));
@@ -148,5 +165,19 @@ class IntegrationProfilePersistenceAdapterTest {
             externalSource,
             SyncDirection.OUTBOUND,
             SourceOfTruth.EXTERNAL);
+    }
+
+    private IntegrationProfile copyOf(IntegrationProfile profile) {
+        return IntegrationProfile.restore(
+            profile.id(),
+            profile.tenantId(),
+            profile.businessDomain(),
+            profile.externalSource(),
+            profile.direction(),
+            profile.sourceOfTruth(),
+            profile.active(),
+            profile.version(),
+            profile.createdAt(),
+            profile.updatedAt());
     }
 }

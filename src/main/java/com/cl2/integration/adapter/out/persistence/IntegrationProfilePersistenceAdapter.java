@@ -33,6 +33,9 @@ public class IntegrationProfilePersistenceAdapter implements IntegrationProfileR
         try {
             IntegrationProfileJpaEntity entity = repository.findByTenantIdAndId(tenantId, profile.id())
                 .map(existing -> {
+                    if (existing.version() != profile.version() - 1) {
+                        throw new IntegrationProfileConflictException("Integration profile version conflict");
+                    }
                     existing.updateFrom(profile);
                     return existing;
                 })

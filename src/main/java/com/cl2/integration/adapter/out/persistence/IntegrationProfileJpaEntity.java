@@ -86,6 +86,10 @@ class IntegrationProfileJpaEntity {
         updatedAt = profile.updatedAt();
     }
 
+    long version() {
+        return version;
+    }
+
     IntegrationProfile toDomain() {
         return IntegrationProfile.restore(
             id,
