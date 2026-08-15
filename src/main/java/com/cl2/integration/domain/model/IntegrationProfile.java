@@ -13,13 +13,15 @@ public final class IntegrationProfile {
     private final String externalSource;
     private final SyncDirection direction;
     private final SourceOfTruth sourceOfTruth;
+    private final IntegrationProfileConfiguration configuration;
     private final boolean active;
     private final Instant createdAt;
     private final Instant updatedAt;
     private final long version;
 
     private IntegrationProfile(UUID id, UUID tenantId, String businessDomain, String externalSource,
-                               SyncDirection direction, SourceOfTruth sourceOfTruth, boolean active,
+                               SyncDirection direction, SourceOfTruth sourceOfTruth,
+                               IntegrationProfileConfiguration configuration, boolean active,
                                Instant createdAt, Instant updatedAt, long version) {
         this.id = requireId(id, "id");
         this.tenantId = requireId(tenantId, "tenantId");
@@ -27,6 +29,7 @@ public final class IntegrationProfile {
         this.externalSource = requireNonBlank(externalSource, "externalSource");
         this.direction = Objects.requireNonNull(direction, "direction must not be null");
         this.sourceOfTruth = Objects.requireNonNull(sourceOfTruth, "sourceOfTruth must not be null");
+        this.configuration = configuration;
         this.active = active;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
@@ -35,23 +38,43 @@ public final class IntegrationProfile {
 
     public static IntegrationProfile create(UUID id, UUID tenantId, String businessDomain, String externalSource,
                                             SyncDirection direction, SourceOfTruth sourceOfTruth) {
+        return create(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, null);
+    }
+
+    public static IntegrationProfile create(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                            SyncDirection direction, SourceOfTruth sourceOfTruth,
+                                            IntegrationProfileConfiguration configuration) {
         Instant now = Instant.now();
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                true, now, now, 0);
+                configuration, true, now, now, 0);
     }
 
     public static IntegrationProfile rehydrate(UUID id, UUID tenantId, String businessDomain, String externalSource,
-                                               SyncDirection direction, SourceOfTruth sourceOfTruth, boolean active,
-                                               Instant createdAt, Instant updatedAt, long version) {
-        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                                                SyncDirection direction, SourceOfTruth sourceOfTruth, boolean active,
+                                                Instant createdAt, Instant updatedAt, long version) {
+        return rehydrate(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, null,
                 active, createdAt, updatedAt, version);
+    }
+
+    public static IntegrationProfile rehydrate(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                                SyncDirection direction, SourceOfTruth sourceOfTruth,
+                                                IntegrationProfileConfiguration configuration, boolean active,
+                                                Instant createdAt, Instant updatedAt, long version) {
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                configuration, active, createdAt, updatedAt, version);
     }
 
     public IntegrationProfile update(String businessDomain, String externalSource, SyncDirection direction,
                                      SourceOfTruth sourceOfTruth, long expectedVersion) {
+        return update(businessDomain, externalSource, direction, sourceOfTruth, this.configuration, expectedVersion);
+    }
+
+    public IntegrationProfile update(String businessDomain, String externalSource, SyncDirection direction,
+                                     SourceOfTruth sourceOfTruth, IntegrationProfileConfiguration configuration,
+                                     long expectedVersion) {
         requireExpectedVersion(expectedVersion);
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                active, createdAt, Instant.now(), version + 1);
+                configuration, active, createdAt, Instant.now(), version + 1);
     }
 
     public IntegrationProfile deactivate() {
@@ -59,7 +82,7 @@ public final class IntegrationProfile {
             return this;
         }
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                false, createdAt, Instant.now(), version + 1);
+                configuration, false, createdAt, Instant.now(), version + 1);
     }
 
     public UUID id() {
@@ -84,6 +107,10 @@ public final class IntegrationProfile {
 
     public SourceOfTruth sourceOfTruth() {
         return sourceOfTruth;
+    }
+
+    public IntegrationProfileConfiguration configuration() {
+        return configuration;
     }
 
     public boolean active() {

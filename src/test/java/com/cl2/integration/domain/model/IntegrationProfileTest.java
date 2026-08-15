@@ -27,6 +27,64 @@ class IntegrationProfileTest {
         assertThat(profile.createdAt()).isNotNull();
         assertThat(profile.updatedAt()).isNotNull();
         assertThat(profile.version()).isZero();
+        assertThat(profile.configuration()).isNull();
+    }
+
+    @Test
+    void createsAProfileWithConnectorConfiguration() {
+        IntegrationProfileConfiguration configuration = configuration();
+
+        IntegrationProfile profile = IntegrationProfile.create(
+                PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.INBOUND,
+                SourceOfTruth.PLATFORM, configuration);
+
+        assertThat(profile.configuration()).isEqualTo(configuration);
+    }
+
+    @Test
+    void rejectsAConfiguredProtocolWithoutConnectorAndAdapter() {
+        assertThatThrownBy(() -> new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, null, "adapter", null, null,
+                null, null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+
+        assertThatThrownBy(() -> new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "connector", null, null, null,
+                null, null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsBlankCredentialRefWhenProvided() {
+        assertThatThrownBy(() -> new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "connector", "adapter", "https://endpoint", "   ",
+                null, null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void rejectsPlaintextPasswordInAnyConfigurationField() {
+        assertThatThrownBy(() -> new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "connector", "adapter", "https://endpoint", "ref",
+                "{\"password\":\"secret\"}", null, null, null, null))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void updatePreservesOrReplacesConfiguration() {
+        IntegrationProfile profile = IntegrationProfile.create(
+                PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.INBOUND,
+                SourceOfTruth.PLATFORM, configuration());
+
+        IntegrationProfileConfiguration updatedConfig = new IntegrationProfileConfiguration(
+                IntegrationProtocol.KAFKA, "kafka-conn", "kafka-adapter", "localhost:9092", "secret/kafka",
+                null, null, null, null, null);
+
+        IntegrationProfile updated = profile.update(
+                "invoices", "billing", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, updatedConfig, 0);
+
+        assertThat(updated.configuration()).isEqualTo(updatedConfig);
+        assertThat(updated.version()).isEqualTo(1);
     }
 
     @Test
@@ -102,12 +160,14 @@ class IntegrationProfileTest {
     void rehydratePreservesPersistedStateWithoutApplyingTransitions() {
         Instant createdAt = Instant.parse("2026-08-14T19:20:30.123456Z");
         Instant updatedAt = Instant.parse("2026-08-15T01:02:03.654321Z");
+        IntegrationProfileConfiguration config = configuration();
 
         IntegrationProfile profile = IntegrationProfile.rehydrate(
                 PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM,
-                false, createdAt, updatedAt, 7);
+                config, false, createdAt, updatedAt, 7);
 
         assertThat(profile.active()).isFalse();
+        assertThat(profile.configuration()).isEqualTo(config);
         assertThat(profile.createdAt()).isEqualTo(createdAt);
         assertThat(profile.updatedAt()).isEqualTo(updatedAt);
         assertThat(profile.version()).isEqualTo(7);
@@ -116,5 +176,20 @@ class IntegrationProfileTest {
     private IntegrationProfile createProfile() {
         return IntegrationProfile.create(
                 PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM);
+    }
+
+    private IntegrationProfileConfiguration configuration() {
+        return new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST,
+                "sigo",
+                "sigo-vehicle-http",
+                "https://sigo.test/api",
+                "secret/sigo/orders",
+                "{\"vin\":\"vehicle.vin\"}",
+                "{\"status\":\"MAP_STATUS\"}",
+                "{\"mode\":\"INCREMENTAL\"}",
+                "{\"maxAttempts\":3,\"initialBackoffMs\":100}",
+                "{\"requestsPerSecond\":10}"
+        );
     }
 }
