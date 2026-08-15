@@ -5,6 +5,7 @@ import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.clearInvocations;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -60,6 +61,7 @@ class IntegrationProfileEventTransactionTest {
     void setUp() {
         callbackCompleted.set(false);
         publishedEvents.clear();
+        clearInvocations(kafkaPublisher);
         when(repository.existsActive(any(), any(), any())).thenReturn(false);
         when(repository.save(eq(TENANT_ID), any())).thenAnswer(invocation -> invocation.getArgument(1));
         doAnswer(invocation -> {
@@ -95,12 +97,31 @@ class IntegrationProfileEventTransactionTest {
 
         assertThat(publishedEvents).extracting(IntegrationProfileEvent::eventType)
                 .containsExactly("IntegrationProfileCreated", "IntegrationProfileUpdated", "IntegrationProfileDeactivated");
-        assertThat(publishedEvents).allSatisfy(event -> {
-            assertThat(event.profileId()).isNotNull();
-            assertThat(event.tenantId()).isEqualTo(TENANT_ID);
-            assertThat(event.occurredAt()).isNotNull();
-        });
-        assertThat(publishedEvents.getLast().state().active()).isFalse();
+        IntegrationProfileEvent created = publishedEvents.get(0);
+        assertThat(created.profileId()).isEqualTo(created.state().id());
+        assertThat(created.profileId()).isNotEqualTo(PROFILE_ID);
+        assertThat(created.tenantId()).isEqualTo(TENANT_ID);
+        assertThat(created.state().businessDomain()).isEqualTo("orders");
+        assertThat(created.state().externalSource()).isEqualTo("erp");
+        assertThat(created.state().active()).isTrue();
+        assertThat(created.state().version()).isZero();
+
+        IntegrationProfileEvent changed = publishedEvents.get(1);
+        assertThat(changed.profileId()).isEqualTo(PROFILE_ID);
+        assertThat(changed.tenantId()).isEqualTo(TENANT_ID);
+        assertThat(changed.state().id()).isEqualTo(PROFILE_ID);
+        assertThat(changed.state().businessDomain()).isEqualTo("catalog");
+        assertThat(changed.state().externalSource()).isEqualTo("crm");
+        assertThat(changed.state().active()).isTrue();
+        assertThat(changed.state().version()).isEqualTo(1);
+
+        IntegrationProfileEvent deactivated = publishedEvents.get(2);
+        assertThat(deactivated.profileId()).isEqualTo(PROFILE_ID);
+        assertThat(deactivated.tenantId()).isEqualTo(TENANT_ID);
+        assertThat(deactivated.state().id()).isEqualTo(PROFILE_ID);
+        assertThat(deactivated.state().active()).isFalse();
+        assertThat(deactivated.state().version()).isEqualTo(2);
+        assertThat(deactivated.occurredAt()).isNotNull();
     }
 
     @Test
@@ -166,13 +187,22 @@ class IntegrationProfileEventTransactionTest {
 
     static class TestTransactionManager extends AbstractPlatformTransactionManager {
 
+        private static final ThreadLocal<Object> CURRENT_TRANSACTION = new ThreadLocal<>();
+
         @Override
         protected Object doGetTransaction() {
-            return new Object();
+            Object current = CURRENT_TRANSACTION.get();
+            return current == null ? new Object() : current;
+        }
+
+        @Override
+        protected boolean isExistingTransaction(Object transaction) {
+            return CURRENT_TRANSACTION.get() != null;
         }
 
         @Override
         protected void doBegin(Object transaction, TransactionDefinition definition) {
+            CURRENT_TRANSACTION.set(transaction);
         }
 
         @Override
@@ -181,6 +211,15 @@ class IntegrationProfileEventTransactionTest {
 
         @Override
         protected void doRollback(DefaultTransactionStatus status) {
+        }
+
+        @Override
+        protected void doSetRollbackOnly(DefaultTransactionStatus status) {
+        }
+
+        @Override
+        protected void doCleanupAfterCompletion(Object transaction) {
+            CURRENT_TRANSACTION.remove();
         }
     }
 }

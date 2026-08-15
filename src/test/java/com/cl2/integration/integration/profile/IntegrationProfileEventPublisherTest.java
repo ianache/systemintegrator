@@ -1,6 +1,7 @@
 package com.cl2.integration.integration.profile;
 
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.verify;
 
 import com.cl2.integration.application.IntegrationProfileView;
@@ -39,23 +40,24 @@ class IntegrationProfileEventPublisherTest {
 
         new IntegrationProfileEventPublisher(kafkaTemplate, new ObjectMapper().findAndRegisterModules()).publish(event);
 
-        verify(kafkaTemplate).send("integration-profile.events", PROFILE_ID.toString(), payload.capture());
+        verify(kafkaTemplate).send(eq("integration-profile.events"), eq(PROFILE_ID.toString()), payload.capture());
         JsonNode json = new ObjectMapper().readTree(payload.getValue());
         assertThat(json.path("eventId").asText()).isEqualTo(EVENT_ID.toString());
         assertThat(json.path("eventType").asText()).isEqualTo("IntegrationProfileUpdated");
         assertThat(json.path("profileId").asText()).isEqualTo(PROFILE_ID.toString());
         assertThat(json.path("tenantId").asText()).isEqualTo(TENANT_ID.toString());
         assertThat(json.path("occurredAt").asText()).isEqualTo("2026-08-15T14:30:00Z");
-        assertThat(json.path("state.id").asText()).isEqualTo(PROFILE_ID.toString());
-        assertThat(json.path("state.tenantId").asText()).isEqualTo(TENANT_ID.toString());
-        assertThat(json.path("state.businessDomain").asText()).isEqualTo("catalog");
-        assertThat(json.path("state.externalSource").asText()).isEqualTo("crm");
-        assertThat(json.path("state.direction").asText()).isEqualTo("OUTBOUND");
-        assertThat(json.path("state.sourceOfTruth").asText()).isEqualTo("EXTERNAL");
-        assertThat(json.path("state.active").asBoolean()).isTrue();
-        assertThat(json.path("state.createdAt").asText()).isEqualTo("2026-08-15T14:00:00Z");
-        assertThat(json.path("state.updatedAt").asText()).isEqualTo("2026-08-15T14:29:00Z");
-        assertThat(json.path("state.version").asLong()).isEqualTo(4L);
+        JsonNode state = json.path("state");
+        assertThat(state.path("id").asText()).isEqualTo(PROFILE_ID.toString());
+        assertThat(state.path("tenantId").asText()).isEqualTo(TENANT_ID.toString());
+        assertThat(state.path("businessDomain").asText()).isEqualTo("catalog");
+        assertThat(state.path("externalSource").asText()).isEqualTo("crm");
+        assertThat(state.path("direction").asText()).isEqualTo("OUTBOUND");
+        assertThat(state.path("sourceOfTruth").asText()).isEqualTo("EXTERNAL");
+        assertThat(state.path("active").asBoolean()).isTrue();
+        assertThat(state.path("createdAt").asText()).isEqualTo("2026-08-15T14:00:00Z");
+        assertThat(state.path("updatedAt").asText()).isEqualTo("2026-08-15T14:29:00Z");
+        assertThat(state.path("version").asLong()).isEqualTo(4L);
     }
 
     private IntegrationProfileView profileState() {
