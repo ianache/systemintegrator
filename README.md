@@ -12,10 +12,9 @@ docker compose config --quiet
 docker compose up --build -d mysql redis kafka app middleware
 ```
 
-Troubleshooting: if Compose reports `bitnami/kafka:3.9: not found`, the configured
-Kafka image tag is unavailable and the stack cannot start. Update the image reference
-through the normal configuration-change process, then rerun the Compose verification;
-a successful `docker compose build app middleware` alone does not validate the full stack.
+Kafka verification status: Compose now uses the available official `apache/kafka:3.8.1`
+image. Kafka-only startup passed after the tag correction; full-stack startup still
+requires a Docker engine with accessible API permissions.
 
 Compose starts MySQL, Redis, Kafka, the integration application, and the Gateway middleware. Only the Gateway publishes a host port (`http://localhost:8081`); it routes `/api/**` internally to `app:8080`. The application port remains on the internal Compose network.
 
