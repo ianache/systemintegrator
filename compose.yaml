@@ -85,7 +85,7 @@ services:
     networks:
       - integration-internal
     healthcheck:
-      test: ["CMD-SHELL", "curl -sS http://localhost:8080/ >/dev/null"]
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null"]
       interval: 10s
       timeout: 5s
       retries: 12
@@ -97,6 +97,7 @@ services:
       dockerfile: Dockerfile
     environment:
       APP_URI: http://app:8080
+      SPRING_PROFILES_ACTIVE: ${SPRING_PROFILES_ACTIVE:-local}
       KEYCLOAK_ISSUER_URI: ${KEYCLOAK_ISSUER_URI:-}
     ports:
       - "${GATEWAY_PORT:-8081}:8081"

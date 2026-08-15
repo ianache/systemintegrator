@@ -1,6 +1,6 @@
 # Integration Profile Platform
 
-Spring Boot service for tenant-isolated integration profiles and the SIGO Vehicle MVP. The tenant is supplied on every request through `X-Tenant-ID`; request payloads must not contain a tenant ID.
+Spring Boot service for tenant-isolated integration profiles and the SIGO Vehicle MVP. The application receives the tenant through `X-Tenant-ID`; Gateway requests derive that header from the validated JWT `tenant_id` claim, while direct application calls provide it explicitly. Request payloads must not contain a tenant ID.
 
 ## Local run
 
@@ -14,6 +14,8 @@ docker compose up --build -d mysql redis kafka app middleware
 
 Compose starts MySQL, Redis, Kafka, the integration application, and the Gateway middleware. Only the Gateway publishes a host port (`http://localhost:8081`); it routes `/api/**` internally to `app:8080`. The application port remains on the internal Compose network.
 
+The Gateway starts with the safe `local` profile by default. This profile does not activate the Keycloak resource-server configuration and does not contact an external issuer. The `qa-e2e` profile activates JWT validation with `KEYCLOAK_ISSUER_URI`; it accepts a Bearer token, reads its `tenant_id` claim, and replaces any caller-supplied `X-Tenant-ID` before proxying the request. Callers must not send or trust `X-Tenant-ID` through the Gateway.
+
 The non-sensitive local override variables are:
 
 | Variable | Default |
@@ -24,7 +26,21 @@ The non-sensitive local override variables are:
 | `KAFKA_PORT` | `29092` |
 | `GATEWAY_PORT` | `8081` |
 
-`KEYCLOAK_ISSUER_URI` is optional and is intentionally not set in `.env.example`. Supply it only from an authorized local environment when you need to exercise the `qa-e2e` JWT validation profile; never commit issuer credentials or tokens.
+`KEYCLOAK_ISSUER_URI` is optional and is intentionally not set in `.env.example`. To run the Gateway against the authorized QA issuer, explicitly activate `qa-e2e` and supply both variables for that command; never commit issuer credentials or tokens:
+
+```bash
+SPRING_PROFILES_ACTIVE=qa-e2e \
+KEYCLOAK_ISSUER_URI=https://issuer.example.test/realms/integration \
+docker compose up -d --build mysql redis kafka app middleware
+```
+
+PowerShell equivalent:
+
+```powershell
+$env:SPRING_PROFILES_ACTIVE = 'qa-e2e'
+$env:KEYCLOAK_ISSUER_URI = 'https://issuer.example.test/realms/integration'
+docker compose up -d --build mysql redis kafka app middleware
+```
 
 For a non-Compose local application run, start dependencies and then run the app with the existing local defaults:
 
@@ -35,14 +51,16 @@ mvn spring-boot:run
 
 Flyway runs on startup. It applies `V1__create_integration_profile.sql` to an empty database and Hibernate then validates the resulting schema; existing databases retain Flyway migration history.
 
-## API examples
+## Gateway API examples (QA E2E)
+
+With `qa-e2e` active, use an access token whose `tenant_id` claim is a UUID. The Gateway derives the tenant from that claim; do not add `X-Tenant-ID` to Gateway requests.
 
 Create a profile:
 
 ```bash
-TENANT_ID=71923e5e-a4cb-4956-91fd-a492fcab5715
+ACCESS_TOKEN='<qa-access-token>'
 curl -i -X POST http://localhost:8081/api/v1/integration-profiles \
-  -H "X-Tenant-ID: $TENANT_ID" \
+  -H "Authorization: Bearer $ACCESS_TOKEN" \
   -H 'Content-Type: application/json' \
   --data '{"businessDomain":"orders","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM"}'
 ```
@@ -50,14 +68,14 @@ curl -i -X POST http://localhost:8081/api/v1/integration-profiles \
 List active profiles:
 
 ```bash
-curl -H "X-Tenant-ID: $TENANT_ID" \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" \
   http://localhost:8081/api/v1/integration-profiles
 ```
 
 Include deactivated profiles:
 
 ```bash
-curl -H "X-Tenant-ID: $TENANT_ID" \
+curl -H "Authorization: Bearer $ACCESS_TOKEN" \
   'http://localhost:8081/api/v1/integration-profiles?activeOnly=false'
 ```
 
@@ -65,9 +83,9 @@ Create and list canonical SIGO vehicles:
 
 ```bash
 curl -i -X POST http://localhost:8081/api/v1/vehicles \
-  -H "X-Tenant-ID: $TENANT_ID" -H 'Content-Type: application/json' \
+  -H "Authorization: Bearer $ACCESS_TOKEN" -H 'Content-Type: application/json' \
   --data '{"vin":"VIN-001","brandCode":"TOYOTA","modelCode":"COROLLA","modelYear":2025}'
-curl -H "X-Tenant-ID: $TENANT_ID" http://localhost:8081/api/v1/vehicles
+curl -H "Authorization: Bearer $ACCESS_TOKEN" http://localhost:8081/api/v1/vehicles
 ```
 
 Vehicle creation writes the canonical `vehicle.created` event to the MySQL outbox in the same transaction. Kafka publication and the SIGO HTTP adapter are separate integration components; the Inbox prevents duplicate event acceptance.
@@ -78,4 +96,4 @@ Run the suite, including the MySQL Testcontainers end-to-end verification:
 mvn test
 ```
 
-Docker must be available to run the MySQL/Kafka Testcontainers end-to-end tests. This environment does not have Docker locally, so those tests are pending; unit, MVC and compile checks remain runnable without containers. A future gateway/JWT layer will supply the authenticated tenant UUID; until then, local callers provide `X-Tenant-ID` directly.
+Docker must be available to run the MySQL/Kafka Testcontainers end-to-end tests. This environment does not have Docker locally, so those tests are pending; unit, MVC and compile checks remain runnable without containers. For a direct, non-Gateway application run only, the application still validates a caller-provided `X-Tenant-ID`; that header is not a Gateway client contract.
