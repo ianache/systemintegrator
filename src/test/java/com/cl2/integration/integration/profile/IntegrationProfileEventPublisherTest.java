@@ -38,7 +38,8 @@ class IntegrationProfileEventPublisherTest {
         IntegrationProfileEvent event = new IntegrationProfileEvent(EVENT_ID, "IntegrationProfileUpdated", PROFILE_ID,
                 TENANT_ID, OCCURRED_AT, profileState());
 
-        new IntegrationProfileEventPublisher(kafkaTemplate, new ObjectMapper().findAndRegisterModules()).publish(event);
+        new IntegrationProfileEventPublisher(kafkaTemplate, new ObjectMapper().findAndRegisterModules(),
+                "integration-profile.events").publish(event);
 
         verify(kafkaTemplate).send(eq("integration-profile.events"), eq(PROFILE_ID.toString()), payload.capture());
         JsonNode json = new ObjectMapper().readTree(payload.getValue());
@@ -58,6 +59,18 @@ class IntegrationProfileEventPublisherTest {
         assertThat(state.path("createdAt").asText()).isEqualTo("2026-08-15T14:00:00Z");
         assertThat(state.path("updatedAt").asText()).isEqualTo("2026-08-15T14:29:00Z");
         assertThat(state.path("version").asLong()).isEqualTo(4L);
+    }
+
+    @Test
+    void publishesToTheConfiguredIntegrationProfileEventsTopic() {
+        IntegrationProfileEvent event = new IntegrationProfileEvent(EVENT_ID, "IntegrationProfileUpdated", PROFILE_ID,
+                TENANT_ID, OCCURRED_AT, profileState());
+
+        new IntegrationProfileEventPublisher(kafkaTemplate, new ObjectMapper().findAndRegisterModules(),
+                "configured.integration-profile.events").publish(event);
+
+        verify(kafkaTemplate).send(eq("configured.integration-profile.events"), eq(PROFILE_ID.toString()),
+                payload.capture());
     }
 
     private IntegrationProfileView profileState() {
