@@ -1,6 +1,7 @@
 package com.cl2.integration.domain.model;
 
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
+import java.time.Instant;
 import java.util.UUID;
 import org.junit.jupiter.api.Test;
 
@@ -96,6 +97,37 @@ class IntegrationProfileTest {
 
         assertThat(profile.active()).isFalse();
         assertThat(profile.id()).isNotNull();
+    }
+
+    @Test
+    void restoreRehydratesAPersistedProfileWithoutChangingItsState() {
+        UUID id = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        Instant createdAt = Instant.parse("2026-08-14T01:02:03Z");
+        Instant updatedAt = Instant.parse("2026-08-14T04:05:06Z");
+
+        IntegrationProfile profile = IntegrationProfile.restore(
+            id,
+            tenantId,
+            "customer",
+            "sap",
+            SyncDirection.OUTBOUND,
+            SourceOfTruth.EXTERNAL,
+            false,
+            7,
+            createdAt,
+            updatedAt);
+
+        assertThat(profile.id()).isEqualTo(id);
+        assertThat(profile.tenantId()).isEqualTo(tenantId);
+        assertThat(profile.businessDomain()).isEqualTo("customer");
+        assertThat(profile.externalSource()).isEqualTo("sap");
+        assertThat(profile.direction()).isEqualTo(SyncDirection.OUTBOUND);
+        assertThat(profile.sourceOfTruth()).isEqualTo(SourceOfTruth.EXTERNAL);
+        assertThat(profile.active()).isFalse();
+        assertThat(profile.version()).isEqualTo(7);
+        assertThat(profile.createdAt()).isEqualTo(createdAt);
+        assertThat(profile.updatedAt()).isEqualTo(updatedAt);
     }
 
     private IntegrationProfile profile() {

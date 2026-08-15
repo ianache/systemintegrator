@@ -55,6 +55,23 @@ public final class IntegrationProfile {
             id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, true, 0, now, now);
     }
 
+    public static IntegrationProfile restore(
+        UUID id,
+        UUID tenantId,
+        String businessDomain,
+        String externalSource,
+        SyncDirection direction,
+        SourceOfTruth sourceOfTruth,
+        boolean active,
+        long version,
+        Instant createdAt,
+        Instant updatedAt
+    ) {
+        return new IntegrationProfile(
+            id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, active, version, createdAt,
+            updatedAt);
+    }
+
     public void update(
         String businessDomain,
         String externalSource,
