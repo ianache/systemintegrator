@@ -5,8 +5,11 @@ import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
+import com.cl2.integration.integration.profile.IntegrationProfileEvent;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.springframework.context.ApplicationEventPublisher;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -14,9 +17,11 @@ import org.springframework.transaction.annotation.Transactional;
 public class IntegrationProfileService {
 
     private final IntegrationProfileRepository repository;
+    private final ApplicationEventPublisher eventPublisher;
 
-    public IntegrationProfileService(IntegrationProfileRepository repository) {
+    public IntegrationProfileService(IntegrationProfileRepository repository, ApplicationEventPublisher eventPublisher) {
         this.repository = repository;
+        this.eventPublisher = eventPublisher;
     }
 
     @Transactional
@@ -26,7 +31,9 @@ public class IntegrationProfileService {
         }
         IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), tenantId, command.businessDomain(),
                 command.externalSource(), command.direction(), command.sourceOfTruth());
-        return toView(repository.save(tenantId, profile));
+        IntegrationProfileView created = toView(repository.save(tenantId, profile));
+        publishEvent("IntegrationProfileCreated", created);
+        return created;
     }
 
     @Transactional(readOnly = true)
@@ -48,13 +55,16 @@ public class IntegrationProfileService {
         }
         IntegrationProfile updated = profile.update(command.businessDomain(), command.externalSource(), command.direction(),
                 command.sourceOfTruth(), command.expectedVersion());
-        return toView(repository.save(tenantId, updated));
+        IntegrationProfileView saved = toView(repository.save(tenantId, updated));
+        publishEvent("IntegrationProfileUpdated", saved);
+        return saved;
     }
 
     @Transactional
     public void deactivate(UUID tenantId, UUID profileId) {
         IntegrationProfile profile = repository.findById(tenantId, profileId);
-        repository.save(tenantId, profile.deactivate());
+        IntegrationProfileView deactivated = toView(repository.save(tenantId, profile.deactivate()));
+        publishEvent("IntegrationProfileDeactivated", deactivated);
     }
 
     private IntegrationProfileView toView(IntegrationProfile profile) {
@@ -66,5 +76,10 @@ public class IntegrationProfileService {
     private boolean identifiesDifferentActiveProfile(IntegrationProfile profile, UpdateIntegrationProfileCommand command) {
         return !profile.businessDomain().equals(command.businessDomain())
                 || !profile.externalSource().equals(command.externalSource());
+    }
+
+    private void publishEvent(String eventType, IntegrationProfileView state) {
+        eventPublisher.publishEvent(new IntegrationProfileEvent(UUID.randomUUID(), eventType, state.id(), state.tenantId(),
+                Instant.now(), state));
     }
 }

@@ -30,7 +30,7 @@ class IntegrationProfileServiceTest {
     @BeforeEach
     void setUp() {
         repository = new FakeIntegrationProfileRepository();
-        service = new IntegrationProfileService(repository);
+        service = new IntegrationProfileService(repository, event -> { });
     }
 
     @Test

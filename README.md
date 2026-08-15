@@ -50,6 +50,13 @@ For a non-Compose local application run, start dependencies and then run the app
 
 ```bash
 docker compose up -d mysql redis kafka
+KAFKA_BOOTSTRAP_SERVERS=localhost:29092 mvn spring-boot:run
+```
+
+The `KAFKA_BOOTSTRAP_SERVERS` override is required for an application running on the host: Compose publishes Kafka on `localhost:29092`. The Compose `app` service runs inside the integration network and therefore uses `kafka:9092` instead. PowerShell equivalent:
+
+```powershell
+$env:KAFKA_BOOTSTRAP_SERVERS = 'localhost:29092'
 mvn spring-boot:run
 ```
 
@@ -100,4 +107,8 @@ Run the suite, including the MySQL Testcontainers end-to-end verification:
 mvn test
 ```
 
-Docker must be available to run the MySQL/Kafka Testcontainers end-to-end tests. The Gateway tests pass locally; the full Compose/Testcontainers verification remains pending where Docker API permissions or container startup prevent execution. For a direct, non-Gateway application run only, the application still validates a caller-provided `X-Tenant-ID`; that header is not a Gateway client contract.
+## Deterministic API/Kafka E2E
+
+The API/Kafka E2E module uses fresh MySQL 8.4 and Kafka Testcontainers, sends requests directly to the application with `X-Tenant-ID`, and verifies events on `integration-profile.events`. It does not contact Keycloak or the Gateway; Gateway QA is Task 7. See [the E2E runbook](e2e/README.md) for the exact module, targeted-test, Compose validation, Docker troubleshooting, initialization, health, and cleanup commands.
+
+Docker must be available to run the MySQL/Kafka Testcontainers suite. For a direct, non-Gateway application run only, the application validates a caller-provided `X-Tenant-ID`; that header is not a Gateway client contract.
