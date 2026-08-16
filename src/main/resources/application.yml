@@ -34,6 +34,15 @@ spring:
   jackson:
     time-zone: UTC
 
+integration:
+  outbox:
+    relay:
+      enabled: true
+      fixed-delay-ms: 1000
+      batch-size: 50
+      max-attempts: 5
+      initial-backoff-ms: 1000
+
 ---
 spring:
   config:
