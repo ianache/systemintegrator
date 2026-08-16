@@ -1,193 +1,231 @@
-# Plan y Casos de Prueba: Transactional Outbox, Idempotent Inbox y Dead Letter Queue (DLQ)
+# Plan de Pruebas Manuales E2E: Transactional Outbox, Idempotent Inbox y Dead Letter Queue (DLQ)
 
 ## 1. Información General
 
 | Campo | Valor |
 |---|---|
-| Módulo | Transactional Outbox & Idempotent Inbox Pipeline |
-| Entorno de ejecución | MySQL 8.4 (`integration`), Kafka 3.8.1 (`integration.events`, `integration.events.dlq`) |
+| Módulo | Transactional Outbox & Idempotent Inbox Pipeline (Core Resilience) |
+| Entorno de ejecución | Docker Compose (`mysql:8.4`, `apache/kafka:3.8.1`, `app:8080`, `middleware:8081`) |
 | Versión Flyway | V4 (`V4__enhance_outbox_inbox_dlq.sql`) |
-| Tablas principales | `integration_outbox`, `integration_inbox`, `integration_inbox_dlq` |
-| Esquema de Concurrencia | `FOR UPDATE SKIP LOCKED` en relay de outbox |
-| Esquema de Idempotencia | Primary Key `(id, tenant_id)` con deduplicación y manejo de DLQ |
+| Tablas principales | `integration_outbox`, `integration_inbox`, `vehicle` |
+| Tópicos Kafka | `integration.events`, `integration.events.dlq` |
+| Esquema de Concurrencia | `SELECT ... FOR UPDATE SKIP LOCKED` en relay de outbox |
+| Esquema de Idempotencia | Primary Key `(event_id)` con validación por `tenant_id` y enrutamiento a DLQ |
 
 ---
 
-## 2. Arquitectura del Flujo
+## 2. Reglas de Ejecución y Formato en PowerShell
 
-```
-+-----------------------------------------------------------------------------------+
-|                            DOMAIN BOUNDED CONTEXT                                 |
-|                                                                                   |
-|  1. Domain Mutation + Outbox INSERT (Atomic Transaction)                          |
-|     +------------------------------------------------------------------------+    |
-|     |  BEGIN TRANSACTION;                                                    |    |
-|     |    INSERT INTO domain_entity (...) VALUES (...);                       |    |
-|     |    INSERT INTO integration_outbox (id, tenant_id, ..., status)         |    |
-|     |           VALUES (UUID(), UUID(), ..., 'PENDING');                     |    |
-|     |  COMMIT;                                                               |    |
-|     +------------------------------------------------------------------------+    |
-+-----------------------------------------------------------------------------------+
-                                         |
-                                         v
-+-----------------------------------------------------------------------------------+
-|                             OUTBOX RELAY SCHEDULER                                |
-|                                                                                   |
-|  2. Polling Batch with SKIP LOCKED:                                               |
-|     SELECT * FROM integration_outbox                                              |
-|     WHERE status = 'PENDING' AND available_at <= NOW(6)                           |
-|     ORDER BY available_at ASC LIMIT 50 FOR UPDATE SKIP LOCKED;                    |
-|                                                                                   |
-|  3. Dispatch to Apache Kafka:                                                     |
-|     - SUCCESS -> UPDATE integration_outbox SET status='PUBLISHED',                |
-|                  published_at=NOW(6) WHERE id=...                                 |
-|     - RETRYABLE ERROR -> attempts++, backoff = initial * 2^(attempts-1)           |
-|                  available_at = NOW(6) + backoff, last_error=...                  |
-|     - EXCEEDED MAX ATTEMPTS -> status='FAILED', last_error=...                    |
-+-----------------------------------------------------------------------------------+
-                                         |
-                                         v (Kafka Topic: integration.events)
-+-----------------------------------------------------------------------------------+
-|                             INBOX PROCESSOR & DLQ                                 |
-|                                                                                   |
-|  4. Idempotent Consumer:                                                          |
-|     - Step 4.1: Record Event (INSERT IGNORE into integration_inbox)               |
-|       * If ALREADY PROCESSED -> Skip duplicate execution gracefully.              |
-|       * If NEW EVENT -> Execute domain consumer lambda:                           |
-|         - SUCCESS -> UPDATE integration_inbox SET status='PROCESSED',             |
-|                      processed_at=NOW(6) WHERE id=...                             |
-|         - FAILURE -> Record in integration_inbox_dlq and forward payload          |
-|                      to DLQ Kafka Topic (integration.events.dlq).                 |
-+-----------------------------------------------------------------------------------+
-```
-
----
-
-## 3. Matriz de Casos de Prueba Automatizados
-
-| ID | Suite / Test Class | Test Case | Tipo | Descripción y Validación |
-|---|---|---|---|---|
-| **OIB-01** | `OutboxInboxFlowIntegrationTest` | `shouldRelayOutboxRecordAndProcessInInboxIdempotently` | Integración E2E | Inserta evento en `integration_outbox`, ejecuta relay con mock de Kafka, procesa en `InboxProcessor` verificando ejecución única e idempotencia en reintentos duplicados. |
-| **OIB-02** | `OutboxEntityTest` | `shouldCreatePendingEventWithDefaultValues` | Unitario | Valida creación de `OutboxEvent` en estado `PENDING`, `attempts=0`, timestamps y mapeo bidireccional a `OutboxJpaEntity`. |
-| **OIB-03** | `OutboxRelaySchedulerTest` | `shouldRelayPendingEventAndMarkPublished` | Unitario | Verifica que eventos pendientes se publiquen a Kafka y su estado transicione a `PUBLISHED` con `publishedAt`. |
-| **OIB-04** | `OutboxRelaySchedulerTest` | `shouldHandlePublishingErrorWithBackoff` | Unitario | Simula falla de red en Kafka, verificando incremento de intentos, cálculo exponencial de backoff y persistencia de `lastError`. |
-| **OIB-05** | `OutboxRelaySchedulerTest` | `shouldMarkTerminalFailedWhenMaxAttemptsReached` | Unitario | Simula agotamiento de reintentos máximos configurados (`maxAttempts`), verificando transición terminal a `FAILED`. |
-| **OIB-06** | `OutboxRelaySchedulerTest` | `shouldSkipRelayWhenDisabled` | Unitario | Comprueba que al desactivar `outbox.relay.enabled=false`, el scheduler no interactúe con el repositorio ni intente despachos. |
-| **OIB-07** | `InboxEntityTest` | `shouldCreateInboxJpaEntityWithDefaults` | Unitario | Verifica instanciación de `InboxJpaEntity` en estado `RECEIVED` con `attempts=0` y mapeo a dominio. |
-| **OIB-08** | `InboxProcessorTest` | `shouldProcessNewEventSuccessfully` | Unitario | Valida que un evento nuevo se registre en el `InboxStore`, se ejecute la lógica de negocio y se marque como `PROCESSED`. |
-| **OIB-09** | `InboxProcessorTest` | `shouldSkipDuplicateAlreadyProcessedEvent` | Unitario | Valida que un evento duplicado ya procesado sea detectado y no vuelva a invocar el consumidor de dominio. |
-| **OIB-10** | `InboxProcessorTest` | `shouldForwardToDlqOnDomainFailure` | Unitario | Valida que ante un error irrecuperable en el handler de dominio, el evento sea registrado como `DEAD_LETTER` y enviado al topic DLQ. |
-
----
-
-## 4. Casos de Prueba Manuales y de Verificación E2E
-
-### OIB-MAN-01: Inserción Atómica y Relay a Kafka
-
-1. **Objetivo:** Verificar que un registro creado en `integration_outbox` sea recogido por el relay y despachado al topic de Kafka.
-2. **Precondición:** Servicios `mysql` y `kafka` activos.
-3. **Paso 1 (Insertar evento outbox manual):**
-   ```sql
-   INSERT INTO integration_outbox (
-       id, tenant_id, aggregate_type, aggregate_id, event_type, topic, payload, status, attempts, available_at, created_at
-   ) VALUES (
-       UUID_TO_BIN(UUID()), UUID_TO_BIN(UUID()), 'Vehicle', UUID_TO_BIN(UUID()),
-       'vehicle.created', 'integration.events', '{"vin":"MANUAL-VIN-001"}',
-       'PENDING', 0, NOW(6), NOW(6)
-   );
+1. **Terminal de Ejecución:** Utilizar PowerShell en Windows.
+2. **Tenants de Prueba:**
+   ```text
+   TENANT_A = 11111111-1111-1111-1111-111111111111
+   TENANT_B = 22222222-2222-2222-2222-222222222222
    ```
-4. **Paso 2 (Esperar ciclo de polling del scheduler):**
-   El scheduler ejecuta `pollAndRelay()` cada 1000 ms.
-5. **Resultado Esperado:**
-   - La fila en `integration_outbox` pasa a `status = 'PUBLISHED'` con `published_at IS NOT NULL`.
-   - El mensaje `{"vin":"MANUAL-VIN-001"}` aparece en el topic Kafka `integration.events`.
-
-### OIB-MAN-02: Deduplicación Idempotente en Inbox
-
-1. **Objetivo:** Verificar que la llegada de un mismo `eventId` múltiples veces solo ejecute la acción de negocio una vez.
-2. **Precondición:** Evento disponible en `integration.events`.
-3. **Paso 1:** Enviar mensaje con cabecera `id: e8a53a1a-cdb0-4854-b966-fed811b3bc21` y `tenantId: ba168da1-0539-4b92-81ad-2d98dfffd1d1`.
-4. **Paso 2:** Reenviar el mismo mensaje inmediatamente (simulación de reintento Kafka o redelivery).
-5. **Resultado Esperado:**
-   - Primer mensaje: Registrado en `integration_inbox` con `status = 'PROCESSED'`, consumidor de negocio ejecutado.
-   - Segundo mensaje: Detectado como duplicado (`recordIfAbsent` retorna `false`), consumidor no se vuelve a invocar.
-
-### OIB-MAN-03: Manejo de Falla y Reenvío a DLQ
-
-1. **Objetivo:** Validar que cargas malformadas o errores de negocio no bloqueen el procesamiento y se canalicen a la Dead Letter Queue.
-2. **Paso 1:** Enviar mensaje con payload inválido que provoque excepción en el consumidor.
-3. **Resultado Esperado:**
-   - Registro en `integration_inbox_dlq` con `error_message` y stack trace.
-   - Evento publicado en el topic DLQ `integration.events.dlq`.
-   - Offset del consumer commitado para continuar consumiendo siguientes mensajes sin bloqueo.
+3. **Llamadas Directas (`http://localhost:8080`):** Requieren cabecera `X-Tenant-ID: <UUID>`.
+4. **Llamadas por Gateway (`http://localhost:8081`):** Requieren token JWT con `Authorization: Bearer <TOKEN>`.
+5. **Comandos Docker Compose:** Todos los comandos están listos para copiar y pegar en PowerShell.
 
 ---
 
-## 5. Evidencia de Ejecución Automatizada
+## 3. Matriz de Casos de Prueba Manuales
 
-Ejecución de la suite completa con Maven (`mvn clean test`):
+| ID | Objetivo | Precondición | Acción / Entrada | Resultado Esperado |
+|---|---|---|---|---|
+| **OIB-PRE-01** | Validar Infraestructura y Migración V4 | Docker Compose levantado | Consulta Flyway y estructura de tablas en MySQL | Flyway V4 `success = 1`, columnas `topic`, `payload` e índices creados. |
+| **OIB-MAN-01** | Creación Atómica de Dominio + Outbox `PENDING` | `app` activa | Crear vehículo vía REST API (`POST /api/v1/vehicles`) | Entidad `vehicle` guardada y registro `integration_outbox` generado en estado `PENDING`. |
+| **OIB-MAN-02** | Relay Autónomo de Outbox a Kafka | OIB-MAN-01 ejecutado | Dejar actuar el scheduler de relay (1s) | `integration_outbox` pasa a `PUBLISHED`, `published_at` poblado y evento presente en Kafka. |
+| **OIB-MAN-03** | Consumo y Procesamiento Idempotente en Inbox | Mensaje publicado en Kafka | Enviar evento nuevo a `integration.events` | Registro en `integration_inbox` con `status = 'PROCESSED'` y `processed_at` no nulo. |
+| **OIB-MAN-04** | Deduplicación de Mensaje Repetido | OIB-MAN-03 completado | Reinyectar el mismo `eventId` en Kafka | El inbox detecta duplicado (`status = PROCESSED`), no reejecuta dominio ni genera errores. |
+| **OIB-MAN-05** | Falla de Procesamiento y Enrutamiento a DLQ | Consumidor Inbox activo | Publicar mensaje con payload corrupto / inválido | `integration_inbox` pasa a `DEAD_LETTER`, `last_error` grabado y payload publicado en `integration.events.dlq`. |
+| **OIB-MAN-06** | Reintentos y Backoff de Relay ante Broker no disponible | Kafka detenido temporalmente | Insertar evento outbox manual | Intentos incrementan (`attempts > 0`), `available_at` postergado con backoff exponencial. |
 
-```text
-[INFO] Scanning for projects...
-[INFO] ------------------------------------------------------------------------
-[INFO] Reactor Build Order:
-[INFO]   integration-parent                                              [pom]
-[INFO]   integration                                                     [jar]
-[INFO]   integration-e2e                                                 [jar]
-[INFO] 
-[INFO] -------------------< com.cl2:integration-parent >--------------------
-[INFO] Building integration-parent 0.0.1-SNAPSHOT                         [1/3]
-[INFO] --------------------------------[ pom ]---------------------------------
-[INFO] 
-[INFO] ------------------------< com.cl2:integration >-------------------------
-[INFO] Building integration 0.0.1-SNAPSHOT                                [2/3]
-[INFO] --------------------------------[ jar ]---------------------------------
-[INFO] Running com.cl2.integration.adapter.in.web.IntegrationProfileControllerTest
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.adapter.out.persistence.IntegrationProfilePersistenceAdapterTest
-[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.infrastructure.tenant.TenantFilterTest
-[INFO] Tests run: 8, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.integration.inbox.InboxEntityTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.integration.inbox.InboxProcessorTest
-[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.integration.outbox.OutboxEntityTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.integration.outbox.OutboxRelaySchedulerTest
-[INFO] Tests run: 4, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.integration.profile.IntegrationProfileEventPublisherTest
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.integration.OutboxInboxFlowIntegrationTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.IntegrationProfileEndToEndTest
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
-[INFO] 
-[INFO] Results:
-[INFO] Tests run: 84, Failures: 0, Errors: 0, Skipped: 0
-[INFO] 
-[INFO] ----------------------< com.cl2:integration-e2e >-----------------------
-[INFO] Building integration-e2e 0.0.1-SNAPSHOT                            [3/3]
-[INFO] --------------------------------[ jar ]---------------------------------
-[INFO] Running com.cl2.integration.e2e.E2eApplicationTest
-[INFO] Tests run: 1, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.e2e.IntegrationProfileE2ETest
-[INFO] Tests run: 2, Failures: 0, Errors: 0, Skipped: 0
-[INFO] Running com.cl2.integration.e2e.KafkaEventObserverTest
-[INFO] Tests run: 3, Failures: 0, Errors: 0, Skipped: 0
-[INFO] 
-[INFO] Results:
-[INFO] Tests run: 6, Failures: 0, Errors: 0, Skipped: 0
-[INFO] 
-[INFO] ------------------------------------------------------------------------
-[INFO] Reactor Summary for integration-parent 0.0.1-SNAPSHOT:
-[INFO] 
-[INFO] integration-parent ................................. SUCCESS [  0.219 s]
-[INFO] integration ........................................ SUCCESS [ 49.522 s]
-[INFO] integration-e2e .................................... SUCCESS [ 26.657 s]
-[INFO] ------------------------------------------------------------------------
-[INFO] BUILD SUCCESS
-[INFO] ------------------------------------------------------------------------
-[INFO] Total tests executed: 90
-[INFO] Failures: 0, Errors: 0, Skipped: 0 (100% PASS)
+---
+
+## 4. Guía Paso a Paso de Ejecución (PowerShell)
+
+### Fase 0: Preparación y Validación del Entorno
+
+#### Paso 0.1 — Levantar Contenedores
+```powershell
+docker compose up -d --build mysql kafka redis app
+docker compose ps
 ```
+*Resultado Esperado:* Todos los servicios en estado `healthy` / `running`.
+
+#### Paso 0.2 — Verificar Migración Flyway V4 e Índices
+```powershell
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT version, description, success, installed_on FROM flyway_schema_history ORDER BY installed_rank;
+SHOW INDEX FROM integration_outbox;
+SHOW INDEX FROM integration_inbox;
+"
+```
+*Resultado Esperado:* `V4` aplicado con `success = 1` y presencia de `idx_outbox_relay` y `idx_inbox_retry`.
+
+---
+
+### Caso OIB-MAN-01: Creación Atómica de Dominio + Outbox PENDING
+
+#### Paso 1.1 — Enviar Solicitud de Creación de Vehículo
+```powershell
+$tenantA = "11111111-1111-1111-1111-111111111111"
+$vinTest = "MANUAL-VIN-" + (Get-Random -Minimum 1000 -Maximum 9999)
+
+$body = @{
+    vin = $vinTest
+    brandCode = "TOYOTA"
+    modelCode = "COROLLA"
+    modelYear = 2024
+} | ConvertTo-Json
+
+$response = Invoke-RestMethod -Method Post `
+  -Uri "http://localhost:8080/api/v1/vehicles" `
+  -Headers @{ "X-Tenant-ID" = $tenantA } `
+  -ContentType "application/json" `
+  -Body $body
+
+Write-Host "Vehículo Creado con ID:" $response.id
+```
+
+#### Paso 1.2 — Verificar Inserción en Tabla de Vehículos y Outbox
+```powershell
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT BIN_TO_UUID(id) AS vehicle_id, vin, brand_code, model_code FROM vehicle WHERE vin = '$vinTest';
+SELECT BIN_TO_UUID(id) AS outbox_id, aggregate_type, event_type, status, attempts, published_at FROM integration_outbox WHERE payload LIKE '%$vinTest%';
+"
+```
+*Resultado Esperado:* El vehículo existe en `vehicle` y el outbox contiene el registro con `event_type = 'vehicle.created'`.
+
+---
+
+### Caso OIB-MAN-02: Verificación del Relay de Outbox a Kafka
+
+#### Paso 2.1 — Comprobar Transición a `PUBLISHED`
+```powershell
+# Esperar 2 segundos para permitir al scheduler procesar el lote
+Start-Sleep -Seconds 2
+
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT BIN_TO_UUID(id) AS outbox_id, event_type, status, attempts, published_at, last_error 
+FROM integration_outbox 
+WHERE payload LIKE '%$vinTest%';
+"
+```
+*Resultado Esperado:* `status = 'PUBLISHED'`, `attempts = 0`, `published_at` con timestamp UTC y `last_error` en `NULL`.
+
+#### Paso 2.2 — Verificar Recepción del Evento en el Topic Kafka
+```powershell
+docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh `
+  --bootstrap-server localhost:9092 `
+  --topic integration.events `
+  --from-beginning `
+  --max-messages 1 `
+  --timeout-ms 5000 `
+  --property print.headers=true `
+  --property print.key=true
+```
+*Resultado Esperado:* Se visualiza la clave del mensaje (UUID), cabeceras `X-Tenant-ID` y `X-Event-Type: vehicle.created`, y el payload JSON del vehículo.
+
+---
+
+### Caso OIB-MAN-03: Consumo y Procesamiento Idempotente en Inbox
+
+#### Paso 3.1 — Insertar un Evento en el Inbox vía Base de Datos o API
+```powershell
+$eventId = [System.Guid]::NewGuid().ToString()
+$tenantId = "11111111-1111-1111-1111-111111111111"
+
+# Insertar simulación de evento recibido
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+INSERT INTO integration_inbox (event_id, tenant_id, event_type, payload, status, attempts, received_at)
+VALUES (UUID_TO_BIN('$eventId'), UUID_TO_BIN('$tenantId'), 'ExternalOrderCreated', '{\"orderId\":\"ORD-1001\"}', 'RECEIVED', 0, NOW(6));
+"
+
+# Consultar estado inicial
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT BIN_TO_UUID(event_id) AS event_id, event_type, status, attempts, received_at, processed_at 
+FROM integration_inbox 
+WHERE event_id = UUID_TO_BIN('$eventId');
+"
+```
+*Resultado Esperado:* Registro en `status = 'RECEIVED'`.
+
+---
+
+### Caso OIB-MAN-04: Deduplicación Idempotente ante Mensaje Repetido
+
+#### Paso 4.1 — Simular Marcado a PROCESSED y Reenvío de Duplicado
+```powershell
+# 1. Simular que el evento fue procesado con éxito
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+UPDATE integration_inbox SET status = 'PROCESSED', processed_at = NOW(6) WHERE event_id = UUID_TO_BIN('$eventId');
+"
+
+# 2. Intentar registrar de nuevo el mismo eventId (como haría el InboxStore)
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT BIN_TO_UUID(event_id) AS event_id, status, processed_at 
+FROM integration_inbox 
+WHERE event_id = UUID_TO_BIN('$eventId') AND tenant_id = UUID_TO_BIN('$tenantId');
+"
+```
+*Resultado Esperado:* El registro conserva `status = 'PROCESSED'`. El adaptador `InboxPersistenceAdapter` detecta la existencia previa y no ejecuta mutaciones de negocio secundarias.
+
+---
+
+### Caso OIB-MAN-05: Falla de Procesamiento y Enrutamiento a DLQ
+
+#### Paso 5.1 — Simular Falla y Registro en DLQ
+```powershell
+$failedEventId = [System.Guid]::NewGuid().ToString()
+
+# Insertar evento en DEAD_LETTER con mensaje de error
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+INSERT INTO integration_inbox (event_id, tenant_id, event_type, payload, status, attempts, last_error, received_at, processed_at)
+VALUES (UUID_TO_BIN('$failedEventId'), UUID_TO_BIN('$tenantId'), 'CorruptedPayloadEvent', '{\"bad_json\":true}', 'DEAD_LETTER', 3, 'Fatal: Schema validation rejected payload', NOW(6), NULL);
+"
+
+# Verificar registro del error
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT BIN_TO_UUID(event_id) AS event_id, status, attempts, last_error 
+FROM integration_inbox 
+WHERE event_id = UUID_TO_BIN('$failedEventId');
+"
+```
+*Resultado Esperado:* `status = 'DEAD_LETTER'`, `attempts = 3`, y `last_error` contiene la causa del fallo.
+
+---
+
+### Caso OIB-MAN-06: Verificación de Reintentos de Outbox y Backoff Exponencial
+
+#### Paso 6.1 — Crear un Evento con Error de Publicación Simulado
+```powershell
+$retryEventId = [System.Guid]::NewGuid().ToString()
+
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+INSERT INTO integration_outbox (id, tenant_id, aggregate_type, aggregate_id, event_type, topic, payload, status, attempts, available_at, last_error, created_at)
+VALUES (UUID_TO_BIN('$retryEventId'), UUID_TO_BIN('$tenantId'), 'Vehicle', UUID_TO_BIN(UUID()), 'vehicle.created', 'invalid.unreachable.topic', '{\"vin\":\"RETRY-001\"}', 'PENDING', 1, DATE_ADD(NOW(6), INTERVAL 10 SECOND), 'Kafka timeout connection', NOW(6));
+"
+
+# Comprobar que available_at está en el futuro (backoff activo)
+docker compose exec mysql mysql -uintegration -pintegration integration -e "
+SELECT BIN_TO_UUID(id) AS id, status, attempts, available_at, last_error 
+FROM integration_outbox 
+WHERE id = UUID_TO_BIN('$retryEventId');
+"
+```
+*Resultado Esperado:* `status = 'PENDING'`, `attempts = 1`, `available_at` postergado 10 segundos en el futuro, impidiendo el reprocesamiento inmediato hasta que expire el backoff.
+
+---
+
+## 5. Registro de Ejecución de Pruebas Manuales
+
+| Caso de Prueba | Resultado (PASS / FAIL) | Fecha de Ejecución | Ejecutor | Observaciones / Evidencia |
+|---|---|---|---|---|
+| **OIB-PRE-01** | | | | Validar migración Flyway V4 y tablas |
+| **OIB-MAN-01** | | | | Inserción atómica `Vehicle` + Outbox `PENDING` |
+| **OIB-MAN-02** | | | | Relay de Outbox a Kafka (`PUBLISHED` y `published_at`) |
+| **OIB-MAN-03** | | | | Consumo y registro en Inbox (`RECEIVED` ➔ `PROCESSED`) |
+| **OIB-MAN-04** | | | | Deduplicación de mensaje duplicado |
+| **OIB-MAN-05** | | | | Enrutamiento a DLQ y estado `DEAD_LETTER` |
+| **OIB-MAN-06** | | | | Reintentos con Backoff Exponencial en Outbox |
