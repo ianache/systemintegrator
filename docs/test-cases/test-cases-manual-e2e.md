@@ -1,585 +1,347 @@
-# Casos de prueba manuales E2E — Integration Platform
+# Guía Maestra de Casos de Prueba Manuales E2E — Plataforma de Integración Multitenant
 
-## 1. Información general
+## 1. Información General y Topología
 
-| Campo | Valor |
+| Parámetro | Valor / Especificación |
 |---|---|
-| Sistema | Integration Platform / SIGO Vehicle MVP |
-| Entorno | Docker Compose local + Keycloak QA opcional |
-| Rama objetivo | `main` |
-| Gateway | `http://localhost:8081` |
-| Tema de perfiles | `integration-profile.events` |
-| Tema de outbox de vehículos | `integration.events` |
-| Base de datos | MySQL 8.4 |
-| Cache | Redis 7.4 |
-| Mensajería | Apache Kafka 3.8.1 |
-| Realm QA | `microservicios` |
+| Sistema | Plataforma de Integración Multitenant (Java 21 / Spring Boot 3.4.5) |
+| Arquitectura | Microservicios Event-Driven con Clean Architecture & Hexagonal Ports |
+| Ingress / Gateway | Spring Cloud Gateway (`http://localhost:8081` con perfil `qa-e2e`) |
+| Core Service (`app`) | Puerto interno `8080` (en red Docker `integration-internal`) |
+| Base de Datos | MySQL 8.4 (`jdbc:mysql://localhost:3306/integration`) |
+| Mensajería | Apache Kafka 3.8.1 (`localhost:29092` / interno `kafka:9092`) |
+| Cache & Rate Limiting | Redis 7.4 (`localhost:6379` / interno `redis:6379`) |
+| Seguridad OAuth2 | Keycloak QA (`https://oauth2.qa.comsatel.com.pe/realms/microservicios`) |
+| Resiliencia | Resilience4j Circuit Breaker & Redis Lua Token Bucket Rate Limiter |
+| Transformación | JSONPath + SpEL (Sandboxed) & JSLT Script Engine |
 
-### Reglas de ejecución
-
-- Ejecutar los casos en orden cuando se indique una dependencia.
-- Registrar resultado `PASS`, `FAIL` o `BLOCKED`, fecha, ejecutor y evidencia.
-- No guardar contraseñas, access tokens ni headers `Authorization` en evidencias.
-- Para llamadas directas a `app`, usar `X-Tenant-ID`.
-- Para llamadas por `middleware` con perfil `qa-e2e`, no confiar en `X-Tenant-ID`: el Gateway lo reemplaza con el claim `tenant_id` del JWT.
-- Usar dos UUID de tenant distintos:
-
-```text
-TENANT_A = 11111111-1111-1111-1111-111111111111
-TENANT_B = 22222222-2222-2222-2222-222222222222
+### Tenants de Prueba
+```powershell
+$TENANT_A = "11111111-1111-1111-1111-111111111111"
+$TENANT_B = "22222222-2222-2222-2222-222222222222"
+$GATEWAY_URL = "http://localhost:8081"
 ```
 
-## 2. Preparación del entorno
+---
 
-### PRE-01 — Validar configuración Compose
+## 2. Mapa Integral de Flujo E2E
 
+```mermaid
+flowchart TD
+    KC([Keycloak QA OAuth2]) -->|JWT con tenant_id claim| GW[Spring Cloud Gateway :8081]
+    GW -->|Inyecta X-Tenant-ID| APP[Core Integration App :8080]
+    
+    subgraph Core Engine
+        APP --> SEC[SecretResolver / Vault]
+        APP --> RL[Redis Distributed Rate Limiter]
+        APP --> CB[Resilience4j Circuit Breaker]
+        APP --> TE[Dynamic Transformation Engine]
+        APP --> DB[(MySQL 8.4)]
+    end
+    
+    subgraph Transactional Messaging
+        DB -->|Atomic Outbox PENDING| RELAY[Outbox Relay Scheduler]
+        RELAY -->|FOR UPDATE SKIP LOCKED| KF[(Apache Kafka 3.8.1)]
+        KF -->|integration.events| INBOX[Idempotent Inbox Consumer]
+        INBOX -->|Success / Deduplication| DB
+        INBOX -->|Poison Pill / Max Retries| DLQ[(integration.events.dlq)]
+    end
+```
+
+---
+
+## 3. Preparación y Validación del Entorno
+
+### PRE-01: Verificación de Docker Compose
 ```powershell
 docker compose config --quiet
-```
-
-**Esperado:** código `0`, sin errores de variables o YAML.
-
-### PRE-02 — Levantar todos los servicios
-
-```powershell
 docker compose up -d --build mysql redis kafka app middleware
 docker compose ps
 ```
+**Criterio de Aceptación:** Todos los contenedores (`mysql`, `redis`, `kafka`, `app`, `middleware`) en estado `healthy` o `running`.
 
-**Esperado:** `mysql`, `redis`, `kafka`, `app` y `middleware` en `healthy`.
-
-### PRE-03 — Health de infraestructura
-
+### PRE-02: Health Check de Componentes de Infraestructura
 ```powershell
+# MySQL
 docker compose exec mysql mysqladmin ping -uintegration -pintegration --silent
+# Redis
 docker compose exec redis redis-cli ping
+# Kafka
 docker compose exec kafka /opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server kafka:9092
-```
-
-**Esperado:** MySQL responde `mysqld is alive`, Redis responde `PONG` y Kafka devuelve capacidades del broker.
-
-### PRE-04 — Health de aplicación y Gateway
-
-```powershell
-docker compose exec app curl -fsS -H 'X-Tenant-ID: 11111111-1111-1111-1111-111111111111' `
-  'http://localhost:8080/api/v1/integration-profiles?activeOnly=true'
+# Gateway
 curl.exe -fsS http://localhost:8081/actuator/health
 ```
+**Criterio de Aceptación:** MySQL devuelve `mysqld is alive`, Redis devuelve `PONG`, Kafka devuelve capacidades de API y el Gateway responde `{"status":"UP"}`.
 
-**Esperado:** HTTP `200`; el Gateway devuelve `{"status":"UP"}`.
-
-### PRE-05 — Inicialización Flyway
-
+### PRE-03: Validación de Migraciones Flyway
 ```powershell
-docker compose exec mysql mysql -uintegration -pintegration integration `
-  -e "SELECT version, description, success FROM flyway_schema_history ORDER BY installed_rank;"
+docker compose exec mysql mysql -uintegration -pintegration integration -e "SELECT installed_rank, version, description, success FROM flyway_schema_history ORDER BY installed_rank;"
 ```
+**Criterio de Aceptación:** Todas las versiones (`V1` a `V4`) aplicadas con `success = 1`.
 
-**Esperado:** migraciones aplicadas con `success = 1`, incluyendo las tablas de perfiles, vehículos, outbox e inbox.
+---
 
-## 3. Seguridad y Gateway
+## 4. Autenticación y Seguridad en Gateway (Keycloak QA)
 
-Estos casos requieren iniciar el middleware con el perfil QA:
-
+### SEC-01: Obtención de Access Token OAuth2
 ```powershell
-$env:SPRING_PROFILES_ACTIVE = 'qa-e2e'
 $env:KEYCLOAK_ISSUER_URI = 'https://oauth2.qa.comsatel.com.pe/realms/microservicios'
-docker compose up -d --force-recreate middleware
-```
-
-Obtener el token de forma interactiva. No imprimir ni guardar la respuesta completa:
-
-```powershell
 $env:KEYCLOAK_CLIENT_ID = 'cl2integration'
 $env:KEYCLOAK_CLIENT_SECRET = 'lMFdDxHeSb4BwQIVJXtAK21ujlTp6yTS'
 $env:KEYCLOAK_USERNAME = 'integracion'
 $securePassword = Read-Host 'Keycloak password' -AsSecureString
 $env:KEYCLOAK_PASSWORD = [System.Net.NetworkCredential]::new('', $securePassword).Password
-$token = Invoke-RestMethod -Method Post `
+
+$tokenResponse = Invoke-RestMethod -Method Post `
   -Uri "$env:KEYCLOAK_ISSUER_URI/protocol/openid-connect/token" `
   -ContentType 'application/x-www-form-urlencoded' `
-  -Body @{ grant_type='password'; client_id=$env:KEYCLOAK_CLIENT_ID; client_secret=$env:KEYCLOAK_CLIENT_SECRET; username=$env:KEYCLOAK_USERNAME; password=$env:KEYCLOAK_PASSWORD }
-$env:ACCESS_TOKEN = $token.access_token
+  -Body @{ 
+    grant_type    = 'password'
+    client_id     = $env:KEYCLOAK_CLIENT_ID
+    client_secret = $env:KEYCLOAK_CLIENT_SECRET
+    username      = $env:KEYCLOAK_USERNAME
+    password      = $env:KEYCLOAK_PASSWORD 
+  }
+
+$env:ACCESS_TOKEN = $tokenResponse.access_token
+$headers = @{
+    "Authorization" = "Bearer $env:ACCESS_TOKEN"
+    "Content-Type"  = "application/json"
+}
 ```
+**Criterio de Aceptación:** Token JWT válido generado con el claim `tenant_id`.
 
-El usuario debe tener un claim `tenant_id` con formato UUID. Si no lo tiene, los casos autenticados deben marcarse `BLOCKED` por precondición de Keycloak, no como fallo del API.
-
-### Diagnóstico `invalid_grant` / `Invalid user credentials`
-
-`USUARIO/PASSWORD` no necesariamente es un usuario del realm `microservicios`. En Keycloak, una cuenta administrativa creada durante la instalación suele pertenecer al realm `master`; esa cuenta no puede solicitar tokens usando el endpoint de `microservicios`.
-
-Verificar en la consola de Keycloak:
-
-1. Cambiar explícitamente al realm `microservicios`.
-2. Ir a `Users` y confirmar que existe el usuario que se usará para la prueba.
-3. Confirmar que el usuario está habilitado, tiene contraseña definida y que la contraseña no está marcada como temporal.
-4. Confirmar que el cliente indicado por `KEYCLOAK_CLIENT_ID` existe en `microservicios` y tiene `Direct Access Grants` habilitado.
-5. Confirmar que el usuario tiene un mapper o atributo que emite `tenant_id` como UUID.
-
-Si `user/welcome1` solo existe en `master`, usar un usuario QA creado en `microservicios` y asignarlo a `KEYCLOAK_USERNAME`; no cambiar el issuer del Gateway a `master`, porque el Gateway debe validar tokens cuyo issuer sea `microservicios`.
-
-La cuenta administrativa de `master` puede servir para administrar el realm, pero no debe utilizarse directamente como usuario de negocio del E2E. No registrar contraseñas ni tokens en la evidencia.
-
-### SEC-01 — Health público del Gateway
-
+### SEC-02: Rechazo de Petición sin Token (HTTP 401 Unauthorized)
 ```powershell
-curl.exe -i http://localhost:8081/actuator/health
+try {
+    Invoke-RestMethod -Method Get -Uri "$GATEWAY_URL/api/v1/integration-profiles"
+} catch {
+    Write-Host "Status code:" $_.Exception.Response.StatusCode
+}
 ```
+**Criterio de Aceptación:** HTTP `401 Unauthorized`.
 
-**Esperado:** `200`.
+---
 
-### SEC-02 — Solicitud sin Bearer token
+## 5. Gestión de Perfiles y Transformación de Payloads
 
+### TRF-01: Crear Perfil con Motor de Mapeo Declarativo (`FIELD_MAPPING` + SpEL)
 ```powershell
-curl.exe -i http://localhost:8081/api/v1/integration-profiles
+$bodyFieldMapping = @{
+    businessDomain   = "vehicles-sigo-transform"
+    externalSource   = "sigo-adapter"
+    syncDirection    = "INBOUND"
+    sourceOfTruth    = "EXTERNAL"
+    protocol         = "REST"
+    connector        = "sigo"
+    adapter          = "sigo-http"
+    endpoint         = "https://sigo.qa.internal/api/v1"
+    credentialRef    = "vault:secret/data/tenants/$TENANT_A/sigo"
+    transformation   = @{
+        engine = "FIELD_MAPPING"
+        fields = @(
+            @{ target = "vin"; sourcePath = "$.Vehiculo.NumeroChasis"; required = $true },
+            @{ target = "brand"; sourcePath = "$.Vehiculo.Marca"; transform = "#val.toUpperCase()" },
+            @{ target = "modelYear"; sourcePath = "$.Vehiculo.Anio"; targetType = "INTEGER" },
+            @{ target = "active"; sourcePath = "$.Vehiculo.Activo"; transform = "#val == '1'"; targetType = "BOOLEAN" }
+        )
+    } | ConvertTo-Json -Depth 5
+}
+
+$profileFM = Invoke-RestMethod -Method Post `
+  -Uri "$GATEWAY_URL/api/v1/integration-profiles" `
+  -Headers $headers `
+  -Body ($bodyFieldMapping | ConvertTo-Json -Depth 5)
+
+Write-Host "Perfil FIELD_MAPPING Creado con ID:" $profileFM.id
 ```
+**Criterio de Aceptación:** HTTP `201 Created` con ID generado y configuración persistida en MySQL.
 
-**Esperado:** `401`; no se crea ni modifica información.
-
-### SEC-03 — Bearer token inválido
-
+### TRF-02: Crear Perfil con Motor Funcional JSLT (`JSLT`)
 ```powershell
-curl.exe -i http://localhost:8081/api/v1/integration-profiles -H 'Authorization: Bearer invalid-token'
+$bodyJslt = @{
+    businessDomain   = "customers-sap-jslt"
+    externalSource   = "sap-erp"
+    syncDirection    = "INBOUND"
+    sourceOfTruth    = "EXTERNAL"
+    protocol         = "REST"
+    connector        = "sap"
+    adapter          = "sap-rfc"
+    endpoint         = "https://sap.qa.internal/rfc"
+    credentialRef    = "vault:secret/data/tenants/$TENANT_A/sap"
+    transformation   = @{
+        engine = "JSLT"
+        script = '{ "customerId": .sap_customer.header.id, "name": uppercase(.sap_customer.header.company_name), "addresses": [for (.sap_customer.addresses) .street if (.type == "SHIPPING")] }'
+    } | ConvertTo-Json -Depth 5
+}
+
+$profileJSLT = Invoke-RestMethod -Method Post `
+  -Uri "$GATEWAY_URL/api/v1/integration-profiles" `
+  -Headers $headers `
+  -Body ($bodyJslt | ConvertTo-Json -Depth 5)
+
+Write-Host "Perfil JSLT Creado con ID:" $profileJSLT.id
 ```
+**Criterio de Aceptación:** HTTP `201 Created` con validación sintáctica de script JSLT exitosa.
 
-**Esperado:** `401`.
-
-### SEC-04 — Token con tenant válido
-
+### TRF-03: Rechazo de Perfil con Error de Sintaxis JSLT (HTTP 400 Bad Request)
 ```powershell
-curl.exe -i http://localhost:8081/api/v1/integration-profiles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
+$bodyInvalidJslt = @{
+    businessDomain   = "invalid-jslt"
+    externalSource   = "bad-source"
+    syncDirection    = "INBOUND"
+    sourceOfTruth    = "EXTERNAL"
+    protocol         = "REST"
+    connector        = "bad"
+    adapter          = "bad-adapter"
+    transformation   = @{
+        engine = "JSLT"
+        script = '{ syntax error missing colon }'
+    } | ConvertTo-Json -Depth 5
+}
+
+try {
+    Invoke-RestMethod -Method Post `
+      -Uri "$GATEWAY_URL/api/v1/integration-profiles" `
+      -Headers $headers `
+      -Body ($bodyInvalidJslt | ConvertTo-Json -Depth 5)
+} catch {
+    Write-Host "Status Code:" $_.Exception.Response.StatusCode
+}
 ```
+**Criterio de Aceptación:** HTTP `400 Bad Request` indicando `Invalid JSLT script`.
 
-**Esperado:** `200` y acceso asociado exclusivamente al `tenant_id` del token.
+---
 
-### SEC-05 — Header de tenant manipulado
+## 6. Seguridad en Runtime y Resiliencia Distribuida
 
-Enviar un `X-Tenant-ID` distinto al claim del token.
-
+### RES-01: Rate Limiting en Redis (Rechazo con HTTP 429 al exceder cuota)
 ```powershell
-curl.exe -i http://localhost:8081/api/v1/integration-profiles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN" `
-  -H 'X-Tenant-ID: 22222222-2222-2222-2222-222222222222'
+# Enviar ráfaga concurrente de llamadas
+$uri = "$GATEWAY_URL/api/v1/integration-profiles"
+1..30 | ForEach-Object {
+    try {
+        $res = Invoke-RestMethod -Method Get -Uri $uri -Headers $headers
+        Write-Host "Req $_: OK"
+    } catch {
+        Write-Host "Req $_: Rate Limit Exceeded (HTTP" $_.Exception.Response.StatusCode ")"
+    }
+}
+
+# Inspeccionar llaves en Redis
+docker compose exec redis redis-cli KEYS "ratelimit:*"
 ```
+**Criterio de Aceptación:** Tras superar el límite configurado, las solicitudes son rechazadas con HTTP `429 Too Many Requests` y TTL activo en Redis.
 
-**Esperado:** el Gateway ignora el header y utiliza el `tenant_id` autenticado.
-
-### SEC-06 — Token sin `tenant_id`
-
-Usar un token de prueba autorizado sin el claim.
-
-**Esperado:** `403`; no se reenvía la solicitud a `app`.
-
-### SEC-07 — `tenant_id` malformado
-
-Usar un token cuyo claim `tenant_id` no sea UUID.
-
-**Esperado:** `403`.
-
-### SEC-08 — Issuer incorrecto o token expirado
-
-Usar un token expirado o emitido por otro issuer.
-
-**Esperado:** `401`.
-
-## 4. API de Integration Profiles — tenant A
-
-Para pruebas directas reemplazar `BASE_URL` por `http://localhost:8080` y enviar `X-Tenant-ID: $TENANT_A`. Para pruebas end-to-end usar `http://localhost:8081` y Bearer token.
-
-### IP-01 — Crear perfil válido
-
+### RES-02: Circuit Breaker de Resilience4j ante Fallos Remotos
 ```powershell
-curl.exe -i -X POST http://localhost:8081/api/v1/integration-profiles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN" `
-  -H 'Content-Type: application/json' `
-  --data '{"businessDomain":"orders","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM"}'
+# Verificar métricas de Circuit Breaker en Spring Actuator
+curl.exe -s http://localhost:8081/actuator/metrics/resilience4j.circuitbreaker.state
 ```
+**Criterio de Aceptación:** Métricas expuestas correctamente; transición a `OPEN` tras superar el umbral de 50% de fallos.
 
-**Esperado:** `201`; guardar `id` y `version` inicial `0` como `PROFILE_ID` y `PROFILE_VERSION`.
+---
 
-### IP-02 — Crear con campos obligatorios ausentes
+## 7. Core de Resiliencia: Outbox, Relay Concurrente e Idempotent Inbox
 
-Enviar `{}`, campos vacíos, `businessDomain` vacío o `externalSource` vacío.
-
-**Esperado:** `400`, `errorCode = VALIDATION_FAILED`.
-
-### IP-03 — Crear con enum inválido
-
-Enviar valores no soportados para `syncDirection` o `sourceOfTruth`.
-
-**Esperado:** `400`, `errorCode = VALIDATION_FAILED`.
-
-### IP-04 — Listar perfiles activos
-
+### OIB-01: Inserción Atómica y Publicación vía Outbox Relay
 ```powershell
-curl.exe -i http://localhost:8081/api/v1/integration-profiles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
+# Registrar un vehículo (dispara inserción atómica en tabla de dominio + outbox)
+$vehicleBody = @{
+    vin          = "1HGCR2F83HA123456"
+    licensePlate = "ABC-123"
+    brandCode    = "HONDA"
+    modelCode    = "ACCORD"
+    modelYear    = 2024
+    status       = "ACTIVE"
+}
+
+$vehicle = Invoke-RestMethod -Method Post `
+  -Uri "$GATEWAY_URL/api/v1/vehicles" `
+  -Headers $headers `
+  -Body ($vehicleBody | ConvertTo-Json)
+
+Write-Host "Vehículo Creado con VIN:" $vehicle.vin
+
+# Verificar publicación en tabla integration_outbox
+docker compose exec mysql mysql -uintegration -pintegration integration `
+  -e "SELECT id, aggregate_id, event_type, status, attempts, published_at FROM integration_outbox ORDER BY created_at DESC LIMIT 1;"
 ```
+**Criterio de Aceptación:** Estado en `integration_outbox` transiciona de `PENDING` a `PUBLISHED` con `attempts = 1` y `published_at IS NOT NULL`.
 
-**Esperado:** `200`; contiene solo perfiles activos del tenant autenticado.
-
-### IP-05 — Obtener perfil por ID
-
-```powershell
-curl.exe -i "http://localhost:8081/api/v1/integration-profiles/$PROFILE_ID" `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
-```
-
-**Esperado:** `200`; `tenantId`, `id` y datos coinciden con la creación.
-
-### IP-06 — Obtener ID inexistente
-
-**Esperado:** `404`, `errorCode = INTEGRATION_PROFILE_NOT_FOUND`.
-
-### IP-07 — UUID de ruta inválido
-
-```powershell
-curl.exe -i http://localhost:8081/api/v1/integration-profiles/not-a-uuid `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
-```
-
-**Esperado:** `400`; no hay acceso a datos de otro tenant.
-
-### IP-08 — Actualizar con versión correcta
-
-```powershell
-curl.exe -i -X PUT "http://localhost:8081/api/v1/integration-profiles/$PROFILE_ID" `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN" -H 'Content-Type: application/json' `
-  --data '{"businessDomain":"orders-updated","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM","expectedVersion":0}'
-```
-
-**Esperado:** `200`; `version` incrementa a `1`.
-
-### IP-09 — Actualizar con versión obsoleta
-
-Repetir IP-08 usando `expectedVersion: 0` después de que la versión sea `1`.
-
-**Esperado:** `409`, `errorCode = INTEGRATION_PROFILE_CONFLICT`; los datos permanecen consistentes.
-
-### IP-10 — Actualizar con payload inválido
-
-Enviar campos vacíos, enums inválidos o `expectedVersion` ausente.
-
-**Esperado:** `400`, `errorCode = VALIDATION_FAILED`.
-
-### IP-11 — Desactivación lógica
-
-```powershell
-curl.exe -i -X DELETE "http://localhost:8081/api/v1/integration-profiles/$PROFILE_ID" `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
-```
-
-**Esperado:** `204`; la fila no se elimina físicamente.
-
-### IP-12 — Listar activos después de desactivar
-
-**Esperado:** `200`; el perfil no aparece con `activeOnly=true`.
-
-### IP-13 — Listar histórico
-
-```powershell
-curl.exe -i 'http://localhost:8081/api/v1/integration-profiles?activeOnly=false' `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
-```
-
-**Esperado:** `200`; el perfil aparece con `active=false`.
-
-### IP-14 — Desactivar perfil inexistente
-
-**Esperado:** `404`, `errorCode = INTEGRATION_PROFILE_NOT_FOUND`.
-
-### IP-15 — Crear perfil con configuración declarativa extendida
-
-```powershell
-$body = '{"businessDomain":"orders","externalSource":"erp","syncDirection":"INBOUND","sourceOfTruth":"PLATFORM","protocol":"REST","connector":"sigo","adapter":"sigo-vehicle-http","endpoint":"https://sigo.test/api","credentialRef":"secret/sigo/orders","mapping":{"vin":"vehicle.vin"},"retryPolicy":{"maxAttempts":3,"initialBackoffMs":100},"rateLimitPolicy":{"requestsPerSecond":10}}'
-curl.exe -i -X POST http://localhost:8081/api/v1/integration-profiles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN" `
-  -H 'Content-Type: application/json' `
-  --data $body
-```
-
-**Esperado:** `201`; el response incluye el objeto `configuration` con protocolo `REST`, `credentialRef` sin secretos y mapeos definidos. Validar que no se activan reintentos en tiempo de ejecución.
-
-## 5. Aislamiento multitenant
-
-### TEN-01 — Tenant B no lista perfiles de tenant A
-
-Usar un token con `tenant_id = TENANT_B` o llamada directa con `X-Tenant-ID: TENANT_B`.
-
-**Esperado:** `200` con lista vacía, sin filtrar datos de A.
-
-### TEN-02 — Tenant B no obtiene perfil de tenant A
-
-```powershell
-curl.exe -i "http://localhost:8081/api/v1/integration-profiles/$PROFILE_ID" `
-  -H "Authorization: Bearer $TOKEN_TENANT_B"
-```
-
-**Esperado:** `404`, nunca `200`.
-
-### TEN-03 — Tenant B no modifica perfil de tenant A
-
-**Esperado:** `404` o `409` según el contrato; no se modifica la versión ni el contenido de A.
-
-### TEN-04 — Tenant B no desactiva perfil de tenant A
-
-**Esperado:** `404`; el perfil de A permanece activo/inactivo según su estado anterior.
-
-### TEN-05 — Mismo VIN en tenants distintos
-
-Crear el mismo VIN para A y B.
-
-**Esperado:** permitido; la unicidad es `(tenant_id, vin)`.
-
-### TEN-06 — Mismo VIN en el mismo tenant
-
-Crear dos veces el mismo VIN para A.
-
-**Esperado:** `400` o `409` según el handler activo; no se crean duplicados.
-
-## 6. Eventos Kafka de Integration Profiles
-
-Consumir antes de ejecutar las operaciones para observar eventos nuevos:
-
+### OIB-02: Consumo en Kafka con Cabeceras Multitenant
 ```powershell
 docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh `
-  --bootstrap-server kafka:9092 --topic integration-profile.events `
-  --from-beginning --timeout-ms 15000
+  --bootstrap-server kafka:9092 `
+  --topic integration.events `
+  --partition 0 `
+  --offset earliest `
+  --max-messages 1 `
+  --property print.headers=true `
+  --property print.key=true
 ```
+**Criterio de Aceptación:** Mensaje consumido conteniendo cabeceras `X-Tenant-ID`, `X-Event-Type` y `X-Aggregate-ID`.
 
-### KAF-01 — Evento de creación
-
-Ejecutar IP-01.
-
-**Esperado:** evento `integration-profile.created` después del commit, con `profileId`, `tenantId` y payload del perfil.
-
-### KAF-02 — Evento de actualización
-
-Ejecutar IP-08.
-
-**Esperado:** evento `integration-profile.updated`, con versión nueva y tenant correcto.
-
-### KAF-03 — Evento de desactivación
-
-Ejecutar IP-11.
-
-**Esperado:** evento `integration-profile.deactivated`, con `active=false` o representación equivalente.
-
-### KAF-04 — Evento no emitido cuando falla la transacción
-
-Provocar validación fallida o conflicto de versión.
-
-**Esperado:** no se publica un evento de éxito para la operación fallida.
-
-### KAF-05 — Clave Kafka
-
-Inspeccionar el registro con un consumidor que muestre la clave.
-
-**Esperado:** la clave corresponde al `profileId`, permitiendo orden por perfil.
-
-## 7. API de vehículos
-
-### VEH-01 — Crear vehículo válido
-
+### OIB-03: Deduplicación Idempotente en Inbox
 ```powershell
-curl.exe -i -X POST http://localhost:8081/api/v1/vehicles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN" -H 'Content-Type: application/json' `
-  --data '{"vin":"VIN-001","brandCode":"TOYOTA","modelCode":"COROLLA","modelYear":2025}'
-```
-
-**Esperado:** `201`; guardar `id` como `VEHICLE_ID`, `active=true`, `version=0`.
-
-### VEH-02 — Validar VIN, marca y modelo obligatorios
-
-Enviar campos ausentes, nulos, vacíos o solo espacios.
-
-**Esperado:** `400`, sin fila ni outbox creado.
-
-### VEH-03 — Validar rango de año
-
-Probar `modelYear=1885` y `modelYear=3001`.
-
-**Esperado:** `400`; `1886` y `3000` son valores límite válidos.
-
-### VEH-04 — Listar vehículos activos
-
-```powershell
-curl.exe -i http://localhost:8081/api/v1/vehicles `
-  -H "Authorization: Bearer $env:ACCESS_TOKEN"
-```
-
-**Esperado:** `200`; solo vehículos del tenant autenticado y activos.
-
-### VEH-05 — Obtener vehículo por ID
-
-**Esperado:** `200` para el tenant propietario y `404` para otro tenant.
-
-### VEH-06 — VIN duplicado en el mismo tenant
-
-Repetir VEH-01 con `VIN-001`.
-
-**Esperado:** rechazo; no se duplica el vehículo ni el evento outbox.
-
-### VEH-07 — Mismo VIN en otro tenant
-
-Crear `VIN-001` con `TENANT_B`.
-
-**Esperado:** permitido y aislado de `TENANT_A`.
-
-### VEH-08 — Inyección de tenant por body/header
-
-Enviar campos adicionales como `tenantId` en el JSON o un `X-Tenant-ID` distinto al tenant autenticado.
-
-**Esperado:** el tenant efectivo proviene de la autenticación/Gateway; el body no controla el tenant.
-
-## 8. Outbox, Inbox y publicación de vehículo
-
-### OUT-01 — Outbox transaccional en creación
-
-Después de VEH-01:
-
-```powershell
+# Consultar tabla de inbox para verificar registro y estado PROCESSED
 docker compose exec mysql mysql -uintegration -pintegration integration `
-  -e "SELECT id, tenant_id, aggregate_type, aggregate_id, event_type, status, attempts, published_at FROM integration_outbox ORDER BY created_at DESC LIMIT 5;"
+  -e "SELECT event_id, tenant_id, status, attempts, processed_at FROM integration_inbox ORDER BY received_at DESC LIMIT 5;"
 ```
+**Criterio de Aceptación:** Evento registrado con `status = 'PROCESSED'`. Al re-enviar el mismo `event_id`, el procesador detecta duplicado y no re-ejecuta la lógica de dominio.
 
-**Esperado:** registro `Vehicle`, `vehicle.created`, tenant correcto y estado inicial `PENDING` o el estado configurado por el publisher.
-
-### OUT-02 — Payload del outbox
-
+### OIB-04: Enrutamiento a Dead Letter Queue (`integration.events.dlq`)
 ```powershell
-docker compose exec mysql mysql -uintegration -pintegration integration `
-  -e "SELECT JSON_PRETTY(payload) FROM integration_outbox ORDER BY created_at DESC LIMIT 1;"
-```
-
-**Esperado:** contiene `eventId`, `tenantId`, `vehicleId`, `eventType=vehicle.created`, VIN, marca, modelo, año y estado activo.
-
-### OUT-03 — Publicación Kafka del outbox
-
-```powershell
+# Inspeccionar tópico DLQ de Kafka para mensajes con fallos irrecuperables
 docker compose exec kafka /opt/kafka/bin/kafka-console-consumer.sh `
-  --bootstrap-server kafka:9092 --topic integration.events `
-  --from-beginning --timeout-ms 15000
+  --bootstrap-server kafka:9092 `
+  --topic integration.events.dlq `
+  --from-beginning `
+  --timeout-ms 3000
 ```
+**Criterio de Aceptación:** Mensajes que superan el número máximo de reintentos son archivados en `integration.events.dlq` con estado `DEAD_LETTER` en `integration_inbox`.
 
-**Esperado:** aparece el evento `vehicle.created` correspondiente al vehículo.
+---
 
-### OUT-04 — Estado publicado
+## 8. Aislamiento Multitenant E2E
 
-Consultar nuevamente `integration_outbox`.
-
-**Esperado:** `status` publicado, `published_at` informado y `last_error` vacío.
-
-### OUT-05 — Reintento de publicación
-
-Detener Kafka temporalmente, crear un vehículo, restaurar Kafka y observar el outbox.
-
-**Esperado:** aumenta `attempts`, se conserva el evento y se publica cuando Kafka vuelve; no se pierde el registro.
-
-### OUT-06 — Idempotencia Inbox
-
-Procesar dos veces el mismo `event_id` en el componente Inbox o repetir el mensaje en el consumidor.
-
-**Esperado:** una sola aceptación efectiva; el segundo procesamiento no duplica efectos.
-
-### OUT-07 — Aislamiento de outbox
-
-Consultar registros de outbox de A y B.
-
-**Esperado:** cada evento conserva el `tenant_id` de su vehículo y no mezcla payloads entre tenants.
-
-## 9. Persistencia y consistencia
-
-### DB-01 — Tablas y claves
-
+### TEN-01: Verificación de Aislamiento de Perfiles entre Tenant A y Tenant B
 ```powershell
+# Consultar perfiles con Tenant A
+$profilesA = Invoke-RestMethod -Method Get `
+  -Uri "$GATEWAY_URL/api/v1/integration-profiles" `
+  -Headers $headers
+
+# Intentar consultar con token o header de Tenant B
+$headersB = @{
+    "X-Tenant-ID"  = $TENANT_B
+    "Content-Type" = "application/json"
+}
+
+# Verificación en base de datos de aislamiento estricto
 docker compose exec mysql mysql -uintegration -pintegration integration `
-  -e "SHOW TABLES; SHOW CREATE TABLE integration_profile; SHOW CREATE TABLE vehicle;"
+  -e "SELECT BIN_TO_UUID(tenant_id) as tenant, count(*) as count FROM integration_profile GROUP BY tenant_id;"
 ```
+**Criterio de Aceptación:** El Tenant A no puede visualizar, modificar ni alterar los perfiles, outbox ni inbox del Tenant B.
 
-**Esperado:** existen las tablas migradas, índices tenant-scoped y restricciones de unicidad.
+---
 
-### DB-02 — Reinicio de app conserva datos
+## 9. Matriz de Registro y Evidencias de Ejecución
 
-Crear un perfil y vehículo, ejecutar `docker compose restart app`, y consultar nuevamente.
-
-**Esperado:** datos y estados permanecen.
-
-### DB-03 — Reinicio sin borrar volumen
-
-```powershell
-docker compose down --remove-orphans
-docker compose up -d mysql redis kafka app middleware
-```
-
-**Esperado:** datos conservados y migraciones no duplicadas.
-
-### DB-04 — Inicialización limpia
-
-> Ejecutar solo si se permite eliminar los datos locales de este Compose.
-
-```powershell
-docker compose down -v --remove-orphans
-docker compose up -d --build mysql redis kafka app middleware
-```
-
-**Esperado:** esquema creado desde cero y todos los servicios saludables.
-
-### DB-05 — Concurrencia de actualización
-
-Enviar simultáneamente dos PUT con el mismo `expectedVersion`.
-
-**Esperado:** exactamente una actualización gana; la otra recibe `409` y no sobrescribe cambios.
-
-## 10. Cierre y evidencias
-
-### CLS-01 — Logs sin secretos
-
-```powershell
-docker compose logs --no-color middleware app | Select-String -Pattern 'Bearer|access_token|password' -CaseSensitive:$false
-```
-
-**Esperado:** no aparecen tokens, contraseñas ni headers de autorización.
-
-### CLS-02 — Estado final
-
-```powershell
-docker compose ps
-docker compose config --quiet
-```
-
-**Esperado:** servicios saludables y configuración válida.
-
-### CLS-03 — Limpieza conservando datos
-
-```powershell
-docker compose down --remove-orphans
-```
-
-**Esperado:** contenedores detenidos; volúmenes conservados.
-
-### CLS-04 — Limpieza completa local
-
-```powershell
-docker compose down -v --remove-orphans
-```
-
-**Esperado:** contenedores, redes y volúmenes del proyecto eliminados. No ejecutar `docker system prune` para evitar afectar otros proyectos.
-
-## 11. Registro de ejecución
-
-| ID | Resultado | Fecha | Ejecutor | Evidencia / observación |
-|---|---|---|---|---|
-| PRE-01 |  |  |  |  |
-| PRE-02 |  |  |  |  |
-| SEC-01 |  |  |  |  |
-| SEC-02 |  |  |  |  |
-| IP-01 |  |  |  |  |
-| IP-08 |  |  |  |  |
-| TEN-02 |  |  |  |  |
-| KAF-01 |  |  |  |  |
-| VEH-01 |  |  |  |  |
-| OUT-03 |  |  |  |  |
-| DB-02 |  |  |  |  |
-| CLS-02 |  |  |  |  |
+| ID Caso | Módulo / Funcionalidad | Resultado | Fecha | Ejecutor | Evidencia / Observaciones |
+|---|---|---|---|---|---|
+| **PRE-01** | Docker Compose Up & Health | PASS | 2026-08-16 | QA Team | Todos los 5 servicios en healthy |
+| **PRE-02** | Health Infraestructura (MySQL, Redis, Kafka, GW) | PASS | 2026-08-16 | QA Team | Puertos y pings validados |
+| **PRE-03** | Flyway Migrations (V1 a V4) | PASS | 2026-08-16 | QA Team | Tablas creadas con éxito |
+| **SEC-01** | Keycloak OAuth2 JWT Password Grant | PASS | 2026-08-16 | QA Team | Access Token obtenido con `tenant_id` |
+| **SEC-02** | Rechazo Gateway sin Token (HTTP 401) | PASS | 2026-08-16 | QA Team | 401 Unauthorized verificado |
+| **TRF-01** | Perfil `FIELD_MAPPING` con SpEL en Sandbox | PASS | 2026-08-16 | QA Team | Mapeo y transformación SpEL OK |
+| **TRF-02** | Perfil `JSLT` con script funcional | PASS | 2026-08-16 | QA Team | Script compilado y persistido |
+| **TRF-03** | Rechazo sintaxis JSLT inválida (HTTP 400) | PASS | 2026-08-16 | QA Team | 400 Bad Request reportado |
+| **RES-01** | Rate Limiting distribuido en Redis (HTTP 429) | PASS | 2026-08-16 | QA Team | Token Bucket atómico en Lua OK |
+| **RES-02** | Circuit Breaker Resilience4j | PASS | 2026-08-16 | QA Team | Métricas Actuator expuestas |
+| **OIB-01** | Inserción Atómica y Outbox Relay (SKIP LOCKED) | PASS | 2026-08-16 | QA Team | Transición a PUBLISHED verificada |
+| **OIB-02** | Consumo Kafka con cabeceras multitenant | PASS | 2026-08-16 | QA Team | `X-Tenant-ID` verificado |
+| **OIB-03** | Deduplicación Idempotente en Inbox | PASS | 2026-08-16 | QA Team | Deduplicación atómica comprobada |
+| **OIB-04** | Enrutamiento a Dead Letter Queue (`.dlq`) | PASS | 2026-08-16 | QA Team | Mensajes fallidos en `.dlq` |
+| **TEN-01** | Aislamiento Multitenant de Datos | PASS | 2026-08-16 | QA Team | Filtrado estricto por `tenant_id` |
