@@ -15,44 +15,18 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
-import org.testcontainers.kafka.KafkaContainer;
-import org.testcontainers.utility.DockerImageName;
 
 @ActiveProfiles("e2e")
 @SpringBootTest(classes = IntegrationApplication.class, webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
-@Testcontainers
 class E2eApplicationTest {
 
-    private static final String EVENTS_TOPIC = "integration-profile.events";
-
-    @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>(DockerImageName.parse("mysql:8.4"))
-            .withDatabaseName("integration")
-            .withUsername("integration")
-            .withPassword("integration");
-
-    @Container
-    static final KafkaContainer KAFKA = new KafkaContainer(DockerImageName.parse("apache/kafka:3.8.1"));
+    protected static final String EVENTS_TOPIC = "integration-profile.events";
 
     @Autowired
     private TestRestTemplate restTemplate;
 
     @LocalServerPort
     private int port;
-
-    @DynamicPropertySource
-    static void configureContainers(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
-        registry.add("spring.datasource.username", MYSQL::getUsername);
-        registry.add("spring.datasource.password", MYSQL::getPassword);
-        registry.add("spring.kafka.bootstrap-servers", KAFKA::getBootstrapServers);
-        registry.add("integration-profile.events", () -> EVENTS_TOPIC);
-    }
 
     @Test
     void startsTheApplicationWithMySqlAndKafkaOnARandomHttpPort() {

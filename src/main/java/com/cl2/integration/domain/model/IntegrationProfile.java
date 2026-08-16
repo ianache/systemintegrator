@@ -2,6 +2,7 @@ package com.cl2.integration.domain.model;
 
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import java.time.Instant;
+import java.time.temporal.ChronoUnit;
 import java.util.Objects;
 import java.util.UUID;
 
@@ -44,7 +45,7 @@ public final class IntegrationProfile {
     public static IntegrationProfile create(UUID id, UUID tenantId, String businessDomain, String externalSource,
                                             SyncDirection direction, SourceOfTruth sourceOfTruth,
                                             IntegrationProfileConfiguration configuration) {
-        Instant now = Instant.now();
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
                 configuration, true, now, now, 0);
     }
@@ -74,7 +75,7 @@ public final class IntegrationProfile {
                                      long expectedVersion) {
         requireExpectedVersion(expectedVersion);
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                configuration, active, createdAt, Instant.now(), version + 1);
+                configuration, active, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
     }
 
     public IntegrationProfile deactivate() {
@@ -82,7 +83,7 @@ public final class IntegrationProfile {
             return this;
         }
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                configuration, false, createdAt, Instant.now(), version + 1);
+                configuration, false, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
     }
 
     public UUID id() {

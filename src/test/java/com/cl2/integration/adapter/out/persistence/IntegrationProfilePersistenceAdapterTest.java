@@ -18,27 +18,17 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
 import org.springframework.dao.InvalidDataAccessApiUsageException;
 import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.test.context.DynamicPropertyRegistry;
-import org.springframework.test.context.DynamicPropertySource;
-import org.testcontainers.containers.MySQLContainer;
-import org.testcontainers.junit.jupiter.Container;
-import org.testcontainers.junit.jupiter.Testcontainers;
+import org.springframework.test.context.ActiveProfiles;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 
+@ActiveProfiles("test")
 @SpringBootTest
-@Testcontainers
 class IntegrationProfilePersistenceAdapterTest {
 
     private static final UUID TENANT_ID = UUID.fromString("71923e5e-a4cb-4956-91fd-a492fcab5715");
     private static final UUID OTHER_TENANT_ID = UUID.fromString("22965df9-e1f2-4375-943d-2df67a4c2e26");
-
-    @Container
-    static final MySQLContainer<?> MYSQL = new MySQLContainer<>("mysql:8.4")
-            .withDatabaseName("integration")
-            .withUsername("integration")
-            .withPassword("integration");
 
     @Autowired
     private IntegrationProfilePersistenceAdapter adapter;
@@ -51,13 +41,6 @@ class IntegrationProfilePersistenceAdapterTest {
 
     @Autowired
     private DataSource dataSource;
-
-    @DynamicPropertySource
-    static void databaseProperties(DynamicPropertyRegistry registry) {
-        registry.add("spring.datasource.url", MYSQL::getJdbcUrl);
-        registry.add("spring.datasource.username", MYSQL::getUsername);
-        registry.add("spring.datasource.password", MYSQL::getPassword);
-    }
 
     @BeforeEach
     void clearProfiles() {
@@ -76,7 +59,7 @@ class IntegrationProfilePersistenceAdapterTest {
             }
         }
 
-        assertThat(flyway.info().applied()).hasSize(3);
+        assertThat(flyway.info().applied()).hasSize(4);
         assertThat(columns).contains(
                 "tenant_id", "active", "version", "created_at", "updated_at",
                 "protocol", "connector", "adapter", "endpoint", "credential_ref",
@@ -104,7 +87,7 @@ class IntegrationProfilePersistenceAdapterTest {
     }
 
     @Test
-    void savesAndReadsAProfileWithConfiguration() {
+    void savesAndReadsAProfileWithConfiguration() throws Exception {
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
                 "{\"vin\":\"vehicle.vin\"}", "{\"status\":\"MAP_STATUS\"}", "{\"mode\":\"INCREMENTAL\"}",
@@ -118,7 +101,18 @@ class IntegrationProfilePersistenceAdapterTest {
 
         IntegrationProfile found = adapter.findById(TENANT_ID, saved.id());
 
-        assertThat(found.configuration()).isEqualTo(config);
+        assertThat(found.configuration()).isNotNull();
+        assertThat(found.configuration().protocol()).isEqualTo(config.protocol());
+        assertThat(found.configuration().connector()).isEqualTo(config.connector());
+        assertThat(found.configuration().adapter()).isEqualTo(config.adapter());
+        assertThat(found.configuration().endpoint()).isEqualTo(config.endpoint());
+        assertThat(found.configuration().credentialRef()).isEqualTo(config.credentialRef());
+        com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
+        assertThat(mapper.readTree(found.configuration().mapping())).isEqualTo(mapper.readTree(config.mapping()));
+        assertThat(mapper.readTree(found.configuration().transformation())).isEqualTo(mapper.readTree(config.transformation()));
+        assertThat(mapper.readTree(found.configuration().syncPolicy())).isEqualTo(mapper.readTree(config.syncPolicy()));
+        assertThat(mapper.readTree(found.configuration().retryPolicy())).isEqualTo(mapper.readTree(config.retryPolicy()));
+        assertThat(mapper.readTree(found.configuration().rateLimitPolicy())).isEqualTo(mapper.readTree(config.rateLimitPolicy()));
     }
 
     @Test

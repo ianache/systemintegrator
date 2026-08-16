@@ -28,6 +28,9 @@ class IntegrationProfileE2ETest extends E2eApplicationTest {
     @LocalServerPort
     private int port;
 
+    @org.springframework.beans.factory.annotation.Value("${spring.kafka.bootstrap-servers:localhost:29092}")
+    private String bootstrapServers;
+
     private ApiClient api;
 
     @BeforeEach
@@ -41,7 +44,7 @@ class IntegrationProfileE2ETest extends E2eApplicationTest {
         UUID tenantB = UUID.randomUUID();
 
         try (KafkaEventObserver events = new KafkaEventObserver(
-                KAFKA.getBootstrapServers(), "integration-profile.events", objectMapper)) {
+                bootstrapServers, "integration-profile.events", objectMapper)) {
             ResponseEntity<IntegrationProfileResponse> tenantACreated = api.create(tenantA, "orders", "erp-a");
             ResponseEntity<IntegrationProfileResponse> tenantBCreated = api.create(tenantB, "billing", "erp-b");
 

@@ -47,9 +47,8 @@ final class KafkaEventObserver implements AutoCloseable {
         }
 
         long deadline = System.nanoTime() + timeout.toNanos();
-        long remainingNanos = timeout.toNanos();
-        while (remainingNanos > 0) {
-            ConsumerRecords<String, String> records = consumer.poll(Duration.ofNanos(remainingNanos));
+        while (System.nanoTime() < deadline) {
+            ConsumerRecords<String, String> records = consumer.poll(Duration.ofMillis(250));
             for (ConsumerRecord<String, String> record : records) {
                 IntegrationProfileEvent event = decode(record);
                 if (profileId.equals(event.profileId())
@@ -58,7 +57,6 @@ final class KafkaEventObserver implements AutoCloseable {
                     return event;
                 }
             }
-            remainingNanos = deadline - System.nanoTime();
         }
 
         throw new AssertionError("Timed out after " + timeout + " waiting for integration profile event "
