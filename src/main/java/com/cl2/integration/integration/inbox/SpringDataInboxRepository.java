@@ -1,9 +1,13 @@
 package com.cl2.integration.integration.inbox;
 
-import java.util.UUID;
 import org.springframework.data.repository.Repository;
+import java.util.Optional;
+import java.util.UUID;
 
-interface SpringDataInboxRepository extends Repository<InboxJpaEntity, UUID> {
-    boolean existsById(UUID eventId);
+public interface SpringDataInboxRepository extends Repository<InboxJpaEntity, UUID> {
     InboxJpaEntity save(InboxJpaEntity entity);
+    Optional<InboxJpaEntity> findById(UUID eventId);
+    Optional<InboxJpaEntity> findByEventIdAndTenantId(UUID eventId, UUID tenantId);
+    boolean existsByEventIdAndTenantId(UUID eventId, UUID tenantId);
+    boolean existsById(UUID eventId);
 }
