@@ -3,6 +3,7 @@ package com.cl2.integration.integration.profile;
 import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.SerializationFeature;
+import java.util.concurrent.CompletableFuture;
 import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Component;
@@ -28,7 +29,10 @@ public class IntegrationProfileEventPublisher {
             String payload = objectMapper.writer()
                     .without(SerializationFeature.WRITE_DATES_AS_TIMESTAMPS)
                     .writeValueAsString(event);
-            kafkaTemplate.send(topic, event.profileId().toString(), payload);
+            CompletableFuture<?> future = kafkaTemplate.send(topic, event.profileId().toString(), payload);
+            if (future != null) {
+                future.join();
+            }
         } catch (JsonProcessingException exception) {
             throw new IllegalStateException("Unable to serialize integration profile event", exception);
         }

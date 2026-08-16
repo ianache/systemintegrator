@@ -5,7 +5,7 @@ spring:
     password: integration
     driver-class-name: com.mysql.cj.jdbc.Driver
   kafka:
-    bootstrap-servers: localhost:29092
+    bootstrap-servers: 127.0.0.1:29092
     admin:
       fail-fast: false
   flyway:

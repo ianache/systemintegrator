@@ -28,7 +28,7 @@ class IntegrationProfileE2ETest extends E2eApplicationTest {
     @LocalServerPort
     private int port;
 
-    @org.springframework.beans.factory.annotation.Value("${spring.kafka.bootstrap-servers:localhost:29092}")
+    @org.springframework.beans.factory.annotation.Value("${spring.kafka.bootstrap-servers:127.0.0.1:29092}")
     private String bootstrapServers;
 
     private ApiClient api;

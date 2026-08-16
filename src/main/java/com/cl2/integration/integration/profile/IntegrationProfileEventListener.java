@@ -13,7 +13,7 @@ public class IntegrationProfileEventListener {
         this.publisher = publisher;
     }
 
-    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void publishAfterCommit(IntegrationProfileEvent event) {
         publisher.publish(event);
     }

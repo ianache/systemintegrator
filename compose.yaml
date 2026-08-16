@@ -133,5 +133,4 @@ volumes:
 
 networks:
   integration-internal:
-    internal: true
   gateway-public:

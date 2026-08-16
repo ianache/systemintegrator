@@ -33,8 +33,20 @@ final class KafkaEventObserver implements AutoCloseable {
     }
 
     KafkaEventObserver(String bootstrapServers, String topic, ObjectMapper objectMapper) {
-        this(new KafkaConsumer<>(consumerProperties(bootstrapServers)), objectMapper);
-        consumer.subscribe(List.of(Objects.requireNonNull(topic, "topic must not be null")));
+        this.consumer = new KafkaConsumer<>(consumerProperties(bootstrapServers));
+        this.objectMapper = Objects.requireNonNull(objectMapper, "objectMapper must not be null")
+                .copy()
+                .disable(DeserializationFeature.FAIL_ON_UNKNOWN_PROPERTIES);
+        List<org.apache.kafka.common.PartitionInfo> partitionInfos = consumer.partitionsFor(topic);
+        if (partitionInfos != null && !partitionInfos.isEmpty()) {
+            List<org.apache.kafka.common.TopicPartition> partitions = partitionInfos.stream()
+                    .map(p -> new org.apache.kafka.common.TopicPartition(p.topic(), p.partition()))
+                    .toList();
+            consumer.assign(partitions);
+            consumer.seekToBeginning(partitions);
+        } else {
+            consumer.subscribe(List.of(Objects.requireNonNull(topic, "topic must not be null")));
+        }
     }
 
     IntegrationProfileEvent await(UUID profileId, UUID tenantId, String eventType, Duration timeout) {
