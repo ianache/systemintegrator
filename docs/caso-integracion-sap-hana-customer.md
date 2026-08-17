@@ -16,6 +16,7 @@ Este documento especifica la configuración completa del **Perfil de Integració
 | **Adaptador** | `generic-jdbc-adapter` | Adaptador genérico declarativo Zero-Code |
 | **Endpoint (JDBC URL)** | `jdbc:sap://192.168.1.100:30015?databaseName=SBO_COMSATEL` | IP `192.168.1.100`, Puerto `30015` |
 | **Credenciales (`credentialRef`)** | `secret/sap/sigo-hana-credentials` | Almacenado en Vault (User: `SIGO`, Pass: `CHANGEME`) |
+| **Colección de Postman** | [`caso-integracion-sap-hana-customer.json`](file:///c:/Users/ianache/Desktop/DATA/01-DOCUMENTOS/03-PERSONAL/12-systemintegrator/docs/caso-integracion-sap-hana-customer.json) | Colección lista para importar en Postman v2.1 |
 | **Frecuencia (`syncPolicy`)** | Cada 1 hora (`0 0 * * * *` / 3600000 ms) | Polling programado con *Overlap Buffer* |
 
 ---
