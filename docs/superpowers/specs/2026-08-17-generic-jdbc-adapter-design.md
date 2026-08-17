@@ -1,122 +1,123 @@
-# Design Spec: Generic Declarative Integration Adapter (`GenericJdbcAdapter` & `SqlSecurityValidator`)
+# Design Spec: Generic Declarative Integration Adapters (`GenericJdbcAdapter`, `GenericRestAdapter` & `SqlSecurityValidator`)
 
 **Date**: 2026-08-17  
-**Status**: Approved by User  
+**Status**: Revised with API/OIDC Authentication & REST Extraction  
 **Target Architecture**: Java 21 + Spring Boot 3.4.5 + Multi-tenant Hexagonal Integration Platform  
 
 ---
 
 ## 1. Overview & Objective
 
-To eliminate the need for developing and compiling custom Java classes for each new database integration source (SAP HANA, SQL Server, Oracle, PostgreSQL, MySQL, etc.), this specification introduces a **Zero-Code Declarative Adapter Engine**. 
+To eliminate the need for developing and compiling custom Java code for each new integration source (whether **Databases** like SAP HANA, SQL Server, PostgreSQL, MySQL or **REST/HTTP APIs** like SAP OData, Salesforce, external webhooks/REST endpoints), this specification defines a **Zero-Code Declarative Integration Adapter Engine**.
 
-The engine enables complete configuration of database extraction pipelines via `IntegrationProfile` metadata, governed by a rigorous **AST-based SQL Security Guardrail (`SqlSecurityValidator`)**.
-
----
-
-## 2. Architecture & Data Flow
-
-```mermaid
-flowchart TD
-    subgraph ProfileConfig["IntegrationProfile (Metadata)"]
-        IP["Profile JSON (protocol=JDBC, adapter=generic-jdbc-adapter)"]
-        ExtractConfig["extractionConfig\n- query\n- watermarkParam\n- keyColumn\n- fetchSize"]
-    end
-
-    subgraph SecurityModule["Security & Validation Layer"]
-        Val["SqlSecurityValidator (JSqlParser AST)"]
-        Rule1["Check: Root is SELECT only"]
-        Rule2["Check: No DML/DDL (INSERT, UPDATE, DROP, EXEC, etc.)"]
-        Rule3["Check: No Multi-statements (;)"]
-        Rule4["Check: No System Catalog access (sys, information_schema)"]
-        Rule5["Check: Contains :watermarkParam binding"]
-    end
-
-    subgraph CoreEngine["Generic Engine (GenericJdbcAdapter)"]
-        Adapter["GenericJdbcAdapter"]
-        ConnResolver["DataSource & Credential Resolver (credentialRef)"]
-        ExecEngine["NamedParameterJdbcTemplate Execution"]
-        RowToJson["Dynamic Row-to-JSON Transformer"]
-        JSLT["JSLT Mapping Engine"]
-    end
-
-    subgraph PlatformStorage["Platform Storage & Events"]
-        Outbox["Transactional Outbox (MySQL)"]
-        Kafka["Apache Kafka Broker"]
-    end
-
-    IP --> ExtractConfig
-    IP --> Val
-    Val --> Rule1 & Rule2 & Rule3 & Rule4 & Rule5
-    Val -->|"Passed Validation"| Adapter
-    Adapter --> ConnResolver
-    ConnResolver -->|"Execute Query with :lastSyncWithBuffer"| ExecEngine
-    ExecEngine --> RowToJson --> JSLT --> Outbox --> Kafka
-```
+The engine supports:
+1. **Generic Database Adapters (`GenericJdbcAdapter`)**: Controlled by `SqlSecurityValidator` (AST-based SQL guardrail).
+2. **Generic HTTP/REST API Adapters (`GenericRestAdapter`)**: Supporting configurable endpoints, JSONPath extraction, and dynamic authentication (OIDC / OAuth2 Client Credentials, Bearer Token, Basic Auth, API Key).
 
 ---
 
-## 3. Detailed Component Specification
+## 2. Declarative Schema Extensions in `IntegrationProfileConfiguration`
 
-### 3.1 Data Model Extension: `IntegrationProfileConfiguration`
-
-The `IntegrationProfileConfiguration` record is updated to support an optional declarative `extractionConfig` object (or structured JSON):
+The `IntegrationProfileConfiguration` record is extended to include two declarative JSON blocks:
+1. `extractionConfig`: Defines how to pull data from the source (SQL for JDBC or HTTP/Path/Params for REST).
+2. `authConfig`: Defines the authentication/security credentials and mechanism for external APIs.
 
 ```json
 {
-  "protocol": "JDBC",
-  "connector": "generic-jdbc",
-  "adapter": "generic-jdbc-adapter",
-  "endpoint": "jdbc:sap://hana-server.internal:30015?databaseName=S4H",
-  "credentialRef": "secret/sap/hana-readonly-user",
-  "extractionConfig": "{\"query\":\"SELECT k.KUNNR AS customerId, k.STCD1 AS taxId, k.NAME1 AS legalName, k.AEDAT AS lastChangeDate FROM KNA1 k WHERE k.AEDAT >= :lastSyncWithBuffer ORDER BY lastChangeDate ASC\",\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"customerId\",\"fetchSize\":500}",
-  "mapping": "{\"customerId\":\"customerId\",\"taxId\":\"taxId\",\"legalName\":\"legalName\"}",
-  "syncPolicy": "{\"cronExpression\":\"0 */15 * * * *\",\"overlapBufferSeconds\":300}"
+  "protocol": "REST",
+  "connector": "generic-rest",
+  "adapter": "generic-rest-adapter",
+  "endpoint": "https://sap-gateway.company.com/sap/opu/odata/sap/API_BUSINESS_PARTNER",
+  "credentialRef": "secret/sap/odata-service-user",
+  "authConfig": "{\"authType\":\"OAUTH2_CLIENT_CREDENTIALS\",\"tokenUrl\":\"https://identity.qa.company.com/oauth2/token\",\"clientId\":\"integration-client-id\",\"clientSecretRef\":\"secret/sap/client-secret\",\"scope\":\"business-partner.read\"}",
+  "extractionConfig": "{\"method\":\"GET\",\"path\":\"/A_BusinessPartner\",\"queryParams\":{\"$filter\":\"LastChangeDateTime ge datetimeoffset'{lastSyncWithBuffer}'\",\"$top\":\"100\"},\"headers\":{\"Accept\":\"application/json\"},\"responseJsonPath\":\"$.d.results\",\"watermarkFormat\":\"ISO_8601\",\"keyProperty\":\"BusinessPartner\"}",
+  "mapping": "{\"customerId\":\"Customer\",\"legalName\":\"OrganizationBPName1\"}",
+  "syncPolicy": "{\"cronExpression\":\"0 */10 * * * *\",\"overlapBufferSeconds\":120}"
 }
 ```
 
-#### Fields Schema for `extractionConfig`:
-- `query` (`String`, required): The SQL SELECT query containing named watermark parameter.
-- `watermarkParam` (`String`, optional, default: `"lastSyncWithBuffer"`): Named parameter used for incremental timestamp filtering.
-- `keyColumn` (`String`, required): Primary business key column in the result set for inbox deduplication.
-- `fetchSize` (`Integer`, optional, default: `500`): JDBC result set fetch size for memory efficiency.
+---
+
+## 3. Extraction Configuration (`extractionConfig`) Specification
+
+### 3.1 JDBC Extraction Configuration (`protocol: "JDBC"`)
+- `query` (`String`, required): The SQL `SELECT` query containing named parameter binding `:lastSyncWithBuffer`.
+- `watermarkParam` (`String`, default: `"lastSyncWithBuffer"`): Parameter name used for incremental timestamp filtering.
+- `keyColumn` (`String`, required): Column name for record primary key / business ID (for deduplication in Inbox).
+- `fetchSize` (`Integer`, default: `500`): JDBC batch fetch size.
+
+### 3.2 REST/API Extraction Configuration (`protocol: "REST"` / `"REST_ODATA"`)
+- `method` (`String`, default: `"GET"`): HTTP method (`GET`, `POST`).
+- `path` (`String`, optional): Relative endpoint path appended to `endpoint`.
+- `queryParams` (`Map<String, String>`): Dynamic URL query parameters with `{lastSyncWithBuffer}` placeholder.
+- `headers` (`Map<String, String>`): HTTP headers (e.g. `Accept: application/json`).
+- `responseJsonPath` (`String`, default: `"$.d.results"` or `"$"`): JSONPath expression to isolate the array of items from the API response payload.
+- `watermarkFormat` (`String`, default: `"ISO_8601"`): Timestamp formatting string (e.g. `"ISO_8601"`, `"EPOCH_MS"`, `"yyyy-MM-dd'T'HH:mm:ss'Z'"`).
+- `keyProperty` (`String`, required): Property name within each item JSON for business deduplication.
 
 ---
 
-### 3.2 SQL Security Guardrail (`SqlSecurityValidator`)
+## 4. Authentication Engine Specification (`authConfig`)
 
-The `SqlSecurityValidator` ensures no arbitrary malicious SQL can be stored or executed.
+To handle external API security without code changes, the platform introduces the **`AuthenticationProviderRegistry`**.
 
-#### Validation Pipeline Rules:
-1. **AST Parsing**: Uses JSqlParser to parse `extractionConfig.query` into a structural AST.
-2. **Statement Type Assertion**: The root AST node MUST be an instance of `net.sf.jsqlparser.statement.select.Select`. Any other statement type (`Insert`, `Update`, `Delete`, `Drop`, `Alter`, `Execute`, `Truncate`, `Create`, `Grant`) immediately throws `InvalidSqlExtractionException`.
-3. **No Multi-Statement Execution**: Verifies no semicolon `;` exists to prevent SQL chaining attacks.
-4. **Forbidden Catalog Schema Guard**: Rejects queries referencing system schemas (`information_schema`, `sys`, `mysql`, `pg_catalog`, `master`, `dbo.sys*`).
-5. **Parameter Binding Enforcement**: Verifies the query contains the specified `:watermarkParam` binding to guarantee parameterization rather than string concatenation.
+### Supported `authType` Options:
+
+#### 1. `OAUTH2_CLIENT_CREDENTIALS` / `OIDC`
+- **Fields**: `tokenUrl`, `clientId`, `clientSecretRef`, `scope`, `grantType` (default: `"client_credentials"`).
+- **Behavior**:
+  - The adapter requests a Bearer JWT token from `tokenUrl` passing `client_credentials`.
+  - Maintains an in-memory **Thread-Safe OAuth2 Token Cache** keyed by tenant and profile ID.
+  - Automatically refreshes tokens before expiration (`expires_in - 60s`).
+  - Injects `Authorization: Bearer <access_token>` into the outgoing HTTP request.
+
+#### 2. `BEARER_TOKEN`
+- **Fields**: `tokenRef` (Vault reference to a static or long-lived JWT).
+- **Behavior**: Injects `Authorization: Bearer <token>` retrieved from Vault.
+
+#### 3. `BASIC_AUTH`
+- **Fields**: `credentialRef` (Vault reference containing `username` and `password`).
+- **Behavior**: Injects HTTP `Authorization: Basic <base64(username:password)>`.
+
+#### 4. `API_KEY`
+- **Fields**: `headerName` (e.g. `"X-API-Key"`, `"Ocp-Apim-Subscription-Key"`), `keyRef` (Vault reference to key).
+- **Behavior**: Injects `<headerName>: <key>` into request headers.
 
 ---
 
-### 3.3 Engine Implementation (`GenericJdbcAdapter`)
+## 5. Security & Safety Architecture
 
-1. **Lifecycle & Triggering**: Invoked by the scheduler according to `syncPolicy` (cron/polling).
-2. **Connection Pooling & Credential Resolution**:
-   - Resolves target database connection using `endpoint` and `credentialRef` via Vault / SecretManager.
-3. **Execution**:
-   - Computes `lastSyncWithBuffer = lastSyncAt - overlapBufferSeconds`.
-   - Executes the validated AST query using `NamedParameterJdbcTemplate` passing `lastSyncWithBuffer`.
-4. **Row Mapping & JSLT Transformation**:
-   - Maps each `ResultSet` row into a generic `Map<String, Object>`.
-   - Passes row JSON through the `JSLT` transformation engine using the profile's `mapping`.
-5. **Inbox / Outbox Transaction**:
-   - Writes event into MySQL `integration_outbox` inside a single local database transaction.
+```mermaid
+flowchart TD
+    subgraph SecurityChecks["Security & Validation Checks"]
+        JDBCVal["SqlSecurityValidator (JSqlParser AST)\n- Enforces SELECT only\n- Rejects DML/DDL\n- Rejects Multi-statements (;)\n- Rejects System Catalogs"]
+        RESTVal["RestSecurityValidator\n- URL Whitelisting & HTTPS Enforcement\n- Header Sanitization (prevent CR/LF injection)"]
+        AuthVal["SecretResolver (Vault / SecretManager)\n- Decrypts secrets in memory\n- Prevents plaintext password logging"]
+    end
+
+    subgraph Adapters["Generic Adapters Engine"]
+        JDBCAdapter["GenericJdbcAdapter"]
+        RESTAdapter["GenericRestAdapter"]
+        TokenCache["OAuth2/OIDC Token Cache Manager"]
+    end
+
+    JDBCVal --> JDBCAdapter
+    RESTVal --> RESTAdapter
+    AuthVal --> TokenCache --> RESTAdapter
+```
+
+1. **SQL Guardrail (`SqlSecurityValidator`)**: AST-based verification enforcing strict `SELECT` only, no multi-statements, no DML/DDL, and parameter binding enforcement.
+2. **REST Guardrail (`RestSecurityValidator`)**: Validates HTTPS endpoints, sanitizes headers against CRLF injection, and enforces timeout limits (Connect timeout: 5s, Read timeout: 30s).
+3. **Secret Security**: No secrets or passwords are stored in `IntegrationProfile` plaintext. All sensitive credentials (`clientSecretRef`, `keyRef`, `credentialRef`) reference HashiCorp Vault.
 
 ---
 
-## 4. Verification & Testing Strategy
+## 6. Verification & Testing Strategy
 
-1. **Unit Tests (`SqlSecurityValidatorTest`)**:
-   - Test valid SELECT queries with joins, aliases, and `GREATEST`/`COALESCE` functions.
-   - Test rejection of `DROP TABLE`, `DELETE FROM`, `UPDATE`, `EXEC`, multiple statements, and system tables.
-2. **Integration Tests (`GenericJdbcAdapterTest`)**:
-   - Test end-to-end extraction against a MySQL Testcontainers instance.
-   - Verify incremental watermark delta queries and outbox event generation.
+1. **Unit Tests**:
+   - `SqlSecurityValidatorTest`: Test valid/invalid SQL syntax, injection attempts, and multi-statements.
+   - `OAuth2TokenCacheTest`: Test token retrieval, caching, and proactive renewal on expiration.
+   - `GenericRestAdapterTest`: Test wiremock-backed HTTP pulling, JSONPath parsing, and JSLT transformation.
+2. **Integration Tests**:
+   - Test `GenericJdbcAdapter` with MySQL Testcontainers.
+   - Test `GenericRestAdapter` with WireMock container simulating OIDC authentication and SAP OData endpoints.
