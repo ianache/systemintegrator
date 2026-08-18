@@ -12,8 +12,33 @@
       "type": "string"
     },
     {
+      "key": "keycloakIssuer",
+      "value": "https://oauth2.qa.comsatel.com.pe",
+      "type": "string"
+    },
+    {
+      "key": "keycloakClientId",
+      "value": "cl2integration",
+      "type": "string"
+    },
+    {
+      "key": "keycloakUsername",
+      "value": "user",
+      "type": "string"
+    },
+    {
+      "key": "keycloakPassword",
+      "value": "<configure-in-postman-environment>",
+      "type": "string"
+    },
+    {
+      "key": "keycloakClientSecret",
+      "value": "<configure-in-postman-environment>",
+      "type": "string"
+    },
+    {
       "key": "accessToken",
-      "value": "<ingrese-su-access-token-qa>",
+      "value": "",
       "type": "string"
     },
     {
@@ -25,6 +50,21 @@
   "item": [
     {
       "name": "0. Obtener Token OAuth2 (Keycloak QA)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "pm.test('Token OAuth2 obtenido', function () {",
+              "    pm.response.to.have.status(200);",
+              "    pm.expect(pm.response.json().access_token).to.be.a('string').and.not.empty;",
+              "});",
+              "pm.collectionVariables.set('accessToken', pm.response.json().access_token);"
+            ],
+            "type": "text/javascript"
+          }
+        }
+      ],
       "request": {
         "method": "POST",
         "header": [
@@ -38,30 +78,36 @@
           "urlencoded": [
             {
               "key": "grant_type",
-              "value": "client_credentials",
+              "value": "password",
               "type": "text"
             },
             {
               "key": "client_id",
-              "value": "integration-client-id",
+              "value": "{{keycloakClientId}}",
               "type": "text"
             },
             {
               "key": "client_secret",
-              "value": "<client-secret-qa>",
+              "value": "{{keycloakClientSecret}}",
+              "type": "text"
+            },
+            {
+              "key": "username",
+              "value": "{{keycloakUsername}}",
+              "type": "text"
+            },
+            {
+              "key": "password",
+              "value": "{{keycloakPassword}}",
               "type": "text"
             }
           ]
         },
         "url": {
-          "raw": "https://oauth2.qa.comsatel.com.pe/realms/microservicios/protocol/openid-connect/token",
+          "raw": "{{keycloakIssuer}}/realms/microservicios/protocol/openid-connect/token",
           "protocol": "https",
           "host": [
-            "oauth2",
-            "qa",
-            "comsatel",
-            "com",
-            "pe"
+            "{{keycloakIssuer}}"
           ],
           "path": [
             "realms",
@@ -71,7 +117,7 @@
             "token"
           ]
         },
-        "description": "Solicita un nuevo token Bearer JWT conteniendo la claim tenant_id requerida por el Gateway."
+        "description": "Solicita un token Bearer JWT con el usuario del realm microservicios. Configure keycloakPassword y keycloakClientSecret en el entorno de Postman antes de ejecutar. El test guarda access_token para las peticiones protegidas."
       },
       "response": []
     },

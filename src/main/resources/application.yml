@@ -35,6 +35,12 @@ spring:
     time-zone: UTC
 
 integration:
+  security:
+    vault:
+      enabled: ${VAULT_ENABLED:false}
+      uri: ${VAULT_ADDR:http://localhost:8200}
+      token: ${VAULT_TOKEN:root}
+      cache-ttl-seconds: ${VAULT_CACHE_TTL_SECONDS:600}
   outbox:
     relay:
       enabled: true
