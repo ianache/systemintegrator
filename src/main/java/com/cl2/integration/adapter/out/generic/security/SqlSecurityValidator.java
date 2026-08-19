@@ -5,9 +5,12 @@ import net.sf.jsqlparser.statement.Statement;
 import net.sf.jsqlparser.statement.Statements;
 import net.sf.jsqlparser.statement.select.Select;
 
+import org.springframework.stereotype.Component;
+
 import java.util.Locale;
 import java.util.Set;
 
+@Component
 public class SqlSecurityValidator {
 
     private static final Set<String> FORBIDDEN_CATALOGS = Set.of(

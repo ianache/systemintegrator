@@ -4,11 +4,13 @@ import com.cl2.integration.adapter.out.generic.model.ExtractionConfig;
 import com.cl2.integration.adapter.out.generic.security.SqlSecurityValidator;
 import org.springframework.jdbc.core.namedparam.MapSqlParameterSource;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
+import org.springframework.stereotype.Component;
 
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
 
+@Component
 public class GenericJdbcAdapter {
 
     private final SqlSecurityValidator sqlSecurityValidator;
