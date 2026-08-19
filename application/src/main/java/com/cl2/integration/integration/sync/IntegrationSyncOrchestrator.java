@@ -174,7 +174,10 @@ public class IntegrationSyncOrchestrator {
             }
 
             int overlapBufferSeconds = readOverlapBufferSeconds(profile);
-            Instant advancedWatermark = rows.isEmpty() ? watermark : maxRowTimestamp.minusSeconds(overlapBufferSeconds);
+            Instant candidateWatermark = maxRowTimestamp.minusSeconds(overlapBufferSeconds);
+            Instant advancedWatermark = rows.isEmpty()
+                    ? watermark
+                    : (candidateWatermark.isAfter(watermark) ? candidateWatermark : watermark);
             syncStateRepository.upsert(new SyncState(profile.id(), advancedWatermark, startedAt, SyncRunStatus.SUCCESS, null));
 
             double durationSeconds = (System.nanoTime() - startedNanos) / 1_000_000_000.0;
@@ -286,7 +289,7 @@ public class IntegrationSyncOrchestrator {
         try {
             return objectMapper.readValue(json, SyncPolicy.class).overlapBufferSecondsOrZero();
         } catch (Exception ex) {
-            return 0;
+            throw new IllegalStateException("Invalid syncPolicy JSON for profile " + profile.id(), ex);
         }
     }
 
