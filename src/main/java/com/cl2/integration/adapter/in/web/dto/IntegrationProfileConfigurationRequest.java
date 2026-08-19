@@ -16,12 +16,14 @@ public record IntegrationProfileConfigurationRequest(
         JsonNode transformation,
         JsonNode syncPolicy,
         JsonNode retryPolicy,
-        JsonNode rateLimitPolicy
+        JsonNode rateLimitPolicy,
+        JsonNode extractionConfig
 ) {
     public boolean hasAnyConfiguration() {
         return protocol != null || connector != null || adapter != null || endpoint != null
                 || credentialRef != null || mapping != null || transformation != null
-                || syncPolicy != null || retryPolicy != null || rateLimitPolicy != null;
+                || syncPolicy != null || retryPolicy != null || rateLimitPolicy != null
+                || extractionConfig != null;
     }
 
     public IntegrationProfileConfiguration toDomain(ObjectMapper objectMapper) {
@@ -38,7 +40,8 @@ public record IntegrationProfileConfigurationRequest(
                 toJsonString(transformation, objectMapper),
                 toJsonString(syncPolicy, objectMapper),
                 toJsonString(retryPolicy, objectMapper),
-                toJsonString(rateLimitPolicy, objectMapper)
+                toJsonString(rateLimitPolicy, objectMapper),
+                toJsonString(extractionConfig, objectMapper)
         );
     }
 

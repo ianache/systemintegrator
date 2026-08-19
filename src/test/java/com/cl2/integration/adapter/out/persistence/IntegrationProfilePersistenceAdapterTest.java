@@ -59,12 +59,12 @@ class IntegrationProfilePersistenceAdapterTest {
             }
         }
 
-        assertThat(flyway.info().applied()).hasSize(4);
+        assertThat(flyway.info().applied()).hasSize(6);
         assertThat(columns).contains(
                 "tenant_id", "active", "version", "created_at", "updated_at",
                 "protocol", "connector", "adapter", "endpoint", "credential_ref",
                 "mapping_json", "transformation_json", "sync_policy_json",
-                "retry_policy_json", "rate_limit_policy_json"
+                "retry_policy_json", "rate_limit_policy_json", "extraction_config_json"
         );
     }
 
@@ -91,7 +91,8 @@ class IntegrationProfilePersistenceAdapterTest {
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
                 "{\"vin\":\"vehicle.vin\"}", "{\"status\":\"MAP_STATUS\"}", "{\"mode\":\"INCREMENTAL\"}",
-                "{\"maxAttempts\":3,\"initialBackoffMs\":100}", "{\"requestsPerSecond\":10}"
+                "{\"maxAttempts\":3,\"initialBackoffMs\":100}", "{\"requestsPerSecond\":10}",
+                "{\"method\":\"GET\",\"path\":\"/vehicles\"}"
         );
         IntegrationProfile profile = IntegrationProfile.create(
                 UUID.randomUUID(), TENANT_ID, "orders", "erp",
@@ -113,6 +114,7 @@ class IntegrationProfilePersistenceAdapterTest {
         assertThat(mapper.readTree(found.configuration().syncPolicy())).isEqualTo(mapper.readTree(config.syncPolicy()));
         assertThat(mapper.readTree(found.configuration().retryPolicy())).isEqualTo(mapper.readTree(config.retryPolicy()));
         assertThat(mapper.readTree(found.configuration().rateLimitPolicy())).isEqualTo(mapper.readTree(config.rateLimitPolicy()));
+        assertThat(mapper.readTree(found.configuration().extractionConfig())).isEqualTo(mapper.readTree(config.extractionConfig()));
     }
 
     @Test

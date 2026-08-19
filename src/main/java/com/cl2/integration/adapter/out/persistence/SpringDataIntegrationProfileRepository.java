@@ -36,6 +36,7 @@ interface SpringDataIntegrationProfileRepository extends Repository<IntegrationP
                 profile.syncPolicyJson = :syncPolicyJson,
                 profile.retryPolicyJson = :retryPolicyJson,
                 profile.rateLimitPolicyJson = :rateLimitPolicyJson,
+                profile.extractionConfigJson = :extractionConfigJson,
                 profile.active = :active,
                 profile.updatedAt = :updatedAt,
                 profile.version = profile.version + 1
@@ -61,6 +62,7 @@ interface SpringDataIntegrationProfileRepository extends Repository<IntegrationP
             @Param("syncPolicyJson") String syncPolicyJson,
             @Param("retryPolicyJson") String retryPolicyJson,
             @Param("rateLimitPolicyJson") String rateLimitPolicyJson,
+            @Param("extractionConfigJson") String extractionConfigJson,
             @Param("active") boolean active,
             @Param("updatedAt") java.time.Instant updatedAt);
 }

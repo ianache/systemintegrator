@@ -175,7 +175,7 @@ class IntegrationProfileServiceTest {
         return new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
                 "{\"vin\":\"vehicle.vin\"}", null, null, "{\"maxAttempts\":3,\"initialBackoffMs\":100}",
-                "{\"requestsPerSecond\":10}");
+                "{\"requestsPerSecond\":10}", null);
     }
 
     private static final class FakeIntegrationProfileRepository implements IntegrationProfileRepository {

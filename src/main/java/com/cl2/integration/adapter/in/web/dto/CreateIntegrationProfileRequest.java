@@ -21,12 +21,13 @@ public record CreateIntegrationProfileRequest(
         JsonNode transformation,
         JsonNode syncPolicy,
         JsonNode retryPolicy,
-        JsonNode rateLimitPolicy
+        JsonNode rateLimitPolicy,
+        JsonNode extractionConfig
 ) {
     public IntegrationProfileConfigurationRequest configurationRequest() {
         return new IntegrationProfileConfigurationRequest(
                 protocol, connector, adapter, endpoint, credentialRef,
-                mapping, transformation, syncPolicy, retryPolicy, rateLimitPolicy
+                mapping, transformation, syncPolicy, retryPolicy, rateLimitPolicy, extractionConfig
         );
     }
 }

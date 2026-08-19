@@ -81,6 +81,10 @@ class IntegrationProfileJpaEntity {
     @Column(name = "rate_limit_policy_json", columnDefinition = "JSON")
     private String rateLimitPolicyJson;
 
+    @JdbcTypeCode(Types.LONGVARCHAR)
+    @Column(name = "extraction_config_json", columnDefinition = "JSON")
+    private String extractionConfigJson;
+
     @Column(nullable = false)
     private boolean active;
 
@@ -116,6 +120,7 @@ class IntegrationProfileJpaEntity {
             this.syncPolicyJson = config.syncPolicy();
             this.retryPolicyJson = config.retryPolicy();
             this.rateLimitPolicyJson = config.rateLimitPolicy();
+            this.extractionConfigJson = config.extractionConfig();
         }
         this.active = profile.active();
         this.version = profile.version();
@@ -131,10 +136,12 @@ class IntegrationProfileJpaEntity {
         IntegrationProfileConfiguration config = null;
         if (protocol != null || connector != null || adapter != null || endpoint != null
                 || credentialRef != null || mappingJson != null || transformationJson != null
-                || syncPolicyJson != null || retryPolicyJson != null || rateLimitPolicyJson != null) {
+                || syncPolicyJson != null || retryPolicyJson != null || rateLimitPolicyJson != null
+                || extractionConfigJson != null) {
             config = new IntegrationProfileConfiguration(
                     protocol, connector, adapter, endpoint, credentialRef,
-                    mappingJson, transformationJson, syncPolicyJson, retryPolicyJson, rateLimitPolicyJson
+                    mappingJson, transformationJson, syncPolicyJson, retryPolicyJson, rateLimitPolicyJson,
+                    extractionConfigJson
             );
         }
         return IntegrationProfile.rehydrate(

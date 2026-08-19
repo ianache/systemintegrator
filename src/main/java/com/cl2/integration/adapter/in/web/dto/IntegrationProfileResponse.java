@@ -46,7 +46,8 @@ public record IntegrationProfileResponse(
             JsonNode transformation,
             JsonNode syncPolicy,
             JsonNode retryPolicy,
-            JsonNode rateLimitPolicy
+            JsonNode rateLimitPolicy,
+            JsonNode extractionConfig
     ) {
         public static ConfigurationResponse from(IntegrationProfileConfiguration config, ObjectMapper objectMapper) {
             if (config == null) {
@@ -62,7 +63,8 @@ public record IntegrationProfileResponse(
                     readTree(config.transformation(), objectMapper),
                     readTree(config.syncPolicy(), objectMapper),
                     readTree(config.retryPolicy(), objectMapper),
-                    readTree(config.rateLimitPolicy(), objectMapper)
+                    readTree(config.rateLimitPolicy(), objectMapper),
+                    readTree(config.extractionConfig(), objectMapper)
             );
         }
 

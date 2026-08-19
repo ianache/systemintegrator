@@ -39,7 +39,7 @@ class RuntimeSecurityResilienceIntegrationTest {
 
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "sap", "sap-customer-adapter", "https://sap.corp.internal/api",
-                credentialRef, null, null, null, null, null
+                credentialRef, null, null, null, null, null, null
         );
 
         IntegrationProfile profile = IntegrationProfile.create(

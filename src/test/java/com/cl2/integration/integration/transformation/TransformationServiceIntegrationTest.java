@@ -42,7 +42,7 @@ class TransformationServiceIntegrationTest {
             """;
 
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
-                IntegrationProtocol.REST, "sigo", "sigo-adapter", "http://external", null, mapping, null, null, null, null
+                IntegrationProtocol.REST, "sigo", "sigo-adapter", "http://external", null, mapping, null, null, null, null, null
         );
 
         IntegrationProfile profile = IntegrationProfile.create(
@@ -69,7 +69,7 @@ class TransformationServiceIntegrationTest {
             """;
 
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
-                IntegrationProtocol.REST, "sap", "sap-adapter", "http://sap", null, null, jslt, null, null, null
+                IntegrationProtocol.REST, "sap", "sap-adapter", "http://sap", null, null, jslt, null, null, null, null
         );
 
         IntegrationProfile profile = IntegrationProfile.create(

@@ -45,12 +45,12 @@ class IntegrationProfileTest {
     void rejectsAConfiguredProtocolWithoutConnectorAndAdapter() {
         assertThatThrownBy(() -> new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, null, "adapter", null, null,
-                null, null, null, null, null))
+                null, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
 
         assertThatThrownBy(() -> new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "connector", null, null, null,
-                null, null, null, null, null))
+                null, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -58,7 +58,7 @@ class IntegrationProfileTest {
     void rejectsBlankCredentialRefWhenProvided() {
         assertThatThrownBy(() -> new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "connector", "adapter", "https://endpoint", "   ",
-                null, null, null, null, null))
+                null, null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -66,7 +66,7 @@ class IntegrationProfileTest {
     void rejectsPlaintextPasswordInAnyConfigurationField() {
         assertThatThrownBy(() -> new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "connector", "adapter", "https://endpoint", "ref",
-                "{\"password\":\"secret\"}", null, null, null, null))
+                "{\"password\":\"secret\"}", null, null, null, null, null))
                 .isInstanceOf(IllegalArgumentException.class);
     }
 
@@ -78,7 +78,7 @@ class IntegrationProfileTest {
 
         IntegrationProfileConfiguration updatedConfig = new IntegrationProfileConfiguration(
                 IntegrationProtocol.KAFKA, "kafka-conn", "kafka-adapter", "localhost:9092", "secret/kafka",
-                null, null, null, null, null);
+                null, null, null, null, null, null);
 
         IntegrationProfile updated = profile.update(
                 "invoices", "billing", SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, updatedConfig, 0);
@@ -189,7 +189,8 @@ class IntegrationProfileTest {
                 "{\"status\":\"MAP_STATUS\"}",
                 "{\"mode\":\"INCREMENTAL\"}",
                 "{\"maxAttempts\":3,\"initialBackoffMs\":100}",
-                "{\"requestsPerSecond\":10}"
+                "{\"requestsPerSecond\":10}",
+                null
         );
     }
 }

@@ -69,7 +69,7 @@ class IntegrationProfileControllerTest {
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
                 "{\"vin\":\"vehicle.vin\"}", null, null, "{\"maxAttempts\":3,\"initialBackoffMs\":100}",
-                "{\"requestsPerSecond\":10}");
+                "{\"requestsPerSecond\":10}", null);
         IntegrationProfileView view = new IntegrationProfileView(PROFILE_ID, TENANT_ID, "orders", "erp",
                 SyncDirection.INBOUND, SourceOfTruth.PLATFORM, config, true, Instant.parse("2026-08-14T12:00:00Z"),
                 Instant.parse("2026-08-14T12:00:00Z"), 0);

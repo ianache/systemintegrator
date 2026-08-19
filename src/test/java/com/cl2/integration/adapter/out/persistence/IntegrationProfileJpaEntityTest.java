@@ -39,7 +39,7 @@ class IntegrationProfileJpaEntityTest {
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST, "sigo", "sigo-vehicle-http", "https://sigo.test/api", "secret/sigo/orders",
                 "{\"vin\":\"vehicle.vin\"}", "{\"status\":\"MAP_STATUS\"}", "{\"mode\":\"INCREMENTAL\"}",
-                "{\"maxAttempts\":3,\"initialBackoffMs\":100}", "{\"requestsPerSecond\":10}"
+                "{\"maxAttempts\":3,\"initialBackoffMs\":100}", "{\"requestsPerSecond\":10}", null
         );
         IntegrationProfile persisted = IntegrationProfile.rehydrate(
                 UUID.fromString("3c32c264-9163-4985-a3df-cb67a1031039"),
