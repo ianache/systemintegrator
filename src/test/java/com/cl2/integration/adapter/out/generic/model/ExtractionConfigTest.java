@@ -18,6 +18,7 @@ class ExtractionConfigTest {
                 "query": "SELECT * FROM KNA1 WHERE AEDAT >= :lastSyncWithBuffer",
                 "watermarkParam": "lastSyncWithBuffer",
                 "keyColumn": "KUNNR",
+                "watermarkColumn": "AEDAT",
                 "fetchSize": 500
             }
             """;
@@ -25,6 +26,7 @@ class ExtractionConfigTest {
         assertEquals("SELECT * FROM KNA1 WHERE AEDAT >= :lastSyncWithBuffer", config.query());
         assertEquals("lastSyncWithBuffer", config.watermarkParam());
         assertEquals("KUNNR", config.keyColumn());
+        assertEquals("AEDAT", config.watermarkColumn());
         assertEquals(500, config.fetchSize());
     }
 

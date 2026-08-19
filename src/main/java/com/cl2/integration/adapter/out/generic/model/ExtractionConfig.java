@@ -15,7 +15,8 @@ public record ExtractionConfig(
         Map<String, String> headers,
         String responseJsonPath,
         String watermarkFormat,
-        String keyProperty
+        String keyProperty,
+        String watermarkColumn
 ) {
     public ExtractionConfig {
         if (watermarkParam == null || watermarkParam.isBlank()) {

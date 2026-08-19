@@ -41,7 +41,7 @@ class GenericJdbcAdapterTest {
 
         ExtractionConfig config = new ExtractionConfig(
                 "SELECT ID AS customerId, NAME AS legalName FROM CUSTOMERS WHERE UPDATED_AT >= :lastSyncWithBuffer",
-                "lastSyncWithBuffer", "customerId", 500, "GET", null, null, null, "$", "ISO_8601", "customerId"
+                "lastSyncWithBuffer", "customerId", 500, "GET", null, null, null, "$", "ISO_8601", "customerId", null
         );
 
         List<Map<String, Object>> rows = adapter.extract(jdbcTemplate, config, Instant.EPOCH);
@@ -54,7 +54,7 @@ class GenericJdbcAdapterTest {
     void shouldFailSecurityValidationOnInvalidQuery() {
         ExtractionConfig invalidConfig = new ExtractionConfig(
                 "DELETE FROM CUSTOMERS WHERE ID = 'C1'",
-                "lastSyncWithBuffer", "customerId", 500, "GET", null, null, null, "$", "ISO_8601", "customerId"
+                "lastSyncWithBuffer", "customerId", 500, "GET", null, null, null, "$", "ISO_8601", "customerId", null
         );
 
         assertThrows(InvalidSqlExtractionException.class, () ->
