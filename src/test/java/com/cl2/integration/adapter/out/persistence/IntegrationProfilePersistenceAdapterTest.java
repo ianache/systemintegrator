@@ -8,6 +8,7 @@ import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 import java.sql.SQLException;
+import java.util.List;
 import java.util.Set;
 import java.util.UUID;
 import javax.sql.DataSource;
@@ -195,6 +196,32 @@ class IntegrationProfilePersistenceAdapterTest {
                 .hasRootCauseInstanceOf(IllegalArgumentException.class);
 
         assertThat(adapter.findAll(TENANT_ID, false)).isEmpty();
+    }
+
+    @Test
+    void findsActiveProfilesByProtocolAcrossAllTenants() {
+        IntegrationProfileConfiguration jdbcConfig = new IntegrationProfileConfiguration(
+                IntegrationProtocol.JDBC, "generic-jdbc", "generic-jdbc-adapter",
+                "jdbc:mysql://localhost:3306/integration", "secret/sap/hana",
+                null, null, "{\"cronExpression\":\"0 */10 * * * *\"}", null, null,
+                "{\"query\":\"SELECT 1\",\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"id\",\"watermarkColumn\":\"updated_at\"}"
+        );
+        IntegrationProfile jdbcProfileTenantOne = adapter.save(TENANT_ID,
+                IntegrationProfile.create(UUID.randomUUID(), TENANT_ID, "customers", "sap-hana",
+                        SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, jdbcConfig));
+        IntegrationProfile jdbcProfileTenantTwo = adapter.save(OTHER_TENANT_ID,
+                IntegrationProfile.create(UUID.randomUUID(), OTHER_TENANT_ID, "customers", "sap-hana",
+                        SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, jdbcConfig));
+        IntegrationProfile restProfile = adapter.save(TENANT_ID, profile(TENANT_ID, "orders", "erp"));
+        IntegrationProfile inactiveJdbcProfile = adapter.save(TENANT_ID,
+                IntegrationProfile.create(UUID.randomUUID(), TENANT_ID, "catalog", "sap-hana",
+                        SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, jdbcConfig));
+        adapter.save(TENANT_ID, inactiveJdbcProfile.deactivate());
+
+        List<IntegrationProfile> jdbcProfiles = adapter.findAllActiveByProtocol(IntegrationProtocol.JDBC);
+
+        assertThat(jdbcProfiles).extracting(IntegrationProfile::id)
+                .containsExactlyInAnyOrder(jdbcProfileTenantOne.id(), jdbcProfileTenantTwo.id());
     }
 
     private IntegrationProfile profile(UUID tenantId, String businessDomain, String externalSource) {

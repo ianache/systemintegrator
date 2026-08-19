@@ -1,5 +1,6 @@
 package com.cl2.integration.adapter.out.persistence;
 
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
@@ -18,6 +19,8 @@ interface SpringDataIntegrationProfileRepository extends Repository<IntegrationP
 
     boolean existsByTenantIdAndBusinessDomainAndExternalSourceAndActiveTrue(
             UUID tenantId, String businessDomain, String externalSource);
+
+    List<IntegrationProfileJpaEntity> findAllByActiveTrueAndProtocol(IntegrationProtocol protocol);
 
     @Modifying(clearAutomatically = true, flushAutomatically = true)
     @Query("""

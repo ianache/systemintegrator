@@ -1,6 +1,7 @@
 package com.cl2.integration.domain.port;
 
 import com.cl2.integration.domain.model.IntegrationProfile;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import java.util.List;
 import java.util.UUID;
 
@@ -13,4 +14,6 @@ public interface IntegrationProfileRepository {
     List<IntegrationProfile> findAll(UUID tenantId, boolean activeOnly);
 
     boolean existsActive(UUID tenantId, String businessDomain, String externalSource);
+
+    List<IntegrationProfile> findAllActiveByProtocol(IntegrationProtocol protocol);
 }

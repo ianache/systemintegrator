@@ -223,6 +223,14 @@ class IntegrationProfileServiceTest {
                     && profile.active());
         }
 
+        @Override
+        public List<IntegrationProfile> findAllActiveByProtocol(IntegrationProtocol protocol) {
+            return profiles.values().stream()
+                    .filter(IntegrationProfile::active)
+                    .filter(profile -> profile.configuration() != null && profile.configuration().protocol() == protocol)
+                    .toList();
+        }
+
         private void clearRecordedTenantIds() {
             requestedTenantIds.clear();
         }

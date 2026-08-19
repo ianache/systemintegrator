@@ -4,6 +4,7 @@ import com.cl2.integration.application.exception.IntegrationProfileConflictExcep
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import jakarta.persistence.EntityManager;
 import java.util.List;
@@ -89,5 +90,13 @@ class IntegrationProfilePersistenceAdapter implements IntegrationProfileReposito
     public boolean existsActive(UUID tenantId, String businessDomain, String externalSource) {
         return repository.existsByTenantIdAndBusinessDomainAndExternalSourceAndActiveTrue(
                 tenantId, businessDomain, externalSource);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<IntegrationProfile> findAllActiveByProtocol(IntegrationProtocol protocol) {
+        return repository.findAllByActiveTrueAndProtocol(protocol).stream()
+                .map(IntegrationProfileJpaEntity::toDomain)
+                .toList();
     }
 }
