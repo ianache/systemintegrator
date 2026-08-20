@@ -15,7 +15,7 @@ final class IntegrationProfilePayloads {
     static CreateIntegrationProfileRequest create(String businessDomain, String externalSource) {
         return new CreateIntegrationProfileRequest(
                 businessDomain, externalSource, SyncDirection.INBOUND, SourceOfTruth.PLATFORM,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 
     static CreateIntegrationProfileRequest createWithConfig(
@@ -25,12 +25,12 @@ final class IntegrationProfilePayloads {
         return new CreateIntegrationProfileRequest(
                 businessDomain, externalSource, SyncDirection.INBOUND, SourceOfTruth.PLATFORM,
                 protocol, connector, adapter, endpoint, credentialRef, mapping, null, null,
-                retryPolicy, rateLimitPolicy);
+                retryPolicy, rateLimitPolicy, null);
     }
 
     static UpdateIntegrationProfileRequest update(String businessDomain, String externalSource, long expectedVersion) {
         return new UpdateIntegrationProfileRequest(
                 businessDomain, externalSource, SyncDirection.OUTBOUND, SourceOfTruth.EXTERNAL, expectedVersion,
-                null, null, null, null, null, null, null, null, null, null);
+                null, null, null, null, null, null, null, null, null, null, null);
     }
 }
