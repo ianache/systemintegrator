@@ -1,6 +1,6 @@
 # Guía de Configuración y Pruebas de Integración Outbound (Despacho HTTP)
 
-Esta guía describe cómo configurar y probar el despacho de eventos desde el bus Apache Kafka (`integration.events`) hacia APIs REST / Webhooks externos mediante perfiles de integración `OUTBOUND` o `BIDIRECTIONAL`.
+Esta guía describe cómo configurar y probar el despacho de eventos desde el bus Apache Kafka (`integration.<domain>.events`) hacia APIs REST / Webhooks externos o microservicios Core de CL2 asegurados con Keycloak mediante perfiles de integración `OUTBOUND` o `BIDIRECTIONAL`.
 
 ---
 
@@ -8,15 +8,16 @@ Esta guía describe cómo configurar y probar el despacho de eventos desde el bu
 
 ```mermaid
 flowchart LR
-    A[Kafka Topic: integration.events] --> B[KafkaInboxListener]
+    A[Kafka Topics: integration.<domain>.events\n(brands, models, vehicles, etc.)] --> B[KafkaInboxListener (Regex: integration.*.events)]
     B --> C[InboxProcessor (Idempotencia en integration_inbox)]
     C --> D[OutboundEventDispatcher]
-    D -->|1. Busca Perfil Activo OUTBOUND| E[(MySQL: integration_profile)]
-    D -->|2. Resuelve Credenciales| F[(HashiCorp Vault)]
+    D -->|1. Filtra Perfiles OUTBOUND y Anti-Loop| E[(MySQL: integration_profile)]
+    D -->|2. Resuelve Secreto OAuth2 / Basic| F[(HashiCorp Vault)]
     D -->|3. Transforma Payload| G[TransformationService]
-    D -->|4. Envío HTTP con Resiliencia| H[API REST / Webhook Destino]
-    H -->|2xx OK| I[integration_inbox: PROCESSED]
-    H -->|Fallo Agotado| J[integration.events.dlq + DEAD_LETTER]
+    D -->|4. Obtiene / Cachea Bearer JWT| H[OAuth2TokenCacheManager / Keycloak]
+    D -->|5. Envío HTTP con Resiliencia| I[API REST / CL2 Core Microservices]
+    I -->|2xx OK| J[integration_inbox: PROCESSED]
+    I -->|Fallo Agotado| K[integration.events.dlq + DEAD_LETTER]
 ```
 
 ---
@@ -25,7 +26,7 @@ flowchart LR
 
 Para habilitar el despacho, se requiere un perfil con `protocol: "REST"` y dirección `OUTBOUND` (o `BIDIRECTIONAL`).
 
-### Opción A: Crear un Nuevo Perfil Outbound
+### Opción A: Crear un Nuevo Perfil Outbound (Ejemplo: Dominio Vehicles)
 
 * **Método**: `POST`
 * **URL**: `http://localhost:8081/api/v1/integration-profiles` (o `http://localhost:8080/api/v1/integration-profiles`)
@@ -43,15 +44,15 @@ Para habilitar el despacho, se requiere un perfil con `protocol: "REST"` y direc
     "syncDirection": "OUTBOUND",
     "sourceOfTruth": "PLATFORM",
     "protocol": "REST",
-    "connector": "generic-http",
-    "adapter": "generic-http-adapter",
-    "endpoint": "https://api.miempresa.com/v1/vehiculos",
-    "credentialRef": "secret/target/api-credentials",
+    "connector": "cl2-vehicles-api",
+    "adapter": "cl2-vehicles-adapter",
+    "endpoint": "https://api.cl2.com/api/v1/vehicles",
+    "credentialRef": "secret/cl2/keycloak-credentials",
     "mapping": {
-      "plateNumber": "placa",
-      "engineNumber": "motor",
-      "manufacturingYear": "anio",
-      "vehicleColor": "color"
+      "vin": "numero_motor",
+      "brandCode": "marca",
+      "modelCode": "modelo",
+      "modelYear": "anio"
     },
     "retryPolicy": {
       "maxAttempts": 3,
@@ -65,47 +66,69 @@ Para habilitar el despacho, se requiere un perfil con `protocol: "REST"` y direc
 
 ---
 
-### Opción B: Actualizar un Perfil Existente a `BIDIRECTIONAL`
+### Opción B: Perfiles de Catálogo Maestro (`brands` y `models`)
 
-* **Método**: `PUT`
-* **URL**: `http://localhost:8081/api/v1/integration-profiles/{profileId}`
-* **Headers**:
-  ```http
-  Authorization: Bearer <TU_TOKEN_JWT>
-  X-Tenant-ID: 11111111-1111-1111-1111-111111111111
-  Content-Type: application/json
-  ```
-* **Payload JSON**:
-  ```json
-  {
-    "businessDomain": "vehicles",
-    "externalSource": "sigo",
-    "syncDirection": "BIDIRECTIONAL",
-    "sourceOfTruth": "EXTERNAL",
-    "expectedVersion": 0,
-    "protocol": "REST",
-    "connector": "generic-http",
-    "adapter": "generic-http-adapter",
-    "endpoint": "https://api.miempresa.com/v1/vehiculos",
-    "credentialRef": "secret/target/api-credentials",
-    "mapping": {
-      "plate": "placa",
-      "engine": "motor"
-    },
-    "syncPolicy": {
-      "cronExpression": "0 */10 * * * *"
-    }
+#### Perfil Brands Outbound
+```json
+{
+  "businessDomain": "brands",
+  "externalSource": "cl2-core",
+  "syncDirection": "OUTBOUND",
+  "sourceOfTruth": "PLATFORM",
+  "protocol": "REST",
+  "connector": "cl2-brands-api",
+  "adapter": "cl2-brands-adapter",
+  "endpoint": "https://api.cl2.com/api/v1/brands",
+  "credentialRef": "secret/cl2/keycloak-credentials",
+  "mapping": {
+    "code": "codigo_marca",
+    "name": "nombre_marca",
+    "active": "activo"
   }
-  ```
+}
+```
+
+#### Perfil Models Outbound
+```json
+{
+  "businessDomain": "models",
+  "externalSource": "cl2-core",
+  "syncDirection": "OUTBOUND",
+  "sourceOfTruth": "PLATFORM",
+  "protocol": "REST",
+  "connector": "cl2-models-api",
+  "adapter": "cl2-models-adapter",
+  "endpoint": "https://api.cl2.com/api/v1/models",
+  "credentialRef": "secret/cl2/keycloak-credentials",
+  "mapping": {
+    "code": "codigo_modelo",
+    "name": "nombre_modelo",
+    "brandCode": "codigo_marca",
+    "active": "activo"
+  }
+}
+```
 
 ---
 
 ## 3. Configuración de Credenciales en Vault (`credentialRef`)
 
-El `credentialRef` indica la ruta del secreto en HashiCorp Vault. El despachador inyecta las cabeceras HTTP automáticamente según las claves del secreto:
+El `credentialRef` indica la ruta del secreto en HashiCorp Vault. El despachador inyecta las cabeceras HTTP automáticamente según el tipo de autenticación:
 
-### 1. Bearer Token (JWT / OAuth2 / Token estático)
-* **Ruta en Vault**: `secret/data/target/api-credentials`
+### 1. OAuth2 Client Credentials / Keycloak (JWT Dinámico con Cache)
+* **Ruta en Vault**: `secret/data/cl2/keycloak-credentials`
+* **JSON del secreto**:
+  ```json
+  {
+    "tokenUrl": "https://oauth2.qa.comsatel.com.pe/realms/microservicios/protocol/openid-connect/token",
+    "clientId": "cl2integration",
+    "clientSecret": "TU_CLIENT_SECRET_AQUI",
+    "scope": "openid"
+  }
+  ```
+* *Comportamiento*: `OAuth2TokenCacheManager` invoca el token endpoint con `grant_type=client_credentials`, cachea el token en memoria por tenant/clientId y añade la cabecera `Authorization: Bearer <JWT>`.
+
+### 2. Bearer Token Estático
 * **JSON del secreto**:
   ```json
   {
@@ -114,7 +137,7 @@ El `credentialRef` indica la ruta del secreto en HashiCorp Vault. El despachador
   ```
 * *Cabecera inyectada*: `Authorization: Bearer <token>`
 
-### 2. Basic Auth (Usuario y Contraseña)
+### 3. Basic Auth (Usuario y Contraseña)
 * **JSON del secreto**:
   ```json
   {
@@ -124,7 +147,7 @@ El `credentialRef` indica la ruta del secreto en HashiCorp Vault. El despachador
   ```
 * *Cabecera inyectada*: `Authorization: Basic <base64(username:password)>`
 
-### 3. API Key
+### 4. API Key
 * **JSON del secreto**:
   ```json
   {
@@ -133,24 +156,14 @@ El `credentialRef` indica la ruta del secreto en HashiCorp Vault. El despachador
   ```
 * *Cabecera inyectada*: `X-API-Key: mi-api-key-secreta`
 
-### 4. Cabeceras Personalizadas (Custom Headers)
-* **JSON del secreto**:
-  ```json
-  {
-    "headers": {
-      "X-Custom-Auth": "Token-12345",
-      "X-Partner-Id": "partner-99"
-    }
-  }
-  ```
-
 ---
 
-## 4. Flujo de Ejecución y Manejo de Errores
+## 4. Flujo de Ejecución, Idempotencia y Manejo de Errores
 
-1. **Ingesta de Eventos**: Un mensaje llega al tópico `integration.events` con headers `X-Tenant-ID` y `X-Event-Type` (ej. `vehicle.upserted` o `customer.upserted`).
-2. **Idempotencia**: `InboxProcessor` valida contra la tabla `integration_inbox`. Si el `eventId` ya fue procesado con éxito (`PROCESSED`), se descarta de forma segura para evitar llamadas duplicadas.
-3. **Despacho Resiliente**: `OutboundEventDispatcher` envía la petición con circuit breaker y políticas de retry (`retryPolicy`).
-4. **Manejo de Respuestas**:
+1. **Ingesta de Eventos**: El mensaje llega al tópico `integration.<domain>.events` con headers de procedencia: `X-Tenant-ID`, `X-Event-Type`, `X-Aggregate-ID`, `X-Business-Domain` y `X-External-Source`.
+2. **Idempotencia**: `InboxProcessor` valida contra la tabla `integration_inbox`. Si el `eventId` ya fue procesado (`PROCESSED`), se descarta para evitar duplicados.
+3. **Filtro Anti-Loop**: Se descartan perfiles cuyo `externalSource` coincida con `X-External-Source`.
+4. **Despacho Resiliente**: `OutboundEventDispatcher` envía la petición con circuit breaker (`Resilience4j`) y rate limiting (`Redis Token Bucket`).
+5. **Manejo de Respuestas**:
    - **Éxito (2xx)**: El registro en `integration_inbox` se marca como `PROCESSED`.
-   - **Fallo Definitivo (5xx / Timeout)**: Tras agotar reintentos, el estado en `integration_inbox` cambia a `DEAD_LETTER` y el evento se redirige al tópico Kafka `integration.events.dlq` con la causa del error en las cabeceras.
+   - **Fallo Definitivo (5xx / Timeout agotado)**: El estado cambia a `DEAD_LETTER` y el evento se redirige al tópico Kafka `integration.events.dlq` con las cabeceras de error correspondientes.

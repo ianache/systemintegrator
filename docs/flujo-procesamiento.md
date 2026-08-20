@@ -1,6 +1,6 @@
 # Flujo de Procesamiento y Despacho de Integración
 
-Este documento describe la arquitectura y la lógica secuencial que sigue el componente de integración desde la extracción de datos en la fuente externa hasta su publicación en el bus de eventos Apache Kafka, implementando el patrón **Transactional Outbox**.
+Este documento describe la arquitectura y la lógica secuencial que sigue el componente de integración desde la extracción de datos en la fuente externa, su publicación en tópicos segregados de Apache Kafka mediante **Transactional Outbox**, hasta el consumo en **Inbox** y despacho **Outbound REST asegurado con Keycloak (JWT)**.
 
 ---
 
@@ -9,9 +9,9 @@ Este documento describe la arquitectura y la lógica secuencial que sigue el com
 ```mermaid
 flowchart TD
     subgraph 1. Disparo y Preparación
-        A[Trigger Cron / REST API] --> B[IntegrationSyncScheduler / IntegrationSyncService]
+        A[Trigger Cron / REST API /sync] --> B[IntegrationSyncScheduler / IntegrationSyncService]
         B -->|ShedLock 'sync:profileId'| C[IntegrationSyncOrchestrator]
-        C -->|Consulta Secret| D[(HashiCorp Vault)]
+        C -->|Consulta Secret| D[(HashiCorp Vault / InMemory)]
         C -->|Lee Watermark| E[(MySQL: integration_sync_state)]
     end
 
@@ -23,14 +23,24 @@ flowchart TD
     subgraph 3. Transformación y Outbox
         G --> H[TransformationService / JSLT]
         H -->|Genera AggregateID determinista| I[Derive UUID Tenant:Key]
-        I -->|Guarda Evento PENDING| J[(MySQL: integration_outbox)]
+        I -->|Guarda Evento PENDING con topic: integration.<domain>.events| J[(MySQL: integration_outbox)]
         I -->|Actualiza nuevo Watermark| E
     end
 
     subgraph 4. Relay Asíncrono a Kafka
         K[OutboxRelayScheduler - Cada 1s] -->|Lee eventos PENDING| J
-        K -->|KafkaOutboxPublisher| L[(Apache Kafka - Topic 'integration.events')]
+        K -->|KafkaOutboxPublisher| L[(Apache Kafka - Topic 'integration.<businessDomain>.events')]
         L -->|ACK recibido| M[Marca evento como PUBLISHED en integration_outbox]
+    end
+
+    subgraph 5. Ingesta Inbox y Despacho Outbound
+        L -->|Consumidor Regex: integration.*.events| N[KafkaInboxListener]
+        N -->|Registra evento & Deduplica| O[(MySQL: integration_inbox)]
+        N --> P[OutboundEventDispatcher]
+        P -->|Filtro Anti-Loop & Coincidencia Dominio| Q[(MySQL: integration_profile OUTBOUND)]
+        P -->|Obtiene Bearer JWT| R[OAuth2TokenCacheManager / Keycloak]
+        P -->|POST + Bearer JWT| S[CL2 Core REST API / Keycloak Secured]
+        S -->|2xx OK| T[Marca PROCESSED en integration_inbox]
     end
 ```
 
@@ -43,7 +53,7 @@ flowchart TD
    - **Automático**: `IntegrationSyncScheduler` evalúa periódicamente la expresión cron (`cronExpression` en `syncPolicy`).
    - **Bajo Demanda (Manual)**: Invocación al endpoint `POST /api/v1/integration-profiles/{profileId}/sync`.
 2. **Bloqueo Distribuido (ShedLock)**:
-   - Se asegura un lock distribuido (`sync:<profileId>`) en la tabla `shedlock` para garantizar que no existan ejecuciones concurrentes simultáneas sobre el mismo perfil.
+   - Se asegura un lock distribuido (`sync:<profileId>`) en la tabla `shedlock` para evitar ejecuciones concurrentes simultáneas sobre el mismo perfil.
 3. **Resolución de Credenciales y Watermark**:
    - `VaultSecretResolver` resuelve usuario y contraseña en HashiCorp Vault a partir del `credentialRef` (ej. `secret/sigo/db-credentials`).
    - Consulta el último watermark registrado en la tabla `integration_sync_state` (si no existe registro previo, utiliza `Instant.EPOCH`).
@@ -54,7 +64,7 @@ flowchart TD
 1. **Conexión Dinámica JDBC**:
    - `JdbcDataSourceFactory` inicializa un pool de conexiones `HikariDataSource` temporal hacia el `endpoint` configurado en el perfil.
 2. **Ejecución de la Consulta SQL**:
-   - `GenericJdbcAdapter` inyecta el parámetro de watermark (ej. `:last_date` o `:lastSyncWithBuffer`) en la consulta `extractionConfig.query` y recupera las filas modificadas desde la fuente externa.
+   - `GenericJdbcAdapter` inyecta el parámetro de watermark (ej. `:last_date` o `:lastSyncWithBuffer`) en la consulta `extractionConfig.query` y recupera las filas modificadas desde la fuente externa de forma validada y segura (`SqlSecurityValidator`).
 
 ---
 
@@ -64,9 +74,11 @@ Para cada fila extraída:
    - `TransformationService` transforma el payload de la fila origen a la estructura canónica requerida utilizando las directivas de `mapping` o `transformation` (JSLT).
 2. **Generación Determinista de Identificador (`aggregateId`)**:
    - Se genera un identificador UUID determinista basado en `UUID.nameUUIDFromBytes(tenantId + ":" + keyColumn)` para preservar la idempotencia.
-3. **Escritura Transaccional en `integration_outbox`**:
-   - Se inserta el evento con estado `PENDING`, `aggregate_type = 'Customer'` (o el dominio correspondiente), tipo de evento (ej. `customer.upserted`) y el payload canónico.
-4. **Actualización de Watermark**:
+3. **Derivación Dinámica de Tópico**:
+   - El tópico se calcula como `integration.<businessDomain>.events` (ej. `integration.brands.events`, `integration.models.events`, `integration.vehicles.events`).
+4. **Escritura Transaccional en `integration_outbox`**:
+   - Se inserta el evento con estado `PENDING`, `aggregate_type = <businessDomain>`, tipo de evento (ej. `<businessDomain>.upserted`), `topic` calculado y payload canónico.
+5. **Actualización de Watermark**:
    - Se calcula el nuevo watermark (`maxRowTimestamp` menos `overlapBufferSeconds`) y se registra en `integration_sync_state` con estado `SUCCESS`.
 
 ---
@@ -75,10 +87,25 @@ Para cada fila extraída:
 1. **Polling del Outbox**:
    - `OutboxRelayScheduler` ejecuta un ciclo cada 1 segundo buscando lotes de eventos con estado `PENDING` en `integration_outbox`.
 2. **Publicación en Apache Kafka**:
-   - `KafkaOutboxPublisher` publica el evento en el tópico `integration.events` con los siguientes headers:
+   - `KafkaOutboxPublisher` publica el evento en su tópico específico con los siguientes headers de procedencia:
      - `X-Tenant-ID`: Identificador del tenant.
-     - `X-Event-Type`: Tipo de evento de dominio.
+     - `X-Event-Type`: Tipo de evento (ej. `vehicles.upserted`).
      - `X-Aggregate-ID`: Identificador del agregado.
-3. **Confirmación y Manejo de Errores**:
-   - Tras recibir la confirmación de entrega (ACK) de Kafka, el evento se actualiza a **`PUBLISHED`** con su fecha `published_at`.
-   - En caso de error, se aplica reintento con backoff exponencial hasta alcanzar el límite máximo (`max-attempts`).
+     - `X-Business-Domain`: Dominio de negocio (ej. `vehicles`).
+     - `X-External-Source`: Sistema origen (ej. `sigo`).
+3. **Confirmación**:
+   - Tras recibir el ACK de Kafka, el evento se actualiza a **`PUBLISHED`** con su fecha `published_at`.
+
+---
+
+### Fase 5: Consumo Inbox y Despacho Outbound REST con Keycloak
+1. **Suscripción Dinámica**:
+   - `KafkaInboxListener` escucha mediante el patrón `integration\..*\.events`.
+2. **Deduplicación e Idempotencia**:
+   - Se registra en `integration_inbox`. Si el `eventId` ya fue procesado, se descarta.
+3. **Filtrado Anti-Loop**:
+   - `OutboundEventDispatcher` filtra perfiles `OUTBOUND` del tenant descartando los que tengan `externalSource == originExternalSource`.
+4. **Autenticación Keycloak & HTTP POST**:
+   - Si el perfil destino requiere autenticación OAuth2 (`AuthType.OAUTH2_CLIENT_CREDENTIALS`), `OAuth2TokenCacheManager` obtiene o reutiliza el token JWT Bearer.
+   - `HttpOutboundClient` efectúa el POST con `Authorization: Bearer <JWT>` hacia los microservicios core de CL2.
+   - El evento en `integration_inbox` se actualiza a `PROCESSED`.
