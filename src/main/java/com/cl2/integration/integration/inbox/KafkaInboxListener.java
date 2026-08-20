@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.inbox;
 
+import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
@@ -14,9 +15,11 @@ public class KafkaInboxListener {
     private static final Logger log = LoggerFactory.getLogger(KafkaInboxListener.class);
 
     private final InboxProcessor inboxProcessor;
+    private final OutboundEventDispatcher outboundEventDispatcher;
 
-    public KafkaInboxListener(InboxProcessor inboxProcessor) {
+    public KafkaInboxListener(InboxProcessor inboxProcessor, OutboundEventDispatcher outboundEventDispatcher) {
         this.inboxProcessor = inboxProcessor;
+        this.outboundEventDispatcher = outboundEventDispatcher;
     }
 
     @KafkaListener(topics = "${integration.inbox.topics:integration.events}", groupId = "${spring.kafka.consumer.group-id:integration-consumer-group}", autoStartup = "${integration.inbox.listener.auto-startup:false}")
@@ -29,16 +32,14 @@ public class KafkaInboxListener {
         }
         final UUID finalEventId = eventId;
 
-        UUID tenantId = extractHeaderAsUuid(record, "X-Tenant-ID");
-        if (tenantId == null) {
-            tenantId = UUID.fromString("00000000-0000-0000-0000-000000000000");
-        }
+        UUID rawTenantId = extractHeaderAsUuid(record, "X-Tenant-ID");
+        final UUID tenantId = rawTenantId != null ? rawTenantId : UUID.fromString("00000000-0000-0000-0000-000000000000");
 
         String eventType = extractHeaderAsString(record, "X-Event-Type", "UnknownEvent");
         log.info("Received event in KafkaInboxListener: eventId={}, tenantId={}, topic={}", eventId, tenantId, record.topic());
 
         inboxProcessor.process(eventId, tenantId, eventType, record.value(), record.topic(), payload -> {
-            log.debug("Dispatched payload to domain handler for eventId={}", finalEventId);
+            outboundEventDispatcher.dispatch(finalEventId, tenantId, eventType, payload);
         });
     }
 
