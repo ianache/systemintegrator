@@ -1,5 +1,6 @@
 package com.cl2.integration.adapter.out.http;
 
+import com.cl2.integration.adapter.out.generic.security.OAuth2TokenCacheManager;
 import com.cl2.integration.integration.security.AuthType;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.github.tomakehurst.wiremock.WireMockServer;
@@ -13,10 +14,13 @@ import org.springframework.web.client.RestClient;
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
 import java.util.Map;
+import java.util.UUID;
 
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.when;
 
 class HttpOutboundClientTest {
 
@@ -234,5 +238,47 @@ class HttpOutboundClientTest {
         assertThatThrownBy(() -> client.send("   ", null, "{}"))
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Endpoint URL cannot be null or blank");
+    }
+
+    @Test
+    @DisplayName("Should fetch token via OAuth2TokenCacheManager and send POST request with Bearer token for OAUTH2_CLIENT_CREDENTIALS")
+    void shouldFetchTokenViaOAuth2TokenCacheManagerAndSendPostRequest() {
+        String endpoint = baseUrl + "/api/v1/units/brands";
+        String payload = "{\"brand\":\"Toyota\"}";
+        ResolvedSecret secret = ResolvedSecret.oauth2(
+                "vault:secret/data/keycloak",
+                "http://auth.keycloak.com/token",
+                "client-1",
+                "secret-1",
+                "units.write"
+        );
+
+        OAuth2TokenCacheManager tokenCacheManager = mock(OAuth2TokenCacheManager.class);
+        UUID tenantUuid = UUID.randomUUID();
+        when(tokenCacheManager.getAccessToken(
+                tenantUuid.toString(),
+                "http://auth.keycloak.com/token",
+                "client-1",
+                "secret-1",
+                "units.write"
+        )).thenReturn("jwt-token-abc");
+
+        HttpOutboundClient oauthClient = new HttpOutboundClient(RestClient.builder(), tokenCacheManager);
+
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/units/brands"))
+                .withHeader("Content-Type", containing("application/json"))
+                .withHeader("Authorization", equalTo("Bearer jwt-token-abc"))
+                .withRequestBody(equalToJson(payload))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("{\"status\":\"success\"}")));
+
+        oauthClient.send(endpoint, secret, payload, tenantUuid);
+
+        wireMockServer.verify(postRequestedFor(urlEqualTo("/api/v1/units/brands"))
+                .withHeader("Content-Type", containing("application/json"))
+                .withHeader("Authorization", equalTo("Bearer jwt-token-abc"))
+                .withRequestBody(equalToJson(payload)));
     }
 }

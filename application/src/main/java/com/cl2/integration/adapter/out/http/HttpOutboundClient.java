@@ -1,5 +1,6 @@
 package com.cl2.integration.adapter.out.http;
 
+import com.cl2.integration.adapter.out.generic.security.OAuth2TokenCacheManager;
 import com.cl2.integration.integration.security.AuthType;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import org.slf4j.Logger;
@@ -14,6 +15,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.UUID;
 
 @Component
 public class HttpOutboundClient {
@@ -21,21 +23,36 @@ public class HttpOutboundClient {
     private static final Logger log = LoggerFactory.getLogger(HttpOutboundClient.class);
 
     private final RestClient restClient;
+    private final OAuth2TokenCacheManager tokenCacheManager;
 
     public HttpOutboundClient() {
-        this(RestClient.builder());
+        this(RestClient.builder(), new OAuth2TokenCacheManager());
+    }
+
+    public HttpOutboundClient(RestClient.Builder builder) {
+        this(builder, new OAuth2TokenCacheManager(builder));
     }
 
     @Autowired
-    public HttpOutboundClient(RestClient.Builder builder) {
+    public HttpOutboundClient(RestClient.Builder builder, @Autowired(required = false) OAuth2TokenCacheManager tokenCacheManager) {
         this.restClient = builder.build();
+        this.tokenCacheManager = tokenCacheManager != null ? tokenCacheManager : new OAuth2TokenCacheManager(builder);
     }
 
     public HttpOutboundClient(RestClient restClient) {
+        this(restClient, new OAuth2TokenCacheManager());
+    }
+
+    public HttpOutboundClient(RestClient restClient, OAuth2TokenCacheManager tokenCacheManager) {
         this.restClient = restClient;
+        this.tokenCacheManager = tokenCacheManager != null ? tokenCacheManager : new OAuth2TokenCacheManager();
     }
 
     public void send(String endpoint, ResolvedSecret secret, String payload) {
+        send(endpoint, secret, payload, null);
+    }
+
+    public void send(String endpoint, ResolvedSecret secret, String payload, UUID tenantId) {
         if (endpoint == null || endpoint.isBlank()) {
             throw new IllegalArgumentException("Endpoint URL cannot be null or blank");
         }
@@ -45,7 +62,7 @@ public class HttpOutboundClient {
                     .uri(endpoint)
                     .contentType(MediaType.APPLICATION_JSON)
                     .accept(MediaType.APPLICATION_JSON)
-                    .headers(httpHeaders -> applyAuthHeaders(httpHeaders, secret))
+                    .headers(httpHeaders -> applyAuthHeaders(httpHeaders, secret, tenantId))
                     .body(payload != null ? payload : "")
                     .retrieve()
                     .toBodilessEntity();
@@ -75,7 +92,7 @@ public class HttpOutboundClient {
         }
     }
 
-    private void applyAuthHeaders(HttpHeaders httpHeaders, ResolvedSecret secret) {
+    private void applyAuthHeaders(HttpHeaders httpHeaders, ResolvedSecret secret, UUID tenantId) {
         if (secret == null) {
             return;
         }
@@ -105,6 +122,20 @@ public class HttpOutboundClient {
         } else if (authType == AuthType.OAUTH2_CLIENT_CREDENTIALS) {
             if (secret.token() != null && !secret.token().isBlank()) {
                 httpHeaders.set(HttpHeaders.AUTHORIZATION, "Bearer " + secret.token());
+            } else if (secret.tokenUrl() != null && !secret.tokenUrl().isBlank()
+                    && secret.clientId() != null && !secret.clientId().isBlank()
+                    && tokenCacheManager != null) {
+                String tenantIdStr = tenantId != null ? tenantId.toString() : null;
+                String token = tokenCacheManager.getAccessToken(
+                        tenantIdStr,
+                        secret.tokenUrl(),
+                        secret.clientId(),
+                        secret.clientSecret(),
+                        secret.scope()
+                );
+                if (token != null && !token.isBlank()) {
+                    httpHeaders.set(HttpHeaders.AUTHORIZATION, "Bearer " + token);
+                }
             }
         }
     }

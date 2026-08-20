@@ -42,14 +42,18 @@ public class OutboundEventDispatcher {
     }
 
     public void dispatch(UUID eventId, UUID tenantId, String eventType, String payload) {
+        dispatch(eventId, tenantId, eventType, payload, null);
+    }
+
+    public void dispatch(UUID eventId, UUID tenantId, String eventType, String payload, String originExternalSource) {
         if (tenantId == null) {
             log.warn("Cannot dispatch outbound event: tenantId is null (eventId={}, eventType={})", eventId, eventType);
             return;
         }
 
         String derivedDomain = deriveBusinessDomain(eventType);
-        log.debug("Dispatching outbound event: eventId={}, tenantId={}, eventType={}, derivedDomain={}",
-                eventId, tenantId, eventType, derivedDomain);
+        log.debug("Dispatching outbound event: eventId={}, tenantId={}, eventType={}, derivedDomain={}, originSource={}",
+                eventId, tenantId, eventType, derivedDomain, originExternalSource);
 
         List<IntegrationProfile> activeProfiles = profileRepository.findAll(tenantId, true);
         if (activeProfiles == null || activeProfiles.isEmpty()) {
@@ -60,11 +64,12 @@ public class OutboundEventDispatcher {
         List<IntegrationProfile> matchingProfiles = activeProfiles.stream()
                 .filter(profile -> isOutboundRestProfile(profile))
                 .filter(profile -> matchesBusinessDomain(profile.businessDomain(), derivedDomain, eventType))
+                .filter(profile -> originExternalSource == null || !originExternalSource.equalsIgnoreCase(profile.externalSource()))
                 .toList();
 
         if (matchingProfiles.isEmpty()) {
-            log.info("No matching active outbound REST profiles found for tenantId={}, eventType={}, derivedDomain={}",
-                    tenantId, eventType, derivedDomain);
+            log.info("No matching active outbound REST profiles found for tenantId={}, eventType={}, derivedDomain={}, originSource={}",
+                    tenantId, eventType, derivedDomain, originExternalSource);
             return;
         }
 
@@ -93,7 +98,7 @@ public class OutboundEventDispatcher {
 
         final ResolvedSecret finalSecret = secret;
         resilienceExecutor.execute(tenantId, connector, () -> {
-            httpOutboundClient.send(endpoint, finalSecret, transformedPayload);
+            httpOutboundClient.send(endpoint, finalSecret, transformedPayload, tenantId);
             return null;
         });
     }

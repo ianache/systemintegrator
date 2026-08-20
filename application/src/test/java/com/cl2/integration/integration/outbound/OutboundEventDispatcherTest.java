@@ -121,7 +121,7 @@ class OutboundEventDispatcherTest {
         verify(secretResolver).resolve(credentialRef, tenantId);
         verify(transformationService).transform(rawPayload, profile);
         verify(resilienceExecutor).execute(eq(tenantId), eq("crm-connector"), any());
-        verify(httpOutboundClient).send(endpoint, secret, transformedPayload);
+        verify(httpOutboundClient).send(endpoint, secret, transformedPayload, tenantId);
     }
 
     @Test
@@ -163,7 +163,7 @@ class OutboundEventDispatcherTest {
         dispatcher.dispatch(eventId, tenantId, "CustomerCreatedEvent", rawPayload);
 
         verify(secretResolver, never()).resolve(anyString(), any(UUID.class));
-        verify(httpOutboundClient).send(endpoint, null, transformedPayload);
+        verify(httpOutboundClient).send(endpoint, null, transformedPayload, tenantId);
     }
 
     @Test
@@ -297,8 +297,8 @@ class OutboundEventDispatcherTest {
 
         dispatcher.dispatch(eventId, tenantId, "orders.created", rawPayload);
 
-        verify(httpOutboundClient).send(eq("https://api1.com"), any(), eq("{\"order\":1}"));
-        verify(httpOutboundClient).send(eq("https://api2.com"), any(), eq("{\"ord\":1}"));
+        verify(httpOutboundClient).send(eq("https://api1.com"), any(), eq("{\"order\":1}"), eq(tenantId));
+        verify(httpOutboundClient).send(eq("https://api2.com"), any(), eq("{\"ord\":1}"), eq(tenantId));
     }
 
     @Test
@@ -369,7 +369,7 @@ class OutboundEventDispatcherTest {
         when(profileRepository.findAll(tenantId, true)).thenReturn(List.of(profile));
         when(transformationService.transform(anyString(), eq(profile))).thenReturn("{}");
         doThrow(new HttpOutboundException("500 Internal Server Error", 500, "Server Error", null))
-                .when(httpOutboundClient).send(eq("https://api.com/fail"), isNull(), eq("{}"));
+                .when(httpOutboundClient).send(eq("https://api.com/fail"), isNull(), eq("{}"), eq(tenantId));
 
         assertThatThrownBy(() -> dispatcher.dispatch(eventId, tenantId, "customer.created", "{}"))
                 .isInstanceOf(HttpOutboundException.class)
@@ -405,5 +405,50 @@ class OutboundEventDispatcherTest {
         dispatcher.dispatch(eventId, tenantId, "vehicles.location.updated", "{}");
         verify(transformationService, times(1)).transform("{}", vehicleProfile);
         verify(transformationService, never()).transform("{}", customerProfile);
+    }
+
+    @Test
+    @DisplayName("Should pass tenantId to HttpOutboundClient when dispatching event with OAuth2 secret")
+    void shouldPassTenantIdToHttpOutboundClient() {
+        stubResilienceExecutorToExecuteDirectly();
+
+        String rawPayload = "{\"name\":\"Toyota\"}";
+        String transformedPayload = "{\"name\":\"Toyota\"}";
+        String endpoint = "https://api.cl2.com/api/v1/brands";
+        String credentialRef = "vault:secret/data/keycloak";
+
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST,
+                "units-connector",
+                "generic-http",
+                endpoint,
+                credentialRef,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+
+        IntegrationProfile profile = IntegrationProfile.create(
+                UUID.randomUUID(),
+                tenantId,
+                "brands",
+                "keycloak-cl2",
+                SyncDirection.OUTBOUND,
+                SourceOfTruth.PLATFORM,
+                config
+        );
+
+        ResolvedSecret secret = ResolvedSecret.oauth2(credentialRef, "http://auth/token", "client", "secret");
+
+        when(profileRepository.findAll(tenantId, true)).thenReturn(List.of(profile));
+        when(secretResolver.resolve(credentialRef, tenantId)).thenReturn(secret);
+        when(transformationService.transform(rawPayload, profile)).thenReturn(transformedPayload);
+
+        dispatcher.dispatch(eventId, tenantId, "brands.created", rawPayload);
+
+        verify(httpOutboundClient).send(endpoint, secret, transformedPayload, tenantId);
     }
 }
