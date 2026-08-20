@@ -57,7 +57,7 @@ public class VaultSecretResolver implements SecretResolver {
         String path = normalizePath(credentialRef);
         Map<?, ?> response = restClient.get()
                 .uri("/v1/secret/data/" + path)
-            .header("X-Vault-Token", vaultProperties.getToken())
+                .header("X-Vault-Token", vaultProperties.getToken())
                 .accept(MediaType.APPLICATION_JSON)
                 .retrieve()
                 .body(Map.class);
@@ -69,12 +69,44 @@ public class VaultSecretResolver implements SecretResolver {
         if (!(valuesNode instanceof Map<?, ?> values)) {
             throw new SecretNotFoundException(credentialRef);
         }
+
+        String tokenUrl = value(values, "tokenUrl");
+        if (tokenUrl == null) {
+            tokenUrl = value(values, "token_url");
+        }
+        String clientId = value(values, "clientId");
+        if (clientId == null) {
+            clientId = value(values, "client_id");
+        }
+        String clientSecret = value(values, "clientSecret");
+        if (clientSecret == null) {
+            clientSecret = value(values, "client_secret");
+        }
+        String scope = value(values, "scope");
+        if (tokenUrl != null && clientId != null && clientSecret != null) {
+            return ResolvedSecret.oauth2(credentialRef, tokenUrl, clientId, clientSecret, scope);
+        }
+
+        String apiKey = value(values, "apiKey");
+        if (apiKey == null) {
+            apiKey = value(values, "api_key");
+        }
+        if (apiKey != null) {
+            return ResolvedSecret.apiKey(credentialRef, apiKey);
+        }
+
+        String token = value(values, "token");
+        if (token != null) {
+            return ResolvedSecret.bearer(credentialRef, token);
+        }
+
         String username = value(values, "username");
         String password = value(values, "password");
-        if (username == null || password == null) {
-            throw new SecretNotFoundException(credentialRef);
+        if (username != null && password != null) {
+            return ResolvedSecret.basic(credentialRef, username, password);
         }
-        return ResolvedSecret.basic(credentialRef, username, password);
+
+        throw new SecretNotFoundException(credentialRef);
     }
 
     private String normalizePath(String credentialRef) {
