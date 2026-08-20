@@ -99,7 +99,7 @@ public class IntegrationSyncOrchestrator {
             Instant advancedWatermark = rows.isEmpty() ? watermark : maxRowTimestamp.minusSeconds(overlapBufferSeconds);
             syncStateRepository.upsert(new SyncState(profile.id(), advancedWatermark, startedAt, SyncRunStatus.SUCCESS, null));
         } catch (Exception ex) {
-            log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage());
+            log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage(), ex);
             syncStateRecorder.recordFailure(profile.id(), startedAt, String.valueOf(ex.getMessage()));
             throw new IntegrationSyncException("Sync failed for profile " + profile.id(), ex);
         }

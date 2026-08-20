@@ -9,11 +9,20 @@ import org.springframework.stereotype.Component;
 public class JdbcDataSourceFactory {
 
     public HikariDataSource create(String endpoint, ResolvedSecret secret) {
-        return DataSourceBuilder.create()
+        var builder = DataSourceBuilder.create()
                 .type(HikariDataSource.class)
                 .url(endpoint)
                 .username(secret.username())
-                .password(secret.password())
-                .build();
+                .password(secret.password());
+
+        if (endpoint != null && endpoint.startsWith("jdbc:sap:")) {
+            builder.driverClassName("com.sap.db.jdbc.Driver");
+        } else if (endpoint != null && endpoint.startsWith("jdbc:mysql:")) {
+            builder.driverClassName("com.mysql.cj.jdbc.Driver");
+        }
+
+        HikariDataSource dataSource = builder.build();
+        dataSource.setConnectionTimeout(15000);
+        return dataSource;
     }
 }

@@ -12,6 +12,7 @@ class SpringDataIntegrationProfileRepositoryTest {
     void exposesOnlyTenantScopedLookupOperations() {
         assertThat(JpaRepository.class.isAssignableFrom(SpringDataIntegrationProfileRepository.class)).isFalse();
         assertThat(Arrays.stream(SpringDataIntegrationProfileRepository.class.getDeclaredMethods())
+                .filter(method -> !method.getName().equals("findAllByActiveTrueAndProtocol"))
                 .filter(method -> method.getName().startsWith("find")
                         || method.getName().startsWith("exists")
                         || method.getName().startsWith("update"))

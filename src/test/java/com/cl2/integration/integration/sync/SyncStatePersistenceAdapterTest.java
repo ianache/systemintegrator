@@ -25,6 +25,8 @@ class SyncStatePersistenceAdapterTest {
 
     @BeforeEach
     void clear() {
+        jdbcTemplate.update("DELETE FROM integration_sync_state");
+        jdbcTemplate.update("DELETE FROM integration_outbox");
         jdbcTemplate.update("DELETE FROM integration_profile");
         jdbcTemplate.update(
                 "INSERT INTO integration_profile (id, tenant_id, business_domain, external_source, sync_direction, source_of_truth, active, version, created_at, updated_at) "

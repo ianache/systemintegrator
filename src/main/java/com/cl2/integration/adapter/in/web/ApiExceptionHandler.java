@@ -15,14 +15,18 @@ import org.springframework.web.method.annotation.MethodArgumentTypeMismatchExcep
 @RestControllerAdvice
 public class ApiExceptionHandler {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(ApiExceptionHandler.class);
+
     @ExceptionHandler(MethodArgumentNotValidException.class)
     ProblemDetail handleValidation(MethodArgumentNotValidException exception, HttpServletRequest request) {
+        log.warn("Validation failed for {}: {}", request.getRequestURI(), exception.getMessage());
         return problem(HttpStatus.BAD_REQUEST, "VALIDATION_FAILED", "The request body is invalid", request);
     }
 
     @ExceptionHandler({HttpMessageNotReadableException.class, MethodArgumentTypeMismatchException.class,
             IllegalArgumentException.class, TenantRequiredException.class})
     ProblemDetail handleBadRequest(Exception exception, HttpServletRequest request) {
+        log.warn("Bad request for {}: {}", request.getRequestURI(), exception.getMessage(), exception);
         return problem(HttpStatus.BAD_REQUEST, "BAD_REQUEST", "The request is invalid", request);
     }
 

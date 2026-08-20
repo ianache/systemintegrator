@@ -46,6 +46,21 @@ class IntegrationProfileControllerTest {
     @MockitoBean
     private IntegrationProfileService service;
 
+    @MockitoBean
+    private com.cl2.integration.integration.sync.IntegrationSyncService syncService;
+
+    @Test
+    void triggersSyncForAProfileForTheTenantFromTheHeader() throws Exception {
+        mockMvc.perform(post(BASE_PATH + "/{profileId}/sync", PROFILE_ID)
+                        .header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isAccepted())
+                .andExpect(jsonPath("$.profileId").value(PROFILE_ID.toString()))
+                .andExpect(jsonPath("$.status").value("TRIGGERED"))
+                .andExpect(jsonPath("$.triggeredAt").isNotEmpty());
+
+        then(syncService).should().triggerSync(TENANT_ID, PROFILE_ID);
+    }
+
     @Test
     void createsAProfileForTheTenantFromTheHeader() throws Exception {
         given(service.create(eq(TENANT_ID), any(CreateIntegrationProfileCommand.class))).willReturn(profileView(TENANT_ID));

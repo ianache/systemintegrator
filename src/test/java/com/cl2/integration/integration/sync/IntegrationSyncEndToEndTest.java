@@ -77,17 +77,22 @@ class IntegrationSyncEndToEndTest {
                 null, null,
                 "{\"query\":\"SELECT card_code, card_name, updated_at FROM scratch_customers WHERE updated_at >= :lastSyncWithBuffer\","
                         + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"card_code\",\"watermarkColumn\":\"updated_at\"}");
-        IntegrationProfile profile = integrationProfileRepository.save(tenantId, IntegrationProfile.create(
+        Instant tenMinutesAgo = Instant.now().minus(10, ChronoUnit.MINUTES);
+        IntegrationProfile profile = integrationProfileRepository.save(tenantId, IntegrationProfile.rehydrate(
                 UUID.randomUUID(), tenantId, "customers", "sap-hana",
-                SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, config));
+                SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, config, true, tenMinutesAgo, tenMinutesAgo, 0));
 
         scheduler.tick();
 
-        List<Map<String, Object>> outboxRows = jdbcTemplate.queryForList(
-                "SELECT * FROM integration_outbox WHERE tenant_id = UNHEX(REPLACE(?, '-', '')) AND aggregate_type = 'Customer'",
-                tenantId.toString());
-        assertThat(outboxRows).hasSize(1);
-        assertThat(String.valueOf(outboxRows.get(0).get("payload"))).contains("Acme Corp");
+        org.testcontainers.shaded.org.awaitility.Awaitility.await()
+                .atMost(java.time.Duration.ofSeconds(5))
+                .untilAsserted(() -> {
+                    List<Map<String, Object>> outboxRows = jdbcTemplate.queryForList(
+                            "SELECT * FROM integration_outbox WHERE tenant_id = UNHEX(REPLACE(?, '-', '')) AND aggregate_type = 'Customer'",
+                            tenantId.toString());
+                    assertThat(outboxRows).hasSize(1);
+                    assertThat(String.valueOf(outboxRows.get(0).get("payload"))).contains("Acme Corp");
+                });
 
         SyncState syncState = jdbcTemplate.queryForObject(
                 "SELECT last_run_status, last_watermark FROM integration_sync_state WHERE profile_id = UNHEX(REPLACE(?, '-', ''))",

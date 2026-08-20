@@ -28,27 +28,18 @@ public class IntegrationSyncScheduler {
 
     private final IntegrationProfileRepository integrationProfileRepository;
     private final SyncStateRepository syncStateRepository;
-    private final IntegrationSyncOrchestrator orchestrator;
-    private final LockingTaskExecutor lockingTaskExecutor;
-    private final Executor integrationSyncExecutor;
+    private final IntegrationSyncService syncService;
     private final ObjectMapper objectMapper;
-    private final IntegrationSyncProperties properties;
 
     public IntegrationSyncScheduler(
             IntegrationProfileRepository integrationProfileRepository,
             SyncStateRepository syncStateRepository,
-            IntegrationSyncOrchestrator orchestrator,
-            LockingTaskExecutor lockingTaskExecutor,
-            @Qualifier("integrationSyncExecutor") Executor integrationSyncExecutor,
-            ObjectMapper objectMapper,
-            IntegrationSyncProperties properties) {
+            IntegrationSyncService syncService,
+            ObjectMapper objectMapper) {
         this.integrationProfileRepository = integrationProfileRepository;
         this.syncStateRepository = syncStateRepository;
-        this.orchestrator = orchestrator;
-        this.lockingTaskExecutor = lockingTaskExecutor;
-        this.integrationSyncExecutor = integrationSyncExecutor;
+        this.syncService = syncService;
         this.objectMapper = objectMapper;
-        this.properties = properties;
     }
 
     @Scheduled(fixedDelayString = "${integration.sync.tick-fixed-delay-ms:30000}")
@@ -94,16 +85,6 @@ public class IntegrationSyncScheduler {
     }
 
     private void dispatch(IntegrationProfile profile) {
-        LockConfiguration lockConfiguration = new LockConfiguration(
-                Instant.now(), "sync:" + profile.id(),
-                Duration.ofSeconds(properties.getDefaultRunLockAtMostForSeconds()), Duration.ofSeconds(1));
-        Runnable task = () -> orchestrator.run(profile);
-        integrationSyncExecutor.execute(() -> {
-            try {
-                lockingTaskExecutor.executeWithLock(task, lockConfiguration);
-            } catch (Exception ex) {
-                log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage());
-            }
-        });
+        syncService.dispatch(profile);
     }
 }

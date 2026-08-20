@@ -45,6 +45,8 @@ class IntegrationProfilePersistenceAdapterTest {
 
     @BeforeEach
     void clearProfiles() {
+        jdbcTemplate.update("DELETE FROM integration_sync_state");
+        jdbcTemplate.update("DELETE FROM integration_outbox");
         jdbcTemplate.update("DELETE FROM integration_profile");
     }
 

@@ -24,15 +24,23 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
 import org.springframework.web.bind.annotation.RestController;
 
+import com.cl2.integration.adapter.in.web.dto.TriggerSyncResponse;
+import com.cl2.integration.integration.sync.IntegrationSyncService;
+
 @RestController
 @RequestMapping("/api/v1/integration-profiles")
 public class IntegrationProfileController {
 
     private final IntegrationProfileService service;
+    private final IntegrationSyncService syncService;
     private final ObjectMapper objectMapper;
 
-    public IntegrationProfileController(IntegrationProfileService service, ObjectMapper objectMapper) {
+    public IntegrationProfileController(
+            IntegrationProfileService service,
+            IntegrationSyncService syncService,
+            ObjectMapper objectMapper) {
         this.service = service;
+        this.syncService = syncService;
         this.objectMapper = objectMapper;
     }
 
@@ -43,6 +51,13 @@ public class IntegrationProfileController {
         return IntegrationProfileResponse.from(service.create(TenantContext.requireTenantId(),
                 new CreateIntegrationProfileCommand(request.businessDomain(), request.externalSource(), request.syncDirection(),
                         request.sourceOfTruth(), configuration)), objectMapper);
+    }
+
+    @PostMapping("/{profileId}/sync")
+    @ResponseStatus(HttpStatus.ACCEPTED)
+    public TriggerSyncResponse triggerSync(@PathVariable UUID profileId) {
+        syncService.triggerSync(TenantContext.requireTenantId(), profileId);
+        return TriggerSyncResponse.triggered(profileId);
     }
 
     @GetMapping

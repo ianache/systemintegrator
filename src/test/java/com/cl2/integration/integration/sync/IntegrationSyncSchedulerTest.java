@@ -7,8 +7,6 @@ import com.cl2.integration.domain.model.SourceOfTruth;
 import com.cl2.integration.domain.model.SyncDirection;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import com.fasterxml.jackson.databind.ObjectMapper;
-import net.javacrumbs.shedlock.core.LockConfiguration;
-import net.javacrumbs.shedlock.core.LockingTaskExecutor;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -17,11 +15,9 @@ import java.time.temporal.ChronoUnit;
 import java.util.List;
 import java.util.Optional;
 import java.util.UUID;
-import java.util.concurrent.Executor;
 
-import static org.assertj.core.api.Assertions.assertThat;
 import static org.mockito.ArgumentMatchers.any;
-import static org.mockito.Mockito.doAnswer;
+import static org.mockito.Mockito.doThrow;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
 import static org.mockito.Mockito.verify;
@@ -31,29 +27,17 @@ class IntegrationSyncSchedulerTest {
 
     private IntegrationProfileRepository integrationProfileRepository;
     private SyncStateRepository syncStateRepository;
-    private IntegrationSyncOrchestrator orchestrator;
-    private LockingTaskExecutor lockingTaskExecutor;
-    private IntegrationSyncProperties properties;
+    private IntegrationSyncService syncService;
     private IntegrationSyncScheduler scheduler;
 
     @BeforeEach
     void setUp() {
         integrationProfileRepository = mock(IntegrationProfileRepository.class);
         syncStateRepository = mock(SyncStateRepository.class);
-        orchestrator = mock(IntegrationSyncOrchestrator.class);
-        lockingTaskExecutor = mock(LockingTaskExecutor.class);
-        properties = new IntegrationSyncProperties();
-        Executor synchronousExecutor = Runnable::run;
+        syncService = mock(IntegrationSyncService.class);
 
         scheduler = new IntegrationSyncScheduler(
-                integrationProfileRepository, syncStateRepository, orchestrator,
-                lockingTaskExecutor, synchronousExecutor, new ObjectMapper(), properties);
-
-        doAnswer(invocation -> {
-            Runnable task = invocation.getArgument(0);
-            task.run();
-            return null;
-        }).when(lockingTaskExecutor).executeWithLock(any(Runnable.class), any(LockConfiguration.class));
+                integrationProfileRepository, syncStateRepository, syncService, new ObjectMapper());
     }
 
     private IntegrationProfile jdbcProfile(UUID id, String cronExpression, Instant createdAt) {
@@ -76,7 +60,7 @@ class IntegrationSyncSchedulerTest {
 
         scheduler.tick();
 
-        verify(orchestrator).run(profile);
+        verify(syncService).dispatch(profile);
     }
 
     @Test
@@ -90,7 +74,7 @@ class IntegrationSyncSchedulerTest {
 
         scheduler.tick();
 
-        verify(orchestrator, never()).run(any());
+        verify(syncService, never()).dispatch(any());
     }
 
     @Test
@@ -103,11 +87,11 @@ class IntegrationSyncSchedulerTest {
         when(integrationProfileRepository.findAllActiveByProtocol(IntegrationProtocol.JDBC))
                 .thenReturn(List.of(brokenProfile, healthyProfile));
         when(syncStateRepository.find(any())).thenReturn(Optional.empty());
-        org.mockito.Mockito.doThrow(new RuntimeException("boom")).when(orchestrator).run(brokenProfile);
+        doThrow(new RuntimeException("boom")).when(syncService).dispatch(brokenProfile);
 
         scheduler.tick();
 
-        verify(orchestrator).run(brokenProfile);
-        verify(orchestrator).run(healthyProfile);
+        verify(syncService).dispatch(brokenProfile);
+        verify(syncService).dispatch(healthyProfile);
     }
 }
