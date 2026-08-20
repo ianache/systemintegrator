@@ -25,6 +25,9 @@ public class KafkaOutboxPublisher {
         record.headers().add(new RecordHeader("X-Tenant-ID", event.toDomain().tenantId().toString().getBytes(StandardCharsets.UTF_8)));
         record.headers().add(new RecordHeader("X-Event-Type", event.toDomain().eventType().getBytes(StandardCharsets.UTF_8)));
         record.headers().add(new RecordHeader("X-Aggregate-ID", event.toDomain().aggregateId().toString().getBytes(StandardCharsets.UTF_8)));
+        if (event.toDomain().aggregateType() != null) {
+            record.headers().add(new RecordHeader("X-Business-Domain", event.toDomain().aggregateType().getBytes(StandardCharsets.UTF_8)));
+        }
 
         return kafkaTemplate.send(record);
     }

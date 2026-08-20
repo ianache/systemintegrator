@@ -49,6 +49,7 @@ integration:
       max-attempts: 5
       initial-backoff-ms: 1000
   inbox:
+    topic-pattern: ${INTEGRATION_INBOX_TOPIC_PATTERN:integration\..*\.events}
     topics: ${INTEGRATION_INBOX_TOPICS:integration.events}
     listener:
       auto-startup: ${INTEGRATION_INBOX_LISTENER_AUTO_STARTUP:false}

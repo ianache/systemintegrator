@@ -22,7 +22,7 @@ public class KafkaInboxListener {
         this.outboundEventDispatcher = outboundEventDispatcher;
     }
 
-    @KafkaListener(topics = "${integration.inbox.topics:integration.events}", groupId = "${spring.kafka.consumer.group-id:integration-consumer-group}", autoStartup = "${integration.inbox.listener.auto-startup:false}")
+    @KafkaListener(topicPattern = "${integration.inbox.topic-pattern:integration\\..*\\.events}", groupId = "${spring.kafka.consumer.group-id:integration-consumer-group}", autoStartup = "${integration.inbox.listener.auto-startup:false}")
     public void onMessage(ConsumerRecord<String, String> record) {
         UUID eventId;
         try {
@@ -36,10 +36,11 @@ public class KafkaInboxListener {
         final UUID tenantId = rawTenantId != null ? rawTenantId : UUID.fromString("00000000-0000-0000-0000-000000000000");
 
         String eventType = extractHeaderAsString(record, "X-Event-Type", "UnknownEvent");
-        log.info("Received event in KafkaInboxListener: eventId={}, tenantId={}, topic={}", eventId, tenantId, record.topic());
+        String externalSource = extractHeaderAsString(record, "X-External-Source", null);
+        log.info("Received event in KafkaInboxListener: eventId={}, tenantId={}, topic={}, source={}", eventId, tenantId, record.topic(), externalSource);
 
         inboxProcessor.process(eventId, tenantId, eventType, record.value(), record.topic(), payload -> {
-            outboundEventDispatcher.dispatch(finalEventId, tenantId, eventType, payload);
+            outboundEventDispatcher.dispatch(finalEventId, tenantId, eventType, payload, externalSource);
         });
     }
 

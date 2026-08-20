@@ -59,7 +59,7 @@ class IntegrationSyncEndToEndTest {
         jdbcTemplate.update(
                 "INSERT INTO scratch_customers (card_code, card_name, updated_at) VALUES (?, ?, ?)",
                 "CLI-001", "Acme Corp", java.sql.Timestamp.from(Instant.now().minusSeconds(60)));
-        jdbcTemplate.update("DELETE FROM integration_outbox WHERE aggregate_type = 'Customer'");
+        jdbcTemplate.update("DELETE FROM integration_outbox WHERE aggregate_type = 'customers'");
     }
 
     @Test
@@ -88,7 +88,7 @@ class IntegrationSyncEndToEndTest {
                 .atMost(java.time.Duration.ofSeconds(5))
                 .untilAsserted(() -> {
                     List<Map<String, Object>> outboxRows = jdbcTemplate.queryForList(
-                            "SELECT * FROM integration_outbox WHERE tenant_id = UNHEX(REPLACE(?, '-', '')) AND aggregate_type = 'Customer'",
+                            "SELECT * FROM integration_outbox WHERE tenant_id = UNHEX(REPLACE(?, '-', '')) AND aggregate_type = 'customers'",
                             tenantId.toString());
                     assertThat(outboxRows).hasSize(1);
                     assertThat(String.valueOf(outboxRows.get(0).get("payload"))).contains("Acme Corp");

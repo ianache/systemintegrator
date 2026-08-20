@@ -82,12 +82,16 @@ public class IntegrationSyncOrchestrator {
                         () -> genericJdbcAdapter.extract(jdbcTemplate, extractionConfig, watermark));
             }
 
+            String aggregateType = deriveAggregateType(profile.businessDomain());
+            String eventType = deriveEventType(profile.businessDomain());
+            String topic = deriveTopic(profile.businessDomain());
+
             Instant maxRowTimestamp = watermark;
             for (Map<String, Object> row : rows) {
                 String rowJson = objectMapper.writeValueAsString(row);
                 String canonicalJson = transformationService.transform(rowJson, profile);
                 UUID aggregateId = deriveAggregateId(profile.tenantId(), String.valueOf(row.get(extractionConfig.keyColumn())));
-                outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, "Customer", "customer.upserted", canonicalJson));
+                outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, canonicalJson));
 
                 Instant rowTimestamp = readWatermarkTimestamp(row, extractionConfig.watermarkColumn());
                 if (rowTimestamp.isAfter(maxRowTimestamp)) {
@@ -131,6 +135,27 @@ public class IntegrationSyncOrchestrator {
 
     private UUID deriveAggregateId(UUID tenantId, String businessKey) {
         return UUID.nameUUIDFromBytes((tenantId + ":" + businessKey).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String deriveAggregateType(String businessDomain) {
+        if (businessDomain == null || businessDomain.isBlank()) {
+            return "Unknown";
+        }
+        return businessDomain.trim();
+    }
+
+    private String deriveEventType(String businessDomain) {
+        if (businessDomain == null || businessDomain.isBlank()) {
+            return "entity.upserted";
+        }
+        return businessDomain.trim().toLowerCase() + ".upserted";
+    }
+
+    private String deriveTopic(String businessDomain) {
+        if (businessDomain == null || businessDomain.isBlank()) {
+            return "integration.events";
+        }
+        return "integration." + businessDomain.trim().toLowerCase() + ".events";
     }
 
     private Instant readWatermarkTimestamp(Map<String, Object> row, String watermarkColumn) {

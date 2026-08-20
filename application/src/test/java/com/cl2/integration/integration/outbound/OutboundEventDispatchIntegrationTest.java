@@ -290,4 +290,84 @@ class OutboundEventDispatchIntegrationTest extends IntegrationApplicationTest {
         assertThat(inboxEntityOpt).isPresent();
         assertThat(inboxEntityOpt.get().getStatus()).isEqualTo("PROCESSED");
     }
+
+    @Test
+    @DisplayName("Anti-Loop: When originExternalSource is 'sigo', profile with externalSource 'sigo' is NOT dispatched to")
+    void shouldNotDispatchWhenOriginMatchesProfileExternalSource() {
+        UUID tenantId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String endpoint = baseUrl + "/api/v1/sigo/customers";
+
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "sigo-connector", "sigo-adapter", endpoint, null, null, null, null, null, null, null
+        );
+        IntegrationProfile profile = IntegrationProfile.create(
+                UUID.randomUUID(), tenantId, "customers", "sigo", SyncDirection.OUTBOUND, SourceOfTruth.PLATFORM, config
+        );
+        profileRepository.save(tenantId, profile);
+
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/sigo/customers"))
+                .willReturn(aResponse().withStatus(200).withBody("{\"ok\":true}")));
+
+        String payload = "{\"id\":\"cust-123\",\"name\":\"Acme Corp\"}";
+        RecordHeaders headers = new RecordHeaders();
+        headers.add(new RecordHeader("X-Tenant-ID", tenantId.toString().getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Event-Type", "CustomerCreatedEvent".getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-External-Source", "sigo".getBytes(StandardCharsets.UTF_8)));
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "integration.customers.events", 0, 0L, 0L, null, 0, 0,
+                eventId.toString(), payload, headers, null
+        );
+
+        kafkaInboxListener.onMessage(record);
+
+        // Verify WireMock was NOT called
+        wireMockServer.verify(0, postRequestedFor(urlEqualTo("/api/v1/sigo/customers")));
+
+        // Verify inbox marked as PROCESSED
+        Optional<InboxJpaEntity> inboxEntityOpt = inboxStore.find(eventId, tenantId);
+        assertThat(inboxEntityOpt).isPresent();
+        assertThat(inboxEntityOpt.get().getStatus()).isEqualTo("PROCESSED");
+    }
+
+    @Test
+    @DisplayName("Anti-Loop: When originExternalSource is 'sigo', profile with externalSource 'sap-hana' IS dispatched to")
+    void shouldDispatchWhenOriginDiffersFromProfileExternalSource() {
+        UUID tenantId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String endpoint = baseUrl + "/api/v1/sap/customers";
+
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST, "sap-connector", "sap-adapter", endpoint, null, null, null, null, null, null, null
+        );
+        IntegrationProfile profile = IntegrationProfile.create(
+                UUID.randomUUID(), tenantId, "customers", "sap-hana", SyncDirection.OUTBOUND, SourceOfTruth.PLATFORM, config
+        );
+        profileRepository.save(tenantId, profile);
+
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/sap/customers"))
+                .willReturn(aResponse().withStatus(200).withBody("{\"status\":\"ok\"}")));
+
+        String payload = "{\"id\":\"cust-456\",\"name\":\"Beta LLC\"}";
+        RecordHeaders headers = new RecordHeaders();
+        headers.add(new RecordHeader("X-Tenant-ID", tenantId.toString().getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Event-Type", "CustomerCreatedEvent".getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-External-Source", "sigo".getBytes(StandardCharsets.UTF_8)));
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "integration.customers.events", 0, 0L, 0L, null, 0, 0,
+                eventId.toString(), payload, headers, null
+        );
+
+        kafkaInboxListener.onMessage(record);
+
+        // Verify WireMock WAS called
+        wireMockServer.verify(1, postRequestedFor(urlEqualTo("/api/v1/sap/customers")));
+
+        // Verify inbox marked as PROCESSED
+        Optional<InboxJpaEntity> inboxEntityOpt = inboxStore.find(eventId, tenantId);
+        assertThat(inboxEntityOpt).isPresent();
+        assertThat(inboxEntityOpt.get().getStatus()).isEqualTo("PROCESSED");
+    }
 }

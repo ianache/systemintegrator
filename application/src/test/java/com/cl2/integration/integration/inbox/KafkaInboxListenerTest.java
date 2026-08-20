@@ -41,17 +41,19 @@ class KafkaInboxListenerTest {
     }
 
     @Test
-    @DisplayName("Should extract headers, invoke inboxProcessor and forward to outboundEventDispatcher")
+    @DisplayName("Should extract headers, invoke inboxProcessor and forward to outboundEventDispatcher with external source")
     void shouldExtractHeadersAndDispatch() {
         UUID eventId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
         String eventType = "CustomerCreatedEvent";
         String payload = "{\"name\":\"Alice\"}";
-        String topic = "integration.events";
+        String topic = "integration.customers.events";
+        String externalSource = "sigo";
 
         RecordHeaders headers = new RecordHeaders();
         headers.add(new RecordHeader("X-Tenant-ID", tenantId.toString().getBytes(StandardCharsets.UTF_8)));
         headers.add(new RecordHeader("X-Event-Type", eventType.getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-External-Source", externalSource.getBytes(StandardCharsets.UTF_8)));
 
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 topic, 0, 0L, 0L, null, 0, 0,
@@ -72,7 +74,7 @@ class KafkaInboxListenerTest {
         Consumer<String> capturedHandler = consumerCaptor.getValue();
         capturedHandler.accept(payload);
 
-        verify(outboundEventDispatcher).dispatch(eventId, tenantId, eventType, payload);
+        verify(outboundEventDispatcher).dispatch(eventId, tenantId, eventType, payload, externalSource);
     }
 
     @Test
@@ -114,7 +116,8 @@ class KafkaInboxListenerTest {
                 eventIdCaptor.getValue(),
                 tenantIdCaptor.getValue(),
                 eventTypeCaptor.getValue(),
-                payload
+                payload,
+                null
         );
     }
 }

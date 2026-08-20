@@ -106,8 +106,8 @@ class IntegrationSyncOrchestratorTest {
         ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxRepository).save(outboxCaptor.capture());
         assertThat(outboxCaptor.getValue().tenantId()).isEqualTo(tenantId);
-        assertThat(outboxCaptor.getValue().aggregateType()).isEqualTo("Customer");
-        assertThat(outboxCaptor.getValue().eventType()).isEqualTo("customer.upserted");
+        assertThat(outboxCaptor.getValue().aggregateType()).isEqualTo("customers");
+        assertThat(outboxCaptor.getValue().eventType()).isEqualTo("customers.upserted");
         assertThat(outboxCaptor.getValue().payload()).isEqualTo("{\"customerId\":\"CLI-001\"}");
 
         ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
@@ -117,6 +117,65 @@ class IntegrationSyncOrchestratorTest {
         assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(rowTimestamp.minusSeconds(300));
 
         verify(syncStateRecorder, never()).recordFailure(any(), any(), anyString());
+    }
+
+    @Test
+    void derivesVehicleAggregateAndVehicleUpsertedForUnitsDomain() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT motor, updated_at FROM vehicles WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"motor\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.JDBC, "sigo", "sigo-adapter",
+                "jdbc:mysql://localhost:3306/integration", "secret/sigo",
+                "{\"motor\":\"numero_motor\"}", null, "{\"cronExpression\":\"0 */10 * * * *\"}", null, null, extractionConfigJson);
+        IntegrationProfile profile = IntegrationProfile.rehydrate(profileId, tenantId, "units", "sigo",
+                SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, config, true, Instant.now(), Instant.now(), 0);
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sigo", "user", "pass");
+        when(secretResolver.resolve("secret/sigo", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(eq("jdbc:mysql://localhost:3306/integration"), eq(secret))).thenReturn(dataSource);
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(Map.of("motor", "MOT-123", "updated_at", java.sql.Timestamp.from(rowTimestamp)));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"motor\":\"MOT-123\"}");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getValue().aggregateType()).isEqualTo("units");
+        assertThat(outboxCaptor.getValue().eventType()).isEqualTo("units.upserted");
+        assertThat(outboxCaptor.getValue().payload()).isEqualTo("{\"motor\":\"MOT-123\"}");
+        assertThat(outboxCaptor.getValue().topic()).isEqualTo("integration.units.events");
+    }
+
+    @Test
+    void derivesDomainSpecificTopicForOutboxEvent() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT card_code, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"card_code\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"cronExpression\":\"0 */10 * * * *\"}");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(Map.of("card_code", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp)));
+        when(genericJdbcAdapter.extract(any(), any(), eq(Instant.EPOCH))).thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getValue().topic()).isEqualTo("integration.customers.events");
     }
 
     @Test
