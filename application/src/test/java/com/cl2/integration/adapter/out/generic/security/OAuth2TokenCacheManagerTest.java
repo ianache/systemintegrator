@@ -64,6 +64,52 @@ class OAuth2TokenCacheManagerTest {
         assertEquals(2, fetchCounter.get(), "Token fetcher should be called again when token has <60s left before expiration");
     }
 
+    @Test
+    void shouldSupportOverloadedGetAccessTokenWithExplicitCredentials() {
+        OAuth2TokenCacheManager cacheManager = new OAuth2TokenCacheManager(fetcher);
+
+        String token1 = cacheManager.getAccessToken("tenant-1", "https://oauth.example.com/token", "client-123", "secret-xyz", "read:all");
+        String token2 = cacheManager.getAccessToken("tenant-1", "https://oauth.example.com/token", "client-123", "secret-xyz", "read:all");
+
+        assertEquals("token-1", token1);
+        assertEquals("token-1", token2);
+        assertEquals(1, fetchCounter.get());
+    }
+
+    @Test
+    void shouldFetchTokenFromKeycloakEndpointUsingDefaultFetcher() {
+        com.github.tomakehurst.wiremock.WireMockServer wireMock = new com.github.tomakehurst.wiremock.WireMockServer(
+                com.github.tomakehurst.wiremock.core.WireMockConfiguration.wireMockConfig().dynamicPort()
+        );
+        wireMock.start();
+
+        try {
+            wireMock.stubFor(com.github.tomakehurst.wiremock.client.WireMock.post("/realms/cl2/protocol/openid-connect/token")
+                    .withHeader("Content-Type", com.github.tomakehurst.wiremock.client.WireMock.containing("application/x-www-form-urlencoded"))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.containing("grant_type=client_credentials"))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.containing("client_id=keycloak-client"))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.containing("client_secret=keycloak-secret"))
+                    .withRequestBody(com.github.tomakehurst.wiremock.client.WireMock.containing("scope=openid"))
+                    .willReturn(com.github.tomakehurst.wiremock.client.WireMock.aResponse()
+                            .withHeader("Content-Type", "application/json")
+                            .withStatus(200)
+                            .withBody("{\"access_token\": \"mock-keycloak-jwt-123\", \"expires_in\": 300, \"token_type\": \"Bearer\"}")));
+
+            OAuth2TokenCacheManager cacheManager = new OAuth2TokenCacheManager();
+            String tokenUrl = wireMock.baseUrl() + "/realms/cl2/protocol/openid-connect/token";
+
+            String token = cacheManager.getAccessToken("tenant-kc", tokenUrl, "keycloak-client", "keycloak-secret", "openid");
+
+            assertEquals("mock-keycloak-jwt-123", token);
+
+            wireMock.verify(1, com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor(
+                    com.github.tomakehurst.wiremock.client.WireMock.urlEqualTo("/realms/cl2/protocol/openid-connect/token")
+            ));
+        } finally {
+            wireMock.stop();
+        }
+    }
+
     private static class MutableClock extends Clock {
         private Instant currentInstant;
         private final ZoneId zone;

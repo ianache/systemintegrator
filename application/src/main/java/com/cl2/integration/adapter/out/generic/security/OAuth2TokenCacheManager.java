@@ -1,6 +1,13 @@
 package com.cl2.integration.adapter.out.generic.security;
 
 import com.cl2.integration.adapter.out.generic.model.AuthConfig;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.MediaType;
+import org.springframework.stereotype.Component;
+import org.springframework.util.LinkedMultiValueMap;
+import org.springframework.util.MultiValueMap;
+import org.springframework.web.client.RestClient;
 
 import java.time.Clock;
 import java.time.Instant;
@@ -8,6 +15,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.concurrent.ConcurrentHashMap;
 
+@Component
 public class OAuth2TokenCacheManager {
 
     @FunctionalInterface
@@ -15,11 +23,58 @@ public class OAuth2TokenCacheManager {
         String fetchToken(String tokenUrl, String clientId, String clientSecretRef, String scope);
     }
 
+    public static class DefaultRestClientTokenFetcher implements TokenFetcher {
+        private final RestClient restClient;
+
+        public DefaultRestClientTokenFetcher(RestClient restClient) {
+            this.restClient = Objects.requireNonNull(restClient, "RestClient must not be null");
+        }
+
+        @Override
+        public String fetchToken(String tokenUrl, String clientId, String clientSecretRef, String scope) {
+            MultiValueMap<String, String> formData = new LinkedMultiValueMap<>();
+            formData.add("grant_type", "client_credentials");
+            if (clientId != null && !clientId.isBlank()) {
+                formData.add("client_id", clientId);
+            }
+            if (clientSecretRef != null && !clientSecretRef.isBlank()) {
+                formData.add("client_secret", clientSecretRef);
+            }
+            if (scope != null && !scope.isBlank()) {
+                formData.add("scope", scope);
+            }
+
+            Map<String, Object> response = restClient.post()
+                    .uri(tokenUrl)
+                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                    .accept(MediaType.APPLICATION_JSON)
+                    .body(formData)
+                    .retrieve()
+                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+            if (response != null && response.get("access_token") != null) {
+                return String.valueOf(response.get("access_token"));
+            }
+            throw new IllegalStateException("No access_token found in token response from " + tokenUrl);
+        }
+    }
+
     private record CachedToken(String accessToken, Instant expiresAt) {}
 
     private final Map<String, CachedToken> tokenCache = new ConcurrentHashMap<>();
     private final TokenFetcher tokenFetcher;
     private final Clock clock;
+
+    public OAuth2TokenCacheManager() {
+        this(new DefaultRestClientTokenFetcher(RestClient.create()), Clock.systemUTC());
+    }
+
+    @Autowired(required = false)
+    public OAuth2TokenCacheManager(RestClient.Builder restClientBuilder) {
+        this(new DefaultRestClientTokenFetcher(
+                restClientBuilder != null ? restClientBuilder.build() : RestClient.create()
+        ), Clock.systemUTC());
+    }
 
     public OAuth2TokenCacheManager(TokenFetcher tokenFetcher) {
         this(tokenFetcher, Clock.systemUTC());
@@ -32,8 +87,24 @@ public class OAuth2TokenCacheManager {
 
     public String getAccessToken(String tenantId, AuthConfig authConfig) {
         Objects.requireNonNull(authConfig, "AuthConfig must not be null");
+        return getAccessToken(
+                tenantId,
+                authConfig.tokenUrl(),
+                authConfig.clientId(),
+                authConfig.clientSecretRef(),
+                authConfig.scope()
+        );
+    }
+
+    public String getAccessToken(String tenantId, String tokenUrl, String clientId, String clientSecret, String scope) {
+        if (tokenUrl == null || tokenUrl.isBlank()) {
+            throw new IllegalArgumentException("Token URL cannot be null or blank");
+        }
+        if (clientId == null || clientId.isBlank()) {
+            throw new IllegalArgumentException("Client ID cannot be null or blank");
+        }
         String effectiveTenant = tenantId != null ? tenantId : "default";
-        String cacheKey = effectiveTenant + ":" + authConfig.clientId() + ":" + authConfig.tokenUrl();
+        String cacheKey = effectiveTenant + ":" + clientId + ":" + tokenUrl;
         Instant now = Instant.now(clock);
 
         CachedToken cached = tokenCache.get(cacheKey);
@@ -46,12 +117,7 @@ public class OAuth2TokenCacheManager {
             if (existing != null && existing.expiresAt().isAfter(currentNow.plusSeconds(60))) {
                 return existing;
             }
-            String freshToken = tokenFetcher.fetchToken(
-                    authConfig.tokenUrl(),
-                    authConfig.clientId(),
-                    authConfig.clientSecretRef(),
-                    authConfig.scope()
-            );
+            String freshToken = tokenFetcher.fetchToken(tokenUrl, clientId, clientSecret, scope);
             return new CachedToken(freshToken, currentNow.plusSeconds(3600));
         }).accessToken();
     }
