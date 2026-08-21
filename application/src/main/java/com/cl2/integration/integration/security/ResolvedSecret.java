@@ -45,12 +45,16 @@ public record ResolvedSecret(
         return new ResolvedSecret(credentialRef, AuthType.BASIC, username, password, null, null, null, null, null, null, Map.of());
     }
 
+    public static ResolvedSecret oauth2(String credentialRef, String tokenUrl, String clientId, String clientSecret, String scope, Map<String, String> headers) {
+        return new ResolvedSecret(credentialRef, AuthType.OAUTH2_CLIENT_CREDENTIALS, null, null, null, null, tokenUrl, clientId, clientSecret, scope, headers);
+    }
+
     public static ResolvedSecret oauth2(String credentialRef, String tokenUrl, String clientId, String clientSecret, String scope) {
-        return new ResolvedSecret(credentialRef, AuthType.OAUTH2_CLIENT_CREDENTIALS, null, null, null, null, tokenUrl, clientId, clientSecret, scope, Map.of());
+        return oauth2(credentialRef, tokenUrl, clientId, clientSecret, scope, Map.of());
     }
 
     public static ResolvedSecret oauth2(String credentialRef, String tokenUrl, String clientId, String clientSecret) {
-        return oauth2(credentialRef, tokenUrl, clientId, clientSecret, null);
+        return oauth2(credentialRef, tokenUrl, clientId, clientSecret, null, Map.of());
     }
 }
 

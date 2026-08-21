@@ -69,6 +69,7 @@ public class VaultSecretResolver implements SecretResolver {
         if (!(valuesNode instanceof Map<?, ?> values)) {
             throw new SecretNotFoundException(credentialRef);
         }
+        Map<String, String> headers = extractHeaders(values);
 
         String tokenUrl = value(values, "tokenUrl");
         if (tokenUrl == null) {
@@ -84,7 +85,7 @@ public class VaultSecretResolver implements SecretResolver {
         }
         String scope = value(values, "scope");
         if (tokenUrl != null && clientId != null && clientSecret != null) {
-            return ResolvedSecret.oauth2(credentialRef, tokenUrl, clientId, clientSecret, scope);
+            return ResolvedSecret.oauth2(credentialRef, tokenUrl, clientId, clientSecret, scope, headers);
         }
 
         String apiKey = value(values, "apiKey");
@@ -92,21 +93,35 @@ public class VaultSecretResolver implements SecretResolver {
             apiKey = value(values, "api_key");
         }
         if (apiKey != null) {
-            return ResolvedSecret.apiKey(credentialRef, apiKey);
+            return new ResolvedSecret(credentialRef, AuthType.API_KEY, null, null, apiKey, null, headers);
         }
 
         String token = value(values, "token");
         if (token != null) {
-            return ResolvedSecret.bearer(credentialRef, token);
+            return new ResolvedSecret(credentialRef, AuthType.BEARER, null, null, null, token, headers);
         }
 
         String username = value(values, "username");
         String password = value(values, "password");
         if (username != null && password != null) {
-            return ResolvedSecret.basic(credentialRef, username, password);
+            return new ResolvedSecret(credentialRef, AuthType.BASIC, username, password, null, null, headers);
         }
 
         throw new SecretNotFoundException(credentialRef);
+    }
+
+    private Map<String, String> extractHeaders(Map<?, ?> values) {
+        Object headersObj = values.get("headers");
+        if (headersObj instanceof Map<?, ?> map) {
+            Map<String, String> result = new java.util.LinkedHashMap<>();
+            map.forEach((k, v) -> {
+                if (k != null && v != null) {
+                    result.put(k.toString(), v.toString());
+                }
+            });
+            return result;
+        }
+        return Map.of();
     }
 
     private String normalizePath(String credentialRef) {
