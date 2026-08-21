@@ -9,6 +9,7 @@ import com.cl2.integration.integration.resilience.ResilienceExecutor;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.cl2.integration.integration.security.SecretResolver;
 import com.cl2.integration.integration.transformation.TransformationService;
+import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.slf4j.Logger;
@@ -40,6 +41,30 @@ public class IntegrationSyncOrchestrator {
     private final SyncStateRepository syncStateRepository;
     private final SyncStateRecorder syncStateRecorder;
     private final ObjectMapper objectMapper;
+    private final IntegrationMetrics metrics;
+
+    public IntegrationSyncOrchestrator(
+            SecretResolver secretResolver,
+            JdbcDataSourceFactory jdbcDataSourceFactory,
+            GenericJdbcAdapter genericJdbcAdapter,
+            TransformationService transformationService,
+            ResilienceExecutor resilienceExecutor,
+            OutboxRepository outboxRepository,
+            SyncStateRepository syncStateRepository,
+            SyncStateRecorder syncStateRecorder,
+            ObjectMapper objectMapper,
+            IntegrationMetrics metrics) {
+        this.secretResolver = secretResolver;
+        this.jdbcDataSourceFactory = jdbcDataSourceFactory;
+        this.genericJdbcAdapter = genericJdbcAdapter;
+        this.transformationService = transformationService;
+        this.resilienceExecutor = resilienceExecutor;
+        this.outboxRepository = outboxRepository;
+        this.syncStateRepository = syncStateRepository;
+        this.syncStateRecorder = syncStateRecorder;
+        this.objectMapper = objectMapper;
+        this.metrics = metrics;
+    }
 
     public IntegrationSyncOrchestrator(
             SecretResolver secretResolver,
@@ -51,20 +76,14 @@ public class IntegrationSyncOrchestrator {
             SyncStateRepository syncStateRepository,
             SyncStateRecorder syncStateRecorder,
             ObjectMapper objectMapper) {
-        this.secretResolver = secretResolver;
-        this.jdbcDataSourceFactory = jdbcDataSourceFactory;
-        this.genericJdbcAdapter = genericJdbcAdapter;
-        this.transformationService = transformationService;
-        this.resilienceExecutor = resilienceExecutor;
-        this.outboxRepository = outboxRepository;
-        this.syncStateRepository = syncStateRepository;
-        this.syncStateRecorder = syncStateRecorder;
-        this.objectMapper = objectMapper;
+        this(secretResolver, jdbcDataSourceFactory, genericJdbcAdapter, transformationService,
+                resilienceExecutor, outboxRepository, syncStateRepository, syncStateRecorder, objectMapper, null);
     }
 
     @Transactional
     public void run(IntegrationProfile profile) {
         Instant startedAt = Instant.now();
+        long startedNanos = System.nanoTime();
         try {
             ExtractionConfig extractionConfig = readExtractionConfig(profile);
             if (extractionConfig.watermarkColumn() == null || extractionConfig.watermarkColumn().isBlank()) {
@@ -97,6 +116,13 @@ public class IntegrationSyncOrchestrator {
                 UUID aggregateId = deriveAggregateId(profile.tenantId(), String.valueOf(row.get(extractionConfig.keyColumn())));
                 outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, canonicalJson));
 
+                if (metrics != null) {
+                    metrics.recordOutboxEventSaved(
+                            profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
+                            profile.businessDomain(),
+                            eventType);
+                }
+
                 Instant rowTimestamp = readWatermarkTimestamp(row, extractionConfig.watermarkColumn());
                 if (rowTimestamp.isAfter(maxRowTimestamp)) {
                     maxRowTimestamp = rowTimestamp;
@@ -106,13 +132,36 @@ public class IntegrationSyncOrchestrator {
             int overlapBufferSeconds = readOverlapBufferSeconds(profile);
             Instant advancedWatermark = rows.isEmpty() ? watermark : maxRowTimestamp.minusSeconds(overlapBufferSeconds);
             syncStateRepository.upsert(new SyncState(profile.id(), advancedWatermark, startedAt, SyncRunStatus.SUCCESS, null));
+
+            double durationSeconds = (System.nanoTime() - startedNanos) / 1_000_000_000.0;
+            if (metrics != null) {
+                metrics.recordSyncRun(
+                        profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
+                        profile.businessDomain(),
+                        profile.externalSource(),
+                        "SUCCESS",
+                        durationSeconds,
+                        rows.size());
+            }
         } catch (SyncExecutionCancelledException ex) {
             log.info("Sync run cancelled for profile {}: {}", profile.id(), ex.getMessage());
             syncStateRecorder.recordCancelled(profile.id(), startedAt, ex.getMessage());
+            if (metrics != null) {
+                metrics.recordSyncFailure(
+                        profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
+                        profile.businessDomain(),
+                        ex.getClass().getSimpleName());
+            }
             throw ex;
         } catch (Exception ex) {
             log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage(), ex);
             syncStateRecorder.recordFailure(profile.id(), startedAt, String.valueOf(ex.getMessage()));
+            if (metrics != null) {
+                metrics.recordSyncFailure(
+                        profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
+                        profile.businessDomain(),
+                        ex.getClass().getSimpleName());
+            }
             throw new IntegrationSyncException("Sync failed for profile " + profile.id(), ex);
         }
     }

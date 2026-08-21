@@ -63,4 +63,13 @@ class SqlSecurityValidatorTest {
         assertThrows(InvalidSqlExtractionException.class, () -> validator.validate(updateQuery, "lastSyncWithBuffer"));
         assertThrows(InvalidSqlExtractionException.class, () -> validator.validate(dropQuery, "lastSyncWithBuffer"));
     }
+
+    @Test
+    void shouldRecordSqlValidationBlockedMetricWhenMetricsProvided() {
+        com.cl2.integration.infrastructure.metrics.IntegrationMetrics metrics = org.mockito.Mockito.mock(com.cl2.integration.infrastructure.metrics.IntegrationMetrics.class);
+        SqlSecurityValidator instrumentedValidator = new SqlSecurityValidator(metrics);
+
+        assertThrows(InvalidSqlExtractionException.class, () -> instrumentedValidator.validate("tenant-abc", "DELETE FROM KNA1", "lastSyncWithBuffer"));
+        org.mockito.Mockito.verify(metrics).recordSqlValidationBlocked(org.mockito.ArgumentMatchers.eq("tenant-abc"), org.mockito.ArgumentMatchers.anyString());
+    }
 }

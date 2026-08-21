@@ -46,6 +46,7 @@ class IntegrationSyncOrchestratorTest {
     private OutboxRepository outboxRepository;
     private SyncStateRepository syncStateRepository;
     private SyncStateRecorder syncStateRecorder;
+    private com.cl2.integration.infrastructure.metrics.IntegrationMetrics metrics;
     private IntegrationSyncOrchestrator orchestrator;
 
     private final UUID tenantId = UUID.randomUUID();
@@ -61,10 +62,11 @@ class IntegrationSyncOrchestratorTest {
         outboxRepository = mock(OutboxRepository.class);
         syncStateRepository = mock(SyncStateRepository.class);
         syncStateRecorder = mock(SyncStateRecorder.class);
+        metrics = mock(com.cl2.integration.infrastructure.metrics.IntegrationMetrics.class);
 
         orchestrator = new IntegrationSyncOrchestrator(
                 secretResolver, jdbcDataSourceFactory, genericJdbcAdapter, transformationService,
-                resilienceExecutor, outboxRepository, syncStateRepository, syncStateRecorder, new ObjectMapper());
+                resilienceExecutor, outboxRepository, syncStateRepository, syncStateRecorder, new ObjectMapper(), metrics);
 
         // ResilienceExecutor just runs the supplier synchronously in these tests
         when(resilienceExecutor.execute(any(), anyString(), any())).thenAnswer(invocation -> {
@@ -117,6 +119,8 @@ class IntegrationSyncOrchestratorTest {
         assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(rowTimestamp.minusSeconds(300));
 
         verify(syncStateRecorder, never()).recordFailure(any(), any(), anyString());
+        verify(metrics).recordOutboxEventSaved(eq(tenantId.toString()), eq("customers"), eq("customers.upserted"));
+        verify(metrics).recordSyncRun(eq(tenantId.toString()), eq("customers"), eq("sap-hana"), eq("SUCCESS"), any(Double.class), eq(1));
     }
 
     @Test
@@ -195,6 +199,7 @@ class IntegrationSyncOrchestratorTest {
         verify(outboxRepository, never()).save(any());
         verify(syncStateRepository, never()).upsert(any());
         verify(syncStateRecorder).recordFailure(eq(profileId), any(Instant.class), anyString());
+        verify(metrics).recordSyncFailure(eq(tenantId.toString()), eq("customers"), anyString());
     }
 
     @Test
