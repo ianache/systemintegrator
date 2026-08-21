@@ -20,7 +20,12 @@ public class OutboxRelayScheduler {
     private final OutboxRelayProperties properties;
     private final IntegrationMetrics metrics;
 
-    public OutboxRelayScheduler(SpringDataOutboxRepository repository, KafkaOutboxPublisher publisher, OutboxRelayProperties properties, IntegrationMetrics metrics) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public OutboxRelayScheduler(
+            SpringDataOutboxRepository repository,
+            KafkaOutboxPublisher publisher,
+            OutboxRelayProperties properties,
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IntegrationMetrics metrics) {
         this.repository = repository;
         this.publisher = publisher;
         this.properties = properties;

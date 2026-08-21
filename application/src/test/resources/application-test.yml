@@ -15,3 +15,23 @@ integration:
   inbox:
     listener:
       auto-startup: false
+
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: "*"
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
+  simple:
+    metrics:
+      export:
+        enabled: false

@@ -197,10 +197,56 @@ services:
       retries: 12
       start_period: 30s
 
+  prometheus:
+    image: prom/prometheus:v3.0.0
+    container_name: integration-prometheus
+    hostname: integration-prometheus
+    command:
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.enable-lifecycle"
+    ports:
+      - "${PROMETHEUS_PORT:-9090}:9090"
+    volumes:
+      - ./deploy/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    networks:
+      integration-internal:
+        aliases:
+          - integration-prometheus
+          - prometheus
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    container_name: integration-grafana
+    hostname: integration-grafana
+    environment:
+      GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+    ports:
+      - "${GRAFANA_PORT:-3000}:3000"
+    volumes:
+      - ./deploy/grafana/provisioning:/etc/grafana/provisioning:ro
+      - grafana-data:/var/lib/grafana
+    depends_on:
+      - prometheus
+    networks:
+      integration-internal:
+        aliases:
+          - integration-grafana
+          - grafana
+      gateway-public:
+        aliases:
+          - integration-grafana
+          - grafana
+
 volumes:
   mysql-data:
   redis-data:
   kafka-data:
+  prometheus-data:
+  grafana-data:
 
 networks:
   integration-internal:

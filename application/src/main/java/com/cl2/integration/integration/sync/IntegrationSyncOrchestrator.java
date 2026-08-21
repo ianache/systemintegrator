@@ -43,6 +43,7 @@ public class IntegrationSyncOrchestrator {
     private final ObjectMapper objectMapper;
     private final IntegrationMetrics metrics;
 
+    @org.springframework.beans.factory.annotation.Autowired
     public IntegrationSyncOrchestrator(
             SecretResolver secretResolver,
             JdbcDataSourceFactory jdbcDataSourceFactory,
@@ -53,7 +54,7 @@ public class IntegrationSyncOrchestrator {
             SyncStateRepository syncStateRepository,
             SyncStateRecorder syncStateRecorder,
             ObjectMapper objectMapper,
-            IntegrationMetrics metrics) {
+            @org.springframework.beans.factory.annotation.Autowired(required = false) IntegrationMetrics metrics) {
         this.secretResolver = secretResolver;
         this.jdbcDataSourceFactory = jdbcDataSourceFactory;
         this.genericJdbcAdapter = genericJdbcAdapter;

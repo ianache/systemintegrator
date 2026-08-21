@@ -76,6 +76,10 @@ management:
       enabled: true
     health:
       show-details: always
+  prometheus:
+    metrics:
+      export:
+        enabled: true
   metrics:
     tags:
       application: systemintegrator-app
