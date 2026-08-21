@@ -100,21 +100,21 @@ git commit -m "feat(lookup): add ValueLookupService and REST API controller"
 - Consumes: `ValueLookupService.lookup(...)`
 - Produces: `LookupRule(String catalogCode, String defaultValue)`
 
-- [ ] **Step 1: Write failing test in FieldMappingPayloadTransformerTest**
+- [x] **Step 1: Write failing test in FieldMappingPayloadTransformerTest**
 Add tests asserting that field mapping with `lookup: { catalogCode: "TIPO", defaultValue: "DEFAULT_VAL" }` translates matching source values and applies fallback when not found.
 
-- [ ] **Step 2: Run test to verify it fails**
+- [x] **Step 2: Run test to verify it fails**
 Run: `mvn test -pl application "-Dtest=FieldMappingPayloadTransformerTest"`
 Expected: FAIL
 
-- [ ] **Step 3: Update `FieldMappingRule.java` and `FieldMappingPayloadTransformer.java`**
+- [x] **Step 3: Update `FieldMappingRule.java` and `FieldMappingPayloadTransformer.java`**
 Inject `ValueLookupService` into `FieldMappingPayloadTransformer` and execute lookup resolution.
 
-- [ ] **Step 4: Run test to verify it passes**
+- [x] **Step 4: Run test to verify it passes**
 Run: `mvn test -pl application "-Dtest=FieldMappingPayloadTransformerTest"`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 ```bash
 git add application/src/main/java/com/cl2/integration/integration/transformation/field/ application/src/test/java/com/cl2/integration/integration/transformation/field/FieldMappingPayloadTransformerTest.java
 git commit -m "feat(transformation): integrate value lookup in FieldMappingPayloadTransformer"
