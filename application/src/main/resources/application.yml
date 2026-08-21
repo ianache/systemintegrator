@@ -27,12 +27,24 @@ spring:
     producer:
       key-serializer: org.apache.kafka.common.serialization.StringSerializer
       value-serializer: org.apache.kafka.common.serialization.StringSerializer
+    consumer:
+      group-id: ${SPRING_KAFKA_CONSUMER_GROUP_ID:integration-consumer-group}
+      auto-offset-reset: earliest
+      key-deserializer: org.apache.kafka.common.serialization.StringDeserializer
+      value-deserializer: org.apache.kafka.common.serialization.StringDeserializer
   data:
     redis:
       host: ${SPRING_DATA_REDIS_HOST:localhost}
       port: ${SPRING_DATA_REDIS_PORT:6379}
   jackson:
     time-zone: UTC
+
+logging:
+  level:
+    root: INFO
+    com.cl2.integration.adapter.out.http.HttpOutboundClient: DEBUG
+    com.cl2.integration.adapter.out.generic.security.OAuth2TokenCacheManager: DEBUG
+    com.cl2.integration.integration.outbound: DEBUG
 
 integration:
   security:

@@ -1,6 +1,8 @@
 package com.cl2.integration.adapter.out.generic.security;
 
 import com.cl2.integration.adapter.out.generic.model.AuthConfig;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.MediaType;
@@ -24,6 +26,7 @@ public class OAuth2TokenCacheManager {
     }
 
     public static class DefaultRestClientTokenFetcher implements TokenFetcher {
+        private static final Logger log = LoggerFactory.getLogger(DefaultRestClientTokenFetcher.class);
         private final RestClient restClient;
 
         public DefaultRestClientTokenFetcher(RestClient restClient) {
@@ -44,18 +47,41 @@ public class OAuth2TokenCacheManager {
                 formData.add("scope", scope);
             }
 
-            Map<String, Object> response = restClient.post()
-                    .uri(tokenUrl)
-                    .contentType(MediaType.APPLICATION_FORM_URLENCODED)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .body(formData)
-                    .retrieve()
-                    .body(new ParameterizedTypeReference<Map<String, Object>>() {});
-
-            if (response != null && response.get("access_token") != null) {
-                return String.valueOf(response.get("access_token"));
+            if (log.isDebugEnabled()) {
+                log.debug("OAuth2 Token Request -> POST {} | grant_type=client_credentials, client_id={}, client_secret={}, scope={}",
+                        tokenUrl,
+                        clientId,
+                        com.cl2.integration.adapter.out.http.SensitiveDataRedactor.redact(clientSecretRef),
+                        scope);
             }
-            throw new IllegalStateException("No access_token found in token response from " + tokenUrl);
+
+            try {
+                Map<String, Object> response = restClient.post()
+                        .uri(tokenUrl)
+                        .contentType(MediaType.APPLICATION_FORM_URLENCODED)
+                        .accept(MediaType.APPLICATION_JSON)
+                        .body(formData)
+                        .retrieve()
+                        .body(new ParameterizedTypeReference<Map<String, Object>>() {});
+
+                if (response != null && response.get("access_token") != null) {
+                    String accessToken = String.valueOf(response.get("access_token"));
+                    if (log.isDebugEnabled()) {
+                        log.debug("OAuth2 Token Response <- 200 OK from {} | access_token={}, token_type={}, expires_in={}",
+                                tokenUrl,
+                                com.cl2.integration.adapter.out.http.SensitiveDataRedactor.redact(accessToken),
+                                response.get("token_type"),
+                                response.get("expires_in"));
+                    }
+                    return accessToken;
+                }
+                throw new IllegalStateException("No access_token found in token response from " + tokenUrl);
+            } catch (Exception ex) {
+                if (log.isDebugEnabled()) {
+                    log.debug("OAuth2 Token Request FAILED for URL {}: {}", tokenUrl, ex.getMessage());
+                }
+                throw ex;
+            }
         }
     }
 

@@ -15,6 +15,7 @@ import org.springframework.web.client.RestClientResponseException;
 
 import java.nio.charset.StandardCharsets;
 import java.util.Base64;
+import java.util.Map;
 import java.util.UUID;
 
 @Component
@@ -57,12 +58,27 @@ public class HttpOutboundClient {
             throw new IllegalArgumentException("Endpoint URL cannot be null or blank");
         }
 
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        headers.setAccept(java.util.List.of(MediaType.APPLICATION_JSON));
+        applyAuthHeaders(headers, secret, tenantId);
+
+        if (log.isDebugEnabled()) {
+            Map<String, String> singleValuedHeaders = new java.util.LinkedHashMap<>();
+            headers.forEach((k, v) -> singleValuedHeaders.put(k, String.join(", ", v)));
+            Map<String, String> sanitizedHeaders = SensitiveDataRedactor.redactHeaders(singleValuedHeaders);
+            String sanitizedPayload = SensitiveDataRedactor.redactJsonPayload(payload);
+
+            log.debug("HTTP Outbound Request -> POST {}\nHeaders: {}\nPayload: {}",
+                    endpoint,
+                    sanitizedHeaders,
+                    sanitizedPayload);
+        }
+
         try {
             restClient.post()
                     .uri(endpoint)
-                    .contentType(MediaType.APPLICATION_JSON)
-                    .accept(MediaType.APPLICATION_JSON)
-                    .headers(httpHeaders -> applyAuthHeaders(httpHeaders, secret, tenantId))
+                    .headers(httpHeaders -> httpHeaders.putAll(headers))
                     .body(payload != null ? payload : "")
                     .retrieve()
                     .toBodilessEntity();
@@ -70,6 +86,10 @@ public class HttpOutboundClient {
         } catch (RestClientResponseException ex) {
             int status = ex.getStatusCode().value();
             String responseBody = ex.getResponseBodyAsString();
+            if (log.isDebugEnabled()) {
+                log.debug("HTTP Outbound Response <- {} from {}\nResponse Body: {}",
+                        status, endpoint, SensitiveDataRedactor.redactJsonPayload(responseBody));
+            }
             log.warn("HTTP outbound dispatch to {} returned status {}: {}", endpoint, status, responseBody);
             throw new HttpOutboundException(
                     "HTTP request to " + endpoint + " failed with status " + status + ": " + responseBody,
