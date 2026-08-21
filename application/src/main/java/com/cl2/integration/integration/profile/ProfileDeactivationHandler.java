@@ -5,8 +5,11 @@ import com.cl2.integration.integration.sync.IntegrationSyncService;
 import com.cl2.integration.integration.sync.SyncStateRecorder;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
-import org.springframework.context.event.EventListener;
 import org.springframework.stereotype.Component;
+import org.springframework.transaction.annotation.Propagation;
+import org.springframework.transaction.annotation.Transactional;
+import org.springframework.transaction.event.TransactionPhase;
+import org.springframework.transaction.event.TransactionalEventListener;
 
 import java.time.Instant;
 
@@ -28,7 +31,8 @@ public class ProfileDeactivationHandler {
         this.syncStateRecorder = syncStateRecorder;
     }
 
-    @EventListener
+    @Transactional(propagation = Propagation.REQUIRES_NEW)
+    @TransactionalEventListener(phase = TransactionPhase.AFTER_COMMIT, fallbackExecution = true)
     public void onProfileDeactivated(IntegrationProfileEvent event) {
         if (event == null || !"IntegrationProfileDeactivated".equalsIgnoreCase(event.eventType())) {
             return;
