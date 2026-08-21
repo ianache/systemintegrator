@@ -12,8 +12,12 @@ import org.springframework.stereotype.Service;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.CompletableFuture;
+import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.Executor;
+import java.util.concurrent.Future;
 
 @Service
 public class IntegrationSyncService {
@@ -25,6 +29,7 @@ public class IntegrationSyncService {
     private final LockingTaskExecutor lockingTaskExecutor;
     private final Executor integrationSyncExecutor;
     private final IntegrationSyncProperties properties;
+    private final Map<UUID, Future<?>> activeExecutions = new ConcurrentHashMap<>();
 
     public IntegrationSyncService(
             IntegrationProfileRepository profileRepository,
@@ -63,12 +68,37 @@ public class IntegrationSyncService {
                 Instant.now(), "sync:" + profile.id(),
                 Duration.ofSeconds(properties.getDefaultRunLockAtMostForSeconds()), Duration.ofSeconds(1));
         Runnable task = () -> orchestrator.run(profile);
-        integrationSyncExecutor.execute(() -> {
-            try {
-                lockingTaskExecutor.executeWithLock(task, lockConfiguration);
-            } catch (Exception ex) {
-                log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage());
-            }
-        });
+
+        if (integrationSyncExecutor instanceof java.util.concurrent.ExecutorService executorService) {
+            Future<?> future = executorService.submit(() -> {
+                try {
+                    lockingTaskExecutor.executeWithLock(task, lockConfiguration);
+                } catch (Exception ex) {
+                    log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage());
+                } finally {
+                    activeExecutions.remove(profile.id());
+                }
+            });
+            activeExecutions.put(profile.id(), future);
+        } else {
+            CompletableFuture<Void> future = CompletableFuture.runAsync(() -> {
+                try {
+                    lockingTaskExecutor.executeWithLock(task, lockConfiguration);
+                } catch (Exception ex) {
+                    log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage());
+                } finally {
+                    activeExecutions.remove(profile.id());
+                }
+            }, integrationSyncExecutor);
+            activeExecutions.put(profile.id(), future);
+        }
+    }
+
+    public void cancelRunningExecution(UUID profileId) {
+        Future<?> future = activeExecutions.remove(profileId);
+        if (future != null && !future.isDone()) {
+            log.info("Canceling active sync execution for profileId={}", profileId);
+            future.cancel(true);
+        }
     }
 }

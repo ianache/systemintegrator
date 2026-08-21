@@ -88,6 +88,10 @@ public class IntegrationSyncOrchestrator {
 
             Instant maxRowTimestamp = watermark;
             for (Map<String, Object> row : rows) {
+                if (Thread.currentThread().isInterrupted()) {
+                    log.info("Sync execution interrupted for profileId={} (tenantId={})", profile.id(), profile.tenantId());
+                    throw new SyncExecutionCancelledException("Execution was cancelled for profile " + profile.id());
+                }
                 String rowJson = objectMapper.writeValueAsString(row);
                 String canonicalJson = transformationService.transform(rowJson, profile);
                 UUID aggregateId = deriveAggregateId(profile.tenantId(), String.valueOf(row.get(extractionConfig.keyColumn())));
@@ -102,6 +106,10 @@ public class IntegrationSyncOrchestrator {
             int overlapBufferSeconds = readOverlapBufferSeconds(profile);
             Instant advancedWatermark = rows.isEmpty() ? watermark : maxRowTimestamp.minusSeconds(overlapBufferSeconds);
             syncStateRepository.upsert(new SyncState(profile.id(), advancedWatermark, startedAt, SyncRunStatus.SUCCESS, null));
+        } catch (SyncExecutionCancelledException ex) {
+            log.info("Sync run cancelled for profile {}: {}", profile.id(), ex.getMessage());
+            syncStateRecorder.recordCancelled(profile.id(), startedAt, ex.getMessage());
+            throw ex;
         } catch (Exception ex) {
             log.warn("Sync run failed for profile {}: {}", profile.id(), ex.getMessage(), ex);
             syncStateRecorder.recordFailure(profile.id(), startedAt, String.valueOf(ex.getMessage()));

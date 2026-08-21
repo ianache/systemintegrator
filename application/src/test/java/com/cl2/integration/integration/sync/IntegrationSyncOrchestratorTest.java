@@ -206,4 +206,39 @@ class IntegrationSyncOrchestratorTest {
         verify(syncStateRecorder).recordFailure(eq(profileId), any(Instant.class), anyString());
         verify(jdbcDataSourceFactory, never()).create(anyString(), any());
     }
+
+    @Test
+    void recordsCancelledAndThrowsSyncExecutionCancelledExceptionWhenInterruptedDuringProcessing() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"cronExpression\":\"0 */10 * * * *\"}");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(
+                Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp))
+        );
+        when(genericJdbcAdapter.extract(any(), any(), eq(Instant.EPOCH))).thenAnswer(invocation -> {
+            Thread.currentThread().interrupt();
+            return rows;
+        });
+
+        try {
+            assertThatThrownBy(() -> orchestrator.run(profile))
+                    .isInstanceOf(SyncExecutionCancelledException.class)
+                    .hasMessageContaining("Execution was cancelled for profile " + profileId);
+
+            verify(syncStateRecorder).recordCancelled(eq(profileId), any(Instant.class), anyString());
+            verify(outboxRepository, never()).save(any());
+            verify(syncStateRepository, never()).upsert(any());
+        } finally {
+            Thread.interrupted(); // Clear interrupted status for the current test runner thread
+        }
+    }
 }
