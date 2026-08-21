@@ -10,3 +10,8 @@ spring:
     hibernate:
       ddl-auto: validate
     open-in-view: false
+
+integration:
+  inbox:
+    listener:
+      auto-startup: false
