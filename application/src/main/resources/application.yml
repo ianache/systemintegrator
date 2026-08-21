@@ -66,6 +66,25 @@ integration:
     listener:
       auto-startup: ${INTEGRATION_INBOX_LISTENER_AUTO_STARTUP:true}
 
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus
+  endpoint:
+    prometheus:
+      enabled: true
+    health:
+      show-details: always
+  metrics:
+    tags:
+      application: systemintegrator-app
+    distribution:
+      percentiles-histogram:
+        integration.outbound.http.duration: true
+        integration.sync.duration: true
+        integration.transformation.duration: true
+
 ---
 spring:
   config:
