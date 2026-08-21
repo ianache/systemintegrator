@@ -5,20 +5,40 @@ import com.cl2.integration.integration.transformation.TransformationEngineType;
 import com.cl2.integration.integration.transformation.TransformationException;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.cl2.integration.infrastructure.tenant.TenantContext;
+import com.cl2.integration.integration.lookup.application.ValueLookupService;
+import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
+import org.mockito.Mockito;
+
+import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.eq;
+import static org.mockito.ArgumentMatchers.isNull;
+import static org.mockito.Mockito.verify;
+import static org.mockito.Mockito.when;
 
 class FieldMappingPayloadTransformerTest {
     private FieldMappingPayloadTransformer transformer;
+    private ValueLookupService valueLookupService;
     private ObjectMapper objectMapper;
+    private static final UUID TEST_TENANT_ID = UUID.randomUUID();
 
     @BeforeEach
     void setup() {
+        TenantContext.set(TEST_TENANT_ID);
         objectMapper = new ObjectMapper();
-        transformer = new FieldMappingPayloadTransformer(objectMapper);
+        valueLookupService = Mockito.mock(ValueLookupService.class);
+        transformer = new FieldMappingPayloadTransformer(objectMapper, valueLookupService);
+    }
+
+    @AfterEach
+    void tearDown() {
+        TenantContext.clear();
     }
 
     @Test
@@ -159,5 +179,176 @@ class FieldMappingPayloadTransformerTest {
 
         assertThatThrownBy(() -> transformer.validateConfiguration(invalidSpelConfig))
                 .isInstanceOf(TransformationException.class);
+    }
+
+    @Test
+    void shouldResolveValueLookupWhenRuleContainsLookup() throws Exception {
+        when(valueLookupService.lookup(TEST_TENANT_ID, "SIGO", "TIPO_VEHICULO", "AUTO", null))
+                .thenReturn("1");
+
+        String source = """
+            {
+              "Vehiculo": {
+                "Tipo": "AUTO"
+              }
+            }
+            """;
+
+        String mappingConfig = """
+            {
+              "engine": "FIELD_MAPPING",
+              "externalSource": "SIGO",
+              "fields": [
+                {
+                  "target": "vehicleType",
+                  "sourcePath": "$.Vehiculo.Tipo",
+                  "lookup": {
+                    "catalogCode": "TIPO_VEHICULO"
+                  }
+                }
+              ]
+            }
+            """;
+
+        String resultJson = transformer.transform(source, mappingConfig);
+        JsonNode result = objectMapper.readTree(resultJson);
+
+        assertThat(result.get("vehicleType").asText()).isEqualTo("1");
+        verify(valueLookupService).lookup(TEST_TENANT_ID, "SIGO", "TIPO_VEHICULO", "AUTO", null);
+    }
+
+    @Test
+    void shouldUseLookupDefaultValueWhenLookupEntryDoesNotExist() throws Exception {
+        when(valueLookupService.lookup(TEST_TENANT_ID, "SIGO", "TIPO_VEHICULO", "CAMION", "99"))
+                .thenReturn("99");
+
+        String source = """
+            {
+              "Vehiculo": {
+                "Tipo": "CAMION"
+              }
+            }
+            """;
+
+        String mappingConfig = """
+            {
+              "engine": "FIELD_MAPPING",
+              "externalSource": "SIGO",
+              "fields": [
+                {
+                  "target": "vehicleType",
+                  "sourcePath": "$.Vehiculo.Tipo",
+                  "lookup": {
+                    "catalogCode": "TIPO_VEHICULO",
+                    "defaultValue": "99"
+                  }
+                }
+              ]
+            }
+            """;
+
+        String resultJson = transformer.transform(source, mappingConfig);
+        JsonNode result = objectMapper.readTree(resultJson);
+
+        assertThat(result.get("vehicleType").asText()).isEqualTo("99");
+    }
+
+    @Test
+    void shouldKeepOriginalValueWhenLookupNotFoundAndNoDefault() throws Exception {
+        when(valueLookupService.lookup(TEST_TENANT_ID, "SIGO", "TIPO_VEHICULO", "UNKNOWN_TYPE", null))
+                .thenReturn(null);
+
+        String source = """
+            {
+              "Vehiculo": {
+                "Tipo": "UNKNOWN_TYPE"
+              }
+            }
+            """;
+
+        String mappingConfig = """
+            {
+              "engine": "FIELD_MAPPING",
+              "externalSource": "SIGO",
+              "fields": [
+                {
+                  "target": "vehicleType",
+                  "sourcePath": "$.Vehiculo.Tipo",
+                  "lookup": {
+                    "catalogCode": "TIPO_VEHICULO"
+                  }
+                }
+              ]
+            }
+            """;
+
+        String resultJson = transformer.transform(source, mappingConfig);
+        JsonNode result = objectMapper.readTree(resultJson);
+
+        assertThat(result.get("vehicleType").asText()).isEqualTo("UNKNOWN_TYPE");
+    }
+
+    @Test
+    void shouldHandleLookupWhenSourceValueIsNullAndLookupDefaultProvided() throws Exception {
+        String source = "{\"Vehiculo\": {}}";
+
+        String mappingConfig = """
+            {
+              "engine": "FIELD_MAPPING",
+              "externalSource": "SIGO",
+              "fields": [
+                {
+                  "target": "vehicleType",
+                  "sourcePath": "$.Vehiculo.Tipo",
+                  "lookup": {
+                    "catalogCode": "TIPO_VEHICULO",
+                    "defaultValue": "DEFAULT_TYPE"
+                  }
+                }
+              ]
+            }
+            """;
+
+        String resultJson = transformer.transform(source, mappingConfig);
+        JsonNode result = objectMapper.readTree(resultJson);
+
+        assertThat(result.get("vehicleType").asText()).isEqualTo("DEFAULT_TYPE");
+    }
+
+    @Test
+    void shouldAllowRuleToOverrideExternalSource() throws Exception {
+        when(valueLookupService.lookup(TEST_TENANT_ID, "OVERRIDDEN_SOURCE", "TIPO_VEHICULO", "AUTO", null))
+                .thenReturn("10");
+
+        String source = """
+            {
+              "Vehiculo": {
+                "Tipo": "AUTO"
+              }
+            }
+            """;
+
+        String mappingConfig = """
+            {
+              "engine": "FIELD_MAPPING",
+              "externalSource": "SIGO",
+              "fields": [
+                {
+                  "target": "vehicleType",
+                  "sourcePath": "$.Vehiculo.Tipo",
+                  "lookup": {
+                    "catalogCode": "TIPO_VEHICULO",
+                    "externalSource": "OVERRIDDEN_SOURCE"
+                  }
+                }
+              ]
+            }
+            """;
+
+        String resultJson = transformer.transform(source, mappingConfig);
+        JsonNode result = objectMapper.readTree(resultJson);
+
+        assertThat(result.get("vehicleType").asText()).isEqualTo("10");
+        verify(valueLookupService).lookup(TEST_TENANT_ID, "OVERRIDDEN_SOURCE", "TIPO_VEHICULO", "AUTO", null);
     }
 }

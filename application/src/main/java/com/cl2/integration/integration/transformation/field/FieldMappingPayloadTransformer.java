@@ -1,5 +1,7 @@
 package com.cl2.integration.integration.transformation.field;
 
+import com.cl2.integration.infrastructure.tenant.TenantContext;
+import com.cl2.integration.integration.lookup.application.ValueLookupService;
 import com.cl2.integration.integration.transformation.MissingRequiredFieldException;
 import com.cl2.integration.integration.transformation.PayloadTransformer;
 import com.cl2.integration.integration.transformation.TransformationEngineType;
@@ -18,20 +20,28 @@ import org.springframework.expression.spel.support.SimpleEvaluationContext;
 import org.springframework.stereotype.Component;
 
 import java.util.Map;
+import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
 
 @Component
 public class FieldMappingPayloadTransformer implements PayloadTransformer {
     private final ObjectMapper objectMapper;
+    private final ValueLookupService valueLookupService;
     private final ExpressionParser spelParser;
     private final Configuration jsonPathConfig;
     private final Map<String, Expression> spelCache = new ConcurrentHashMap<>();
 
-    public FieldMappingPayloadTransformer(ObjectMapper objectMapper) {
+    @org.springframework.beans.factory.annotation.Autowired
+    public FieldMappingPayloadTransformer(ObjectMapper objectMapper, ValueLookupService valueLookupService) {
         this.objectMapper = objectMapper;
+        this.valueLookupService = valueLookupService;
         this.spelParser = new SpelExpressionParser();
         this.jsonPathConfig = Configuration.defaultConfiguration()
                 .addOptions(Option.SUPPRESS_EXCEPTIONS, Option.DEFAULT_PATH_LEAF_TO_NULL);
+    }
+
+    public FieldMappingPayloadTransformer(ObjectMapper objectMapper) {
+        this(objectMapper, null);
     }
 
     @Override
@@ -73,6 +83,13 @@ public class FieldMappingPayloadTransformer implements PayloadTransformer {
             Object document = jsonPathConfig.jsonProvider().parse(sourcePayload);
             ObjectNode outputNode = objectMapper.createObjectNode();
 
+            UUID tenantId = null;
+            try {
+                tenantId = TenantContext.requireTenantId();
+            } catch (Exception ignored) {
+                // tenantId may not be available in non-tenant contexts
+            }
+
             for (FieldMappingRule rule : config.fields()) {
                 Object rawValue = extractRawValue(document, rule.sourcePath());
 
@@ -80,13 +97,33 @@ public class FieldMappingPayloadTransformer implements PayloadTransformer {
                     rawValue = rule.defaultValue();
                 }
 
-                if (rawValue == null && rule.required()) {
-                    throw new MissingRequiredFieldException(rule.target(), rule.sourcePath());
-                }
-
                 Object transformedValue = rawValue;
                 if (rule.transform() != null && !rule.transform().isBlank()) {
                     transformedValue = evaluateSpel(rule.transform(), rawValue);
+                }
+
+                if (rule.lookup() != null && valueLookupService != null) {
+                    String externalSource = rule.lookup().externalSource() != null
+                            ? rule.lookup().externalSource()
+                            : config.externalSource();
+                    if (transformedValue != null) {
+                        String sourceVal = transformedValue.toString();
+                        String lookupDefault = rule.lookup().defaultValue();
+                        String resolved = valueLookupService.lookup(
+                                tenantId,
+                                externalSource,
+                                rule.lookup().catalogCode(),
+                                sourceVal,
+                                lookupDefault
+                        );
+                        transformedValue = resolved != null ? resolved : (lookupDefault != null ? lookupDefault : transformedValue);
+                    } else if (rule.lookup().defaultValue() != null) {
+                        transformedValue = rule.lookup().defaultValue();
+                    }
+                }
+
+                if (transformedValue == null && rule.required()) {
+                    throw new MissingRequiredFieldException(rule.target(), rule.sourcePath());
                 }
 
                 putConvertedValue(outputNode, rule.target(), transformedValue, rule.type());

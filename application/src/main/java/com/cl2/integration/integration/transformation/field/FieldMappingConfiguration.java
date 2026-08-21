@@ -6,8 +6,13 @@ import java.util.List;
 @JsonIgnoreProperties(ignoreUnknown = true)
 public record FieldMappingConfiguration(
     String engine,
+    String externalSource,
     List<FieldMappingRule> fields
 ) {
+    public FieldMappingConfiguration(String engine, List<FieldMappingRule> fields) {
+        this(engine, null, fields);
+    }
+
     public FieldMappingConfiguration {
         if (fields == null) {
             fields = List.of();

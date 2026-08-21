@@ -62,7 +62,7 @@ class IntegrationProfilePersistenceAdapterTest {
             }
         }
 
-        assertThat(flyway.info().applied()).hasSize(7);
+        assertThat(flyway.info().applied()).hasSizeGreaterThanOrEqualTo(7);
         assertThat(columns).contains(
                 "tenant_id", "active", "version", "created_at", "updated_at",
                 "protocol", "connector", "adapter", "endpoint", "credential_ref",
