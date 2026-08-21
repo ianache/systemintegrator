@@ -1,10 +1,12 @@
 package com.cl2.integration.integration.inbox;
 
+import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.kafka.annotation.KafkaListener;
 import org.springframework.stereotype.Component;
 import java.nio.charset.StandardCharsets;
@@ -16,10 +18,17 @@ public class KafkaInboxListener {
 
     private final InboxProcessor inboxProcessor;
     private final OutboundEventDispatcher outboundEventDispatcher;
+    private final IntegrationMetrics metrics;
 
     public KafkaInboxListener(InboxProcessor inboxProcessor, OutboundEventDispatcher outboundEventDispatcher) {
+        this(inboxProcessor, outboundEventDispatcher, null);
+    }
+
+    @Autowired
+    public KafkaInboxListener(InboxProcessor inboxProcessor, OutboundEventDispatcher outboundEventDispatcher, @Autowired(required = false) IntegrationMetrics metrics) {
         this.inboxProcessor = inboxProcessor;
         this.outboundEventDispatcher = outboundEventDispatcher;
+        this.metrics = metrics;
     }
 
     @KafkaListener(topicPattern = "${integration.inbox.topic-pattern:integration\\..*\\.events}", groupId = "${spring.kafka.consumer.group-id:integration-consumer-group}", autoStartup = "${integration.inbox.listener.auto-startup:false}")
@@ -38,6 +47,11 @@ public class KafkaInboxListener {
         String eventType = extractHeaderAsString(record, "X-Event-Type", "UnknownEvent");
         String externalSource = extractHeaderAsString(record, "X-External-Source", null);
         log.info("Received event in KafkaInboxListener: eventId={}, tenantId={}, topic={}, source={}", eventId, tenantId, record.topic(), externalSource);
+
+        if (metrics != null) {
+            String derivedDomain = outboundEventDispatcher.deriveBusinessDomain(eventType);
+            metrics.recordInboxMessageConsumed(tenantId.toString(), derivedDomain, record.topic());
+        }
 
         inboxProcessor.process(eventId, tenantId, eventType, record.value(), record.topic(), payload -> {
             outboundEventDispatcher.dispatch(finalEventId, tenantId, eventType, payload, externalSource);

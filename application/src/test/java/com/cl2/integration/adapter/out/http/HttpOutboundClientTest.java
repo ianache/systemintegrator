@@ -5,6 +5,7 @@ import com.cl2.integration.integration.security.AuthType;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.github.tomakehurst.wiremock.WireMockServer;
 import com.github.tomakehurst.wiremock.core.WireMockConfiguration;
+import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
 import org.junit.jupiter.api.AfterEach;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.DisplayName;
@@ -19,13 +20,17 @@ import java.util.UUID;
 import static com.github.tomakehurst.wiremock.client.WireMock.*;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
+import static org.mockito.ArgumentMatchers.anyDouble;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
+import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
 class HttpOutboundClientTest {
 
     private WireMockServer wireMockServer;
     private HttpOutboundClient client;
+    private IntegrationMetrics metrics;
     private String baseUrl;
 
     @BeforeEach
@@ -33,7 +38,8 @@ class HttpOutboundClientTest {
         wireMockServer = new WireMockServer(WireMockConfiguration.wireMockConfig().dynamicPort());
         wireMockServer.start();
         baseUrl = "http://localhost:" + wireMockServer.port();
-        client = new HttpOutboundClient(RestClient.builder());
+        metrics = mock(IntegrationMetrics.class);
+        client = new HttpOutboundClient(RestClient.builder(), new OAuth2TokenCacheManager(), metrics);
     }
 
     @AfterEach
@@ -65,6 +71,7 @@ class HttpOutboundClientTest {
                 .withHeader("Content-Type", containing("application/json"))
                 .withHeader("Authorization", equalTo("Bearer token-abc-123"))
                 .withRequestBody(equalToJson(payload)));
+        verify(metrics).recordOutboundHttpRequest(eq("unknown"), eq("http-outbound"), eq(200), anyDouble());
     }
 
     @Test
@@ -185,6 +192,7 @@ class HttpOutboundClientTest {
                     assertThat(hoe.getStatusCode()).isEqualTo(500);
                     assertThat(hoe.getResponseBody()).contains("Internal Server Error");
                 });
+        verify(metrics).recordOutboundHttpRequest(eq("unknown"), eq("http-outbound"), eq(500), anyDouble());
     }
 
     @Test

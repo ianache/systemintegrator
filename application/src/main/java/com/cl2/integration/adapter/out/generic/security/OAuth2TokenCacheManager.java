@@ -1,6 +1,7 @@
 package com.cl2.integration.adapter.out.generic.security;
 
 import com.cl2.integration.adapter.out.generic.model.AuthConfig;
+import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -90,25 +91,38 @@ public class OAuth2TokenCacheManager {
     private final Map<String, CachedToken> tokenCache = new ConcurrentHashMap<>();
     private final TokenFetcher tokenFetcher;
     private final Clock clock;
+    private final IntegrationMetrics metrics;
 
     public OAuth2TokenCacheManager() {
-        this(new DefaultRestClientTokenFetcher(RestClient.create()), Clock.systemUTC());
+        this(new DefaultRestClientTokenFetcher(RestClient.create()), Clock.systemUTC(), null);
     }
 
-    @Autowired(required = false)
     public OAuth2TokenCacheManager(RestClient.Builder restClientBuilder) {
         this(new DefaultRestClientTokenFetcher(
                 restClientBuilder != null ? restClientBuilder.build() : RestClient.create()
-        ), Clock.systemUTC());
+        ), Clock.systemUTC(), null);
+    }
+
+    @Autowired
+    public OAuth2TokenCacheManager(@Autowired(required = false) RestClient.Builder restClientBuilder,
+                                  @Autowired(required = false) IntegrationMetrics metrics) {
+        this(new DefaultRestClientTokenFetcher(
+                restClientBuilder != null ? restClientBuilder.build() : RestClient.create()
+        ), Clock.systemUTC(), metrics);
     }
 
     public OAuth2TokenCacheManager(TokenFetcher tokenFetcher) {
-        this(tokenFetcher, Clock.systemUTC());
+        this(tokenFetcher, Clock.systemUTC(), null);
     }
 
     public OAuth2TokenCacheManager(TokenFetcher tokenFetcher, Clock clock) {
+        this(tokenFetcher, clock, null);
+    }
+
+    public OAuth2TokenCacheManager(TokenFetcher tokenFetcher, Clock clock, IntegrationMetrics metrics) {
         this.tokenFetcher = Objects.requireNonNull(tokenFetcher, "TokenFetcher must not be null");
         this.clock = Objects.requireNonNull(clock, "Clock must not be null");
+        this.metrics = metrics;
     }
 
     public String getAccessToken(String tenantId, AuthConfig authConfig) {
@@ -135,16 +149,32 @@ public class OAuth2TokenCacheManager {
 
         CachedToken cached = tokenCache.get(cacheKey);
         if (cached != null && cached.expiresAt().isAfter(now.plusSeconds(60))) {
+            if (metrics != null) {
+                metrics.recordOAuth2TokenCacheHit(effectiveTenant, clientId);
+            }
             return cached.accessToken();
         }
 
         return tokenCache.compute(cacheKey, (key, existing) -> {
             Instant currentNow = Instant.now(clock);
             if (existing != null && existing.expiresAt().isAfter(currentNow.plusSeconds(60))) {
+                if (metrics != null) {
+                    metrics.recordOAuth2TokenCacheHit(effectiveTenant, clientId);
+                }
                 return existing;
             }
-            String freshToken = tokenFetcher.fetchToken(tokenUrl, clientId, clientSecret, scope);
-            return new CachedToken(freshToken, currentNow.plusSeconds(3600));
+            try {
+                String freshToken = tokenFetcher.fetchToken(tokenUrl, clientId, clientSecret, scope);
+                if (metrics != null) {
+                    metrics.recordOAuth2TokenRequest(effectiveTenant, clientId, "SUCCESS");
+                }
+                return new CachedToken(freshToken, currentNow.plusSeconds(3600));
+            } catch (Exception ex) {
+                if (metrics != null) {
+                    metrics.recordOAuth2TokenRequest(effectiveTenant, clientId, "ERROR");
+                }
+                throw ex;
+            }
         }).accessToken();
     }
 }

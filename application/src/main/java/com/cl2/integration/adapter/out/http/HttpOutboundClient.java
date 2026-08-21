@@ -1,6 +1,7 @@
 package com.cl2.integration.adapter.out.http;
 
 import com.cl2.integration.adapter.out.generic.security.OAuth2TokenCacheManager;
+import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
 import com.cl2.integration.integration.security.AuthType;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import org.slf4j.Logger;
@@ -25,28 +26,41 @@ public class HttpOutboundClient {
 
     private final RestClient restClient;
     private final OAuth2TokenCacheManager tokenCacheManager;
+    private final IntegrationMetrics metrics;
 
     public HttpOutboundClient() {
-        this(RestClient.builder(), new OAuth2TokenCacheManager());
+        this(RestClient.builder(), new OAuth2TokenCacheManager(), null);
     }
 
     public HttpOutboundClient(RestClient.Builder builder) {
-        this(builder, new OAuth2TokenCacheManager(builder));
+        this(builder, new OAuth2TokenCacheManager(builder), null);
+    }
+
+    public HttpOutboundClient(RestClient.Builder builder, OAuth2TokenCacheManager tokenCacheManager) {
+        this(builder, tokenCacheManager, null);
     }
 
     @Autowired
-    public HttpOutboundClient(RestClient.Builder builder, @Autowired(required = false) OAuth2TokenCacheManager tokenCacheManager) {
+    public HttpOutboundClient(RestClient.Builder builder,
+                              @Autowired(required = false) OAuth2TokenCacheManager tokenCacheManager,
+                              @Autowired(required = false) IntegrationMetrics metrics) {
         this.restClient = builder.build();
         this.tokenCacheManager = tokenCacheManager != null ? tokenCacheManager : new OAuth2TokenCacheManager(builder);
+        this.metrics = metrics;
     }
 
     public HttpOutboundClient(RestClient restClient) {
-        this(restClient, new OAuth2TokenCacheManager());
+        this(restClient, new OAuth2TokenCacheManager(), null);
     }
 
     public HttpOutboundClient(RestClient restClient, OAuth2TokenCacheManager tokenCacheManager) {
+        this(restClient, tokenCacheManager, null);
+    }
+
+    public HttpOutboundClient(RestClient restClient, OAuth2TokenCacheManager tokenCacheManager, IntegrationMetrics metrics) {
         this.restClient = restClient;
         this.tokenCacheManager = tokenCacheManager != null ? tokenCacheManager : new OAuth2TokenCacheManager();
+        this.metrics = metrics;
     }
 
     public void send(String endpoint, ResolvedSecret secret, String payload) {
@@ -75,6 +89,10 @@ public class HttpOutboundClient {
                     sanitizedPayload);
         }
 
+        String tenantIdStr = tenantId != null ? tenantId.toString() : "unknown";
+        String connector = "http-outbound";
+        long startNanos = System.nanoTime();
+
         try {
             restClient.post()
                     .uri(endpoint)
@@ -82,9 +100,17 @@ public class HttpOutboundClient {
                     .body(payload != null ? payload : "")
                     .retrieve()
                     .toBodilessEntity();
+            double durationSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            if (metrics != null) {
+                metrics.recordOutboundHttpRequest(tenantIdStr, connector, 200, durationSeconds);
+            }
             log.debug("Successfully sent outbound HTTP event to endpoint: {}", endpoint);
         } catch (RestClientResponseException ex) {
+            double durationSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
             int status = ex.getStatusCode().value();
+            if (metrics != null) {
+                metrics.recordOutboundHttpRequest(tenantIdStr, connector, status, durationSeconds);
+            }
             String responseBody = ex.getResponseBodyAsString();
             if (log.isDebugEnabled()) {
                 log.debug("HTTP Outbound Response <- {} from {}\nResponse Body: {}",
@@ -98,12 +124,20 @@ public class HttpOutboundClient {
                     ex
             );
         } catch (ResourceAccessException ex) {
+            double durationSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            if (metrics != null) {
+                metrics.recordOutboundHttpRequest(tenantIdStr, connector, 503, durationSeconds);
+            }
             log.warn("HTTP outbound dispatch to {} failed due to network/timeout error: {}", endpoint, ex.getMessage());
             throw new HttpOutboundException(
                     "HTTP request to " + endpoint + " failed due to network/timeout error: " + ex.getMessage(),
                     ex
             );
         } catch (Exception ex) {
+            double durationSeconds = (System.nanoTime() - startNanos) / 1_000_000_000.0;
+            if (metrics != null) {
+                metrics.recordOutboundHttpRequest(tenantIdStr, connector, 500, durationSeconds);
+            }
             log.warn("HTTP outbound dispatch to {} failed unexpectedly: {}", endpoint, ex.getMessage());
             throw new HttpOutboundException(
                     "HTTP request to " + endpoint + " failed: " + ex.getMessage(),

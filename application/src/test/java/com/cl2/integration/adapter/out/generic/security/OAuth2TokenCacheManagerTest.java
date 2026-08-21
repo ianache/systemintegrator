@@ -1,6 +1,7 @@
 package com.cl2.integration.adapter.out.generic.security;
 
 import com.cl2.integration.adapter.out.generic.model.AuthConfig;
+import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -11,16 +12,19 @@ import java.time.ZoneId;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static org.junit.jupiter.api.Assertions.*;
+import static org.mockito.Mockito.*;
 
 class OAuth2TokenCacheManagerTest {
 
     private AtomicInteger fetchCounter;
     private OAuth2TokenCacheManager.TokenFetcher fetcher;
     private AuthConfig authConfig;
+    private IntegrationMetrics metrics;
 
     @BeforeEach
     void setUp() {
         fetchCounter = new AtomicInteger(0);
+        metrics = mock(IntegrationMetrics.class);
         fetcher = (tokenUrl, clientId, clientSecretRef, scope) -> 
             "token-" + fetchCounter.incrementAndGet();
         authConfig = new AuthConfig(
@@ -35,7 +39,7 @@ class OAuth2TokenCacheManagerTest {
 
     @Test
     void shouldCacheAndReturnTokenOnSubsequentRequests() {
-        OAuth2TokenCacheManager cacheManager = new OAuth2TokenCacheManager(fetcher);
+        OAuth2TokenCacheManager cacheManager = new OAuth2TokenCacheManager(fetcher, Clock.systemUTC(), metrics);
 
         String token1 = cacheManager.getAccessToken("tenant-1", authConfig);
         String token2 = cacheManager.getAccessToken("tenant-1", authConfig);
@@ -43,6 +47,9 @@ class OAuth2TokenCacheManagerTest {
         assertEquals("token-1", token1);
         assertEquals("token-1", token2);
         assertEquals(1, fetchCounter.get(), "Token fetcher should only be called once when token is cached and valid");
+
+        verify(metrics, times(1)).recordOAuth2TokenRequest("tenant-1", "client-123", "SUCCESS");
+        verify(metrics, times(1)).recordOAuth2TokenCacheHit("tenant-1", "client-123");
     }
 
     @Test

@@ -30,6 +30,9 @@ class KafkaInboxListenerTest {
     @Mock
     private OutboundEventDispatcher outboundEventDispatcher;
 
+    @Mock
+    private com.cl2.integration.infrastructure.metrics.IntegrationMetrics metrics;
+
     @Captor
     private ArgumentCaptor<Consumer<String>> consumerCaptor;
 
@@ -37,7 +40,7 @@ class KafkaInboxListenerTest {
 
     @BeforeEach
     void setUp() {
-        listener = new KafkaInboxListener(inboxProcessor, outboundEventDispatcher);
+        listener = new KafkaInboxListener(inboxProcessor, outboundEventDispatcher, metrics);
     }
 
     @Test
@@ -60,6 +63,8 @@ class KafkaInboxListenerTest {
                 eventId.toString(), payload, headers, null
         );
 
+        when(outboundEventDispatcher.deriveBusinessDomain(eventType)).thenReturn("customers");
+
         listener.onMessage(record);
 
         verify(inboxProcessor).process(
@@ -75,6 +80,7 @@ class KafkaInboxListenerTest {
         capturedHandler.accept(payload);
 
         verify(outboundEventDispatcher).dispatch(eventId, tenantId, eventType, payload, externalSource);
+        verify(metrics).recordInboxMessageConsumed(eq(tenantId.toString()), eq("customers"), eq(topic));
     }
 
     @Test
