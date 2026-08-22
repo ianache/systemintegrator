@@ -246,4 +246,36 @@ class IntegrationSyncOrchestratorTest {
             Thread.interrupted(); // Clear interrupted status for the current test runner thread
         }
     }
+
+    @Test
+    void skipsDuplicateOutboxEventWhenPayloadIsIdenticalToLatestSavedEvent() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"cronExpression\":\"0 */10 * * * *\",\"overlapBufferSeconds\":300}");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(
+                Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp))
+        );
+        when(genericJdbcAdapter.extract(any(), any(), eq(Instant.EPOCH))).thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        // Existing event with identical payload already present
+        OutboxEvent existingEvent = OutboxEvent.pending(tenantId, UUID.randomUUID(), "Customer", "customers.upserted", "integration.customers.events", "{\"customerId\":\"CLI-001\"}");
+        when(outboxRepository.findLatestByAggregateId(eq(tenantId), any(UUID.class))).thenReturn(Optional.of(existingEvent));
+
+        orchestrator.run(profile);
+
+        // Verify outboxRepository.save was NOT called because it's a duplicate
+        verify(outboxRepository, never()).save(any());
+        // Verify watermark still advances properly
+        verify(syncStateRepository).upsert(any());
+    }
 }

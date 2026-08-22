@@ -14,6 +14,9 @@ class SpringDataOutboxRepositoryTest extends IntegrationApplicationTest {
     @Autowired
     private SpringDataOutboxRepository repository;
 
+    @org.springframework.boot.test.mock.mockito.MockBean
+    private OutboxRelayScheduler outboxRelayScheduler;
+
     @Test
     @DisplayName("Should cancel pending outbox events for a given tenant and topic")
     void shouldCancelPendingEventsByTenantAndTopic() {

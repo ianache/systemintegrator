@@ -115,13 +115,23 @@ public class IntegrationSyncOrchestrator {
                 String rowJson = objectMapper.writeValueAsString(row);
                 String canonicalJson = transformationService.transform(rowJson, profile);
                 UUID aggregateId = deriveAggregateId(profile.tenantId(), String.valueOf(row.get(extractionConfig.keyColumn())));
-                outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, canonicalJson));
 
-                if (metrics != null) {
-                    metrics.recordOutboxEventSaved(
-                            profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
-                            profile.businessDomain(),
-                            eventType);
+                boolean isDuplicate = outboxRepository.findLatestByAggregateId(profile.tenantId(), aggregateId)
+                        .map(latestEvent -> canonicalJson.equals(latestEvent.payload()))
+                        .orElse(false);
+
+                if (!isDuplicate) {
+                    outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, canonicalJson));
+
+                    if (metrics != null) {
+                        metrics.recordOutboxEventSaved(
+                                profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
+                                profile.businessDomain(),
+                                eventType);
+                    }
+                } else {
+                    log.debug("Skipping duplicate outbox event for tenantId={}, aggregateId={}, businessDomain={}",
+                            profile.tenantId(), aggregateId, profile.businessDomain());
                 }
 
                 Instant rowTimestamp = readWatermarkTimestamp(row, extractionConfig.watermarkColumn());

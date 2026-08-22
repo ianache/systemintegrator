@@ -15,11 +15,19 @@ public interface SpringDataOutboxRepository extends Repository<OutboxJpaEntity, 
     OutboxJpaEntity save(OutboxJpaEntity entity);
     Optional<OutboxJpaEntity> findById(UUID id);
 
+    @Query("SELECT e FROM OutboxJpaEntity e WHERE e.tenantId = :tenantId AND e.aggregateId = :aggregateId ORDER BY e.createdAt DESC")
+    List<OutboxJpaEntity> findByTenantIdAndAggregateIdOrderByCreatedAtDesc(@Param("tenantId") UUID tenantId, @Param("aggregateId") UUID aggregateId);
+
+    default Optional<OutboxJpaEntity> findLatestByTenantIdAndAggregateId(UUID tenantId, UUID aggregateId) {
+        List<OutboxJpaEntity> list = findByTenantIdAndAggregateIdOrderByCreatedAtDesc(tenantId, aggregateId);
+        return list.isEmpty() ? Optional.empty() : Optional.of(list.get(0));
+    }
+
     @Query(value = "SELECT * FROM integration_outbox WHERE status = 'PENDING' AND available_at <= :now ORDER BY created_at ASC LIMIT :batchSize FOR UPDATE SKIP LOCKED", nativeQuery = true)
     List<OutboxJpaEntity> findPendingForPublishing(@Param("now") Instant now, @Param("batchSize") int batchSize);
 
-    @Modifying
+    @Modifying(clearAutomatically = true)
     @Transactional
-    @Query(value = "UPDATE integration_outbox SET status = 'CANCELLED', last_error = :errorReason WHERE tenant_id = :tenantId AND topic = :topic AND status = 'PENDING'", nativeQuery = true)
+    @Query("UPDATE OutboxJpaEntity e SET e.status = 'CANCELLED', e.lastError = :errorReason WHERE e.tenantId = :tenantId AND e.topic = :topic AND e.status = 'PENDING'")
     int cancelPendingByTenantAndTopic(@Param("tenantId") UUID tenantId, @Param("topic") String topic, @Param("errorReason") String errorReason);
 }
