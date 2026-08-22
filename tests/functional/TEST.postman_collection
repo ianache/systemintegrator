@@ -1,0 +1,528 @@
+{
+  "info": {
+    "_postman_id": "d2b67086-a1b8-4919-874c-b9252b46f32c",
+    "name": "caso-integracion-sap-hana-customer",
+    "description": "Colección de Postman completa para el escenario de integración SAP HANA (OCRD/CRD1) - Extracción Delta de Clientes.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "4516199"
+  },
+  "item": [
+    {
+      "name": "Perfiles",
+      "item": [
+        {
+          "name": "1. Crear Perfil de Integración (SAP HANA Customer)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.id) {",
+                  "        pm.collectionVariables.set('profileId', jsonData.id);",
+                  "        console.log('Profile ID guardado:', jsonData.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "11111111-1111-1111-1111-111111111111",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n    \"businessDomain\": \"customers\",\n    \"externalSource\": \"sap-hana\",\n    \"syncDirection\": \"INBOUND\",\n    \"sourceOfTruth\": \"EXTERNAL\",\n    \"expectedVersion\": 0,\n    \"protocol\": \"JDBC\",\n    \"connector\": \"generic-jdbc\",\n    \"adapter\": \"generic-jdbc-adapter\",\n    \"endpoint\": \"jdbc:sap://192.168.1.100:30015\",\n    \"credentialRef\": \"secret/sap/sigo-hana-credentials\",\n    \"extractionConfig\": {\n        \"query\": \"SELECT T0.CardCode AS CardCode, T0.CardName AS CardName, T0.CardType AS CardType, T0.LicTradNum AS IdNumber, T0.E_Mail AS EmailBP, T0.validFor AS ValidFor, T0.U_EXX_TIPODOCU AS DocumentType, T0.U_EXX_TIPOPERS AS PersonType, T0.Phone1 AS Phone1, T0.Phone2 AS Phone2, T0.Cellular AS Cellular, T1.Address AS AddressName, COALESCE(T0.State1, T0.State2) AS State, T1.City AS City, T1.County AS Country, T1.Street AS Street, T1.U_EXC_TIPDIR AS AddressType, GREATEST(T0.CreateDate, T0.UpdateDate) AS CreateUpdate FROM SBO_COMSATEL_PRUEBAS.OCRD T0 LEFT JOIN SBO_COMSATEL_PRUEBAS.CRD1 T1 ON T0.CardCode = T1.CardCode WHERE T0.CreateDate >= :last_date OR T0.UpdateDate >= :last_date ORDER BY CreateUpdate ASC\",\n        \"watermarkParam\": \"last_date\",\n        \"watermarkColumn\": \"CreateUpdate\",\n        \"keyColumn\": \"CardCode\",\n        \"fetchSize\": 1000\n    },\n    \"mapping\": {\n        \"customerId\": \"CardCode\",\n        \"legalName\": \"CardName\",\n        \"cardType\": \"CardType\",\n        \"taxId\": \"IdNumber\",\n        \"email\": \"EmailBP\",\n        \"status\": \"ValidFor\",\n        \"documentType\": \"DocumentType\",\n        \"personType\": \"PersonType\",\n        \"phone\": {\n            \"landline\": \"Phone1\",\n            \"secondary\": \"Phone2\",\n            \"mobile\": \"Cellular\"\n        },\n        \"address\": {\n            \"name\": \"AddressName\",\n            \"state\": \"State\",\n            \"city\": \"City\",\n            \"country\": \"Country\",\n            \"street\": \"Street\",\n            \"type\": \"AddressType\"\n        },\n        \"lastChangeDate\": \"CreateUpdate\"\n    },\n    \"syncPolicy\": {\n        \"cronExpression\": \"0 */10 * * * *\",\n        \"overlapBufferSeconds\": 300\n    }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/integration-profiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "integration-profiles"
+              ]
+            },
+            "description": "Crea el perfil de integración para la extracción delta de clientes desde SAP HANA B1 (SBO_COMSATEL)."
+          },
+          "response": []
+        },
+        {
+          "name": "1. Crear Perfil de Integración (SIGO Vehiculos)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.id) {",
+                  "        pm.collectionVariables.set('profileId', jsonData.id);",
+                  "        console.log('Profile ID guardado:', jsonData.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "disabled": true
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "11111111-1111-1111-1111-111111111114",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n      \"businessDomain\": \"units\",\n      \"externalSource\": \"sigo\",\n      \"syncDirection\": \"INBOUND\",\n      \"sourceOfTruth\": \"EXTERNAL\",\n      \"expectedVersion\": 0,\n      \"protocol\": \"JDBC\",\n      \"connector\": \"mysql-jdbc\",\n      \"adapter\": \"mysql-jdbc-adapter\",\n      \"endpoint\": \"jdbc:mysql://192.168.1.180:3307\",\n      \"credentialRef\": \"secret/sigo/db-credentials\",\n      \"extractionConfig\": {\n        \"query\": \"SELECT * FROM (SELECT numero_motor,numero_placa,anio,color, GREATEST(creacion, COALESCE(modificacion, creacion)) AS CreateUpdate FROM vehiculos.tb_vehiculo WHERE creacion >= :last_date or modificacion >= :last_date) TV ORDER BY CreateUpdate ASC\",\n        \"watermarkParam\": \"last_date\",\n        \"watermarkColumn\": \"CreateUpdate\",\n        \"keyColumn\": \"numero_motor\",\n        \"fetchSize\": 1000\n      },\n      \"mapping\": {\n        \"motor\": \"numero_motor\",\n        \"placa\": \"numero_placa\",\n        \"anio\": \"anio\",\n        \"color\": \"color\",\n        \"lastChangeDate\": \"CreateUpdate\"\n      },\n      \"syncPolicy\": {\n        \"cronExpression\": \"0 */10 * * * *\",\n        \"overlapBufferSeconds\": 300\n      }\n    }"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/integration-profiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "integration-profiles"
+              ]
+            },
+            "description": "Crea el perfil de integración para la extracción delta de clientes desde SAP HANA B1 (SBO_COMSATEL)."
+          },
+          "response": []
+        },
+        {
+          "name": "1. Crear Perfil de Integración (SIGO Vehiculos) OUTBOUND",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "if (pm.response.code === 201 || pm.response.code === 200) {",
+                  "    var jsonData = pm.response.json();",
+                  "    if (jsonData.id) {",
+                  "        pm.collectionVariables.set('profileId', jsonData.id);",
+                  "        console.log('Profile ID guardado:', jsonData.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{access_token}}",
+                "disabled": true
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-Tenant-ID",
+                "value": "11111111-1111-1111-1111-111111111114",
+                "type": "text"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"businessDomain\": \"units\",\n  \"externalSource\": \"comsatel-unidad-api\",\n  \"syncDirection\": \"OUTBOUND\",\n  \"sourceOfTruth\": \"PLATFORM\",\n  \"protocol\": \"REST\",\n  \"connector\": \"comsatel-unidad-rest\",\n  \"adapter\": \"generic-http-adapter\",\n  \"endpoint\": \"https://api.qa.comsatel.com.pe/unidad/api/v1/unidad\",\n  \"credentialRef\": \"secret/cl2/comsatel-unidad-credentials\",\n  \"transformation\": {\n    \"engine\": \"JSLT\",\n    \"script\": \"{\\n  \\\"tipoUnidadId\\\": 1,\\n  \\\"externoId\\\": (if (.externo_id) .externo_id else if (.numero_motor) .numero_motor else \\\"0\\\"),\\n  \\\"alias\\\": (if(.numero_placa) .numero_placa else .numero_motor),\\n  \\\"propietarioId\\\": (if (.propietario_id) .propietario_id else 1),\\n  \\\"creadorUsuarioId\\\": (if (.usuario_id) .usuario_id else 1),\\n  \\\"fuenteId\\\": 1,\\n  \\\"atributosUnidad\\\": [\\n    {\\n      \\\"atributoId\\\": 1,\\n      \\\"valor\\\": .numero_placa\\n    },\\n    {\\n      \\\"atributoId\\\": 2,\\n      \\\"valor\\\": .numero_motor\\n    },\\n    {\\n      \\\"atributoId\\\": 4,\\n      \\\"valor\\\": (if (.marca) .marca else \\\"TOYOTA\\\")\\n    },\\n    {\\n      \\\"atributoId\\\": 5,\\n      \\\"valor\\\": (if (.modelo) .modelo else \\\"PRIUS\\\")\\n    },\\n    {\\n      \\\"atributoId\\\": 6,\\n      \\\"valor\\\": (if (.color) .color else \\\"BLANCO\\\")\\n    },\\n    {\\n      \\\"atributoId\\\": 7,\\n      \\\"valor\\\": (if (.anio) number(.anio) else 2026)\\n    }\\n  ]\\n}\"\n  },\n  \"retryPolicy\": {\n    \"maxAttempts\": 3,\n    \"backoffMs\": 1000\n  },\n  \"rateLimitPolicy\": {\n    \"requestsPerSecond\": 20\n  }\n}"
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/integration-profiles",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "integration-profiles"
+              ]
+            },
+            "description": "Crea el perfil de integración para la extracción delta de clientes desde SAP HANA B1 (SBO_COMSATEL)."
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "0. Obtener Token OAuth2 (Keycloak QA)",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const response = pm.response.json();\r",
+              "//onsole.log(response);\r",
+              "pm.collectionVariables.set(\"access_token\", response.access_token);\r",
+              "//console.log(response.access_token);"
+            ],
+            "type": "text/javascript",
+            "packages": {},
+            "requests": {}
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Content-Type",
+            "value": "application/x-www-form-urlencoded"
+          }
+        ],
+        "body": {
+          "mode": "urlencoded",
+          "urlencoded": [
+            {
+              "key": "grant_type",
+              "value": "client_credentials",
+              "type": "text"
+            },
+            {
+              "key": "client_id",
+              "value": "systemintegrator",
+              "type": "text"
+            },
+            {
+              "key": "client_secret",
+              "value": "iKe5luhtRVlFIpKw1fgAzhk4pbLzvesq",
+              "type": "text"
+            }
+          ]
+        },
+        "url": {
+          "raw": "https://oauth2.qa.comsatel.com.pe/realms/microservicios/protocol/openid-connect/token",
+          "protocol": "https",
+          "host": [
+            "oauth2",
+            "qa",
+            "comsatel",
+            "com",
+            "pe"
+          ],
+          "path": [
+            "realms",
+            "microservicios",
+            "protocol",
+            "openid-connect",
+            "token"
+          ]
+        },
+        "description": "Solicita un nuevo token Bearer JWT conteniendo la claim tenant_id requerida por el Gateway."
+      },
+      "response": []
+    },
+    {
+      "name": "2. Listar Perfiles de Integración Activos",
+      "request": {
+        "auth": {
+          "type": "bearer",
+          "bearer": [
+            {
+              "key": "token",
+              "value": "{{access_token}}",
+              "type": "string"
+            }
+          ]
+        },
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "11111111-1111-1111-1111-111111111114",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integration-profiles?activeOnly=true",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integration-profiles"
+          ],
+          "query": [
+            {
+              "key": "activeOnly",
+              "value": "true"
+            }
+          ]
+        },
+        "description": "Lista los perfiles de integración activos asociados al tenant del usuario autenticado."
+      },
+      "response": []
+    },
+    {
+      "name": "3. Obtener Perfil por ID",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integration-profiles/{{profileId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integration-profiles",
+            "{{profileId}}"
+          ]
+        },
+        "description": "Obtiene el detalle completo del perfil de integración mediante su ID."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Actualizar Perfil de Integración",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}",
+            "disabled": true
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "11111111-1111-1111-1111-111111111111",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "[\n    {\n        \"id\": \"b50c7266-6b30-475b-9057-d706f4ba24a8\",\n        \"tenantId\": \"11111111-1111-1111-1111-111111111111\",\n        \"businessDomain\": \"customers\",\n        \"externalSource\": \"sap-hana\",\n        \"syncDirection\": \"INBOUND\",\n        \"sourceOfTruth\": \"EXTERNAL\",\n        \"configuration\": {\n            \"protocol\": \"JDBC\",\n            \"connector\": \"generic-jdbc\",\n            \"adapter\": \"generic-jdbc-adapter\",\n            \"endpoint\": \"jdbc:sap://192.168.1.100:30015?databaseName=SBO_COMSATEL_PRUEBAS\",\n            \"credentialRef\": \"secret/sap/sigo-hana-credentials\",\n            \"mapping\": {\n                \"email\": \"EmailBP\",\n                \"phone\": {\n                    \"mobile\": \"Cellular\",\n                    \"landline\": \"Phone1\",\n                    \"secondary\": \"Phone2\"\n                },\n                \"taxId\": \"IdNumber\",\n                \"status\": \"ValidFor\",\n                \"address\": {\n                    \"city\": \"City\",\n                    \"name\": \"AddressName\",\n                    \"type\": \"AddressType\",\n                    \"state\": \"State\",\n                    \"street\": \"Street\",\n                    \"country\": \"Country\"\n                },\n                \"cardType\": \"CardType\",\n                \"legalName\": \"CardName\",\n                \"customerId\": \"CardCode\",\n                \"personType\": \"PersonType\",\n                \"documentType\": \"DocumentType\",\n                \"lastChangeDate\": \"CreateUpdate\"\n            },\n            \"syncPolicy\": {\n                \"cronExpression\": \"0 */10 * * * *\",\n                \"overlapBufferSeconds\": 300\n            },\n            \"extractionConfig\": {\n                \"query\": \"SELECT T0.CardCode AS CardCode, T0.CardName AS CardName, T0.CardType AS CardType, T0.LicTradNum AS IdNumber, T0.E_Mail AS EmailBP, T0.validFor AS ValidFor, T0.U_EXX_TIPODOCU AS DocumentType, T0.U_EXX_TIPOPERS AS PersonType, T0.Phone1 AS Phone1, T0.Phone2 AS Phone2, T0.Cellular AS Cellular, T1.Address AS AddressName, COALESCE(T0.State1, T0.State2) AS State, T1.City AS City, T1.County AS Country, T1.Street AS Street, T1.U_EXC_TIPDIR AS AddressType, GREATEST(T0.CreateDate, T0.UpdateDate) AS CreateUpdate FROM SBO_COMSATEL_PRUEBAS.OCRD T0 LEFT JOIN SBO_COMSATEL_PRUEBAS.CRD1 T1 ON T0.CardCode = T1.CardCode WHERE T0.CreateDate >= :last_date OR T0.UpdateDate >= :last_date ORDER BY CreateUpdate ASC\",\n                \"fetchSize\": 1000,\n                \"keyColumn\": \"CardCode\",\n                \"watermarkParam\": \"last_date\",\n                \"watermarkColumn\": \"CreateUpdate\"\n            }\n        },\n        \"active\": true,\n        \"createdAt\": \"2026-08-19T20:23:50.905851Z\",\n        \"updatedAt\": \"2026-08-19T20:23:50.905851Z\",\n        \"version\": 0\n    }\n]"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integration-profiles/{{profileId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integration-profiles",
+            "{{profileId}}"
+          ]
+        },
+        "description": "Actualiza la configuración del perfil de integración incluyendo el campo version para control de concurrencia optimista."
+      },
+      "response": []
+    },
+    {
+      "name": "4. Actualizar Perfil de Integración SIGO Vehiculos",
+      "request": {
+        "method": "PUT",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}",
+            "disabled": true
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "11111111-1111-1111-1111-111111111111",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": "{\n      \"businessDomain\": \"vehicles\",\n      \"externalSource\": \"sigo\",\n      \"syncDirection\": \"INBOUND\",\n      \"sourceOfTruth\": \"EXTERNAL\",\n      \"expectedVersion\": 1,\n      \"protocol\": \"JDBC\",\n      \"connector\": \"mysql-jdbc\",\n      \"adapter\": \"mysql-jdbc-adapter\",\n      \"endpoint\": \"jdbc:mysql://192.168.1.180:3307\",\n      \"credentialRef\": \"secret/sigo/db-credentials\",\n      \"mapping\": {\n        \"anio\": \"anio\",\n        \"color\": \"color\",\n        \"motor\": \"numero_motor\",\n        \"placa\": \"numero_placa\",\n        \"lastChangeDate\": \"CreateUpdate\"\n      },\n      \"syncPolicy\": {\n        \"cronExpression\": \"0 */10 * * * *\",\n        \"overlapBufferSeconds\": 300\n      },\n      \"extractionConfig\": {\n        \"query\": \"SELECT * FROM (SELECT numero_motor,numero_placa,anio,color, GREATEST(creacion, COALESCE(modificacion, creacion)) AS CreateUpdate FROM vehiculos.tb_vehiculo WHERE creacion >= :last_date or modificacion >= :last_date) TV ORDER BY CreateUpdate ASC\",\n        \"fetchSize\": 1000,\n        \"keyColumn\": \"numero_motor\",\n        \"watermarkParam\": \"last_date\",\n        \"watermarkColumn\": \"CreateUpdate\"\n      }\n    }"
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integration-profiles/{{profileId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integration-profiles",
+            "{{profileId}}"
+          ]
+        },
+        "description": "Actualiza la configuración del perfil de integración incluyendo el campo version para control de concurrencia optimista."
+      },
+      "response": []
+    },
+    {
+      "name": "5. Listar Clientes Canónicos Extraídos",
+      "request": {
+        "method": "GET",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/customers",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "customers"
+          ]
+        },
+        "description": "Consulta la lista de clientes canónicos procesados y transformados por la plataforma."
+      },
+      "response": []
+    },
+    {
+      "name": "6. Desactivar Perfil de Integración",
+      "request": {
+        "method": "DELETE",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}",
+            "disabled": true
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "11111111-1111-1111-1111-111111111114",
+            "type": "text"
+          }
+        ],
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integration-profiles/{{profileId}}",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integration-profiles",
+            "{{profileId}}"
+          ]
+        },
+        "description": "Desactiva lógicamente el perfil de integración."
+      },
+      "response": []
+    },
+    {
+      "name": "forzar",
+      "request": {
+        "method": "POST",
+        "header": [
+          {
+            "key": "Authorization",
+            "value": "Bearer {{access_token}}",
+            "disabled": true
+          },
+          {
+            "key": "Content-Type",
+            "value": "application/json"
+          },
+          {
+            "key": "X-Tenant-ID",
+            "value": "11111111-1111-1111-1111-111111111114",
+            "type": "text"
+          }
+        ],
+        "body": {
+          "mode": "raw",
+          "raw": ""
+        },
+        "url": {
+          "raw": "{{baseUrl}}/api/v1/integration-profiles/{{profileId}}/sync",
+          "host": [
+            "{{baseUrl}}"
+          ],
+          "path": [
+            "api",
+            "v1",
+            "integration-profiles",
+            "{{profileId}}",
+            "sync"
+          ]
+        }
+      },
+      "response": []
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8081"
+    },
+    {
+      "key": "accessToken",
+      "value": "<ingrese-su-access-token-qa>"
+    },
+    {
+      "key": "profileId",
+      "value": ""
+    },
+    {
+      "key": "supabase_service_role_api_key_14z3",
+      "secret": true
+    },
+    {
+      "key": "access_token",
+      "value": ""
+    }
+  ]
+}
