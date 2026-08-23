@@ -53,6 +53,7 @@
   },
   "nx": {},
   "dependencies": {
+    "@angular-architects/native-federation": "^22.0.6",
     "@angular/common": "~22.0.4",
     "@angular/compiler": "~22.0.4",
     "@angular/core": "~22.0.4",
