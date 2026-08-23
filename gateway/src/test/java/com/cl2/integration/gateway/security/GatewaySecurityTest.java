@@ -24,6 +24,12 @@ import static org.springframework.security.test.web.reactive.server.SecurityMock
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
         properties = {
                 "KEYCLOAK_ISSUER_URI=https://issuer.example.test/realms/integration",
+                "KEYCLOAK_APPS_ISSUER_URI=https://apps-issuer.example.test/realms/Apps",
+                // GatewaySecurityConfig's issuerAuthenticationManagerResolver bean is registered
+                // (component scan) before this class's @Import-ed TestSecurityConfiguration is
+                // parsed, so its @ConditionalOnMissingBean sees no conflict and wins the race.
+                // Allowing bean-definition overriding lets the later-registered test bean replace
+                // it instead of throwing, so the real (network-calling) resolver never gets built.
                 "spring.main.allow-bean-definition-overriding=true"
         })
 @ActiveProfiles("qa-e2e")
