@@ -464,10 +464,10 @@ The second `git log` must show your new commit on top, with the pre-commit `git 
 Run, from `backoffice/`:
 
 ```bash
-npm install @angular-architects/native-federation@latest
+npm install @angular-architects/native-federation@22.0.6
 ```
 
-The installed Angular version in this workspace is `~22.0.4` (confirm with `grep '"@angular/core"' package.json` if in doubt) — `@latest` should resolve a compatible release, since this package tracks Angular's major version closely. If `npm install` reports a peer-dependency conflict with the installed Angular version, stop and report BLOCKED with the exact error rather than forcing it with `--legacy-peer-deps` or `--force`.
+**Pinned, not `@latest` (verified):** `@latest` (`22.1.1` at the time this was checked) requires `@angular/build@~22.1.0` as a peer, but this workspace is pinned to `@angular/build@~22.0.4` (set by Task 3, already reviewed and closed — not something to bump for this task). `22.0.6` declares `@angular/build@~22.0.0` as its peer, which matches. If `npm install` still reports a peer-dependency conflict, stop and report BLOCKED with the exact error rather than forcing it with `--legacy-peer-deps` or `--force`.
 
 - [ ] **Step 2: Generate the library**
 
