@@ -4,6 +4,9 @@
     "outDir": "../../dist/out-tsc",
     "module": "commonjs",
     "moduleResolution": "bundler",
+    // Lets ts-jest transpile the ESM-only openid-client dependency chain
+    // (see transformIgnorePatterns in jest.config.cts) down to CommonJS.
+    "allowJs": true,
     "types": ["jest", "node"]
   },
   "include": [
