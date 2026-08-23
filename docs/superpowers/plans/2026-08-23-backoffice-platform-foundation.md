@@ -672,7 +672,9 @@ git commit -m "feat(backoffice): wire shell and integration-mfe via Native Feder
 
 - [ ] **Step 1: Install dependencies**
 
-Run: `cd backoffice && npm install express-session connect-redis redis @nestjs/config && npm install -D @types/express-session`
+Run: `cd backoffice && npm install express-session connect-redis redis @nestjs/config && npm install -D @types/express-session supertest @types/supertest`
+
+**Verified necessary, not in the original install line:** `supertest`/`@types/supertest` (the test below imports them, and neither existed anywhere in the workspace yet) — folded into the command above. Also: `main.ts` calls `app.get(ConfigService)`, which throws at boot unless `ConfigModule` is registered — add `ConfigModule.forRoot({ isGlobal: true })` to `backoffice/apps/bff/src/app/app.module.ts`'s `imports` if it isn't already there.
 
 - [ ] **Step 2: Write the failing test**
 
