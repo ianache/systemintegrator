@@ -342,50 +342,56 @@ git commit -m "feat(gateway): trust realms/Apps alongside realms/microservicios 
 **Interfaces:**
 - Produces: `nx build shell`, `nx build integration-mfe`, `nx build bff`, `nx test <project>` executors for every later task in this plan.
 
-**Environment note (verified against the Nx CLI actually installed in this environment, v23.1.1 — do not assume an older Nx's defaults):** `create-nx-workspace`'s `--interactive` flag defaults to `true`, and this environment sets `CLAUDECODE=1`, which the CLI itself documents as entering its own "AI Agent Mode." Left implicit, this produces a generic fullstack demo workspace (`packages/api`, `packages/shared`, `packages/shop`) plus unwanted AI-agent-tool scaffolding (`.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.opencode/`, `AGENTS.md`, `CLAUDE.md`, `opencode.json`) instead of the intended layout. Every command below passes `--interactive=false` and `--aiAgents=none` explicitly to avoid this, and uses the bare `apps` preset (no demo template) followed by explicit per-app generators.
+**Environment note (verified against the Nx CLI actually installed in this environment, v23.1.1 — do not assume an older Nx's defaults; this section reflects the sequence actually validated end-to-end, after two earlier approaches — `create-nx-workspace` with the `apps` preset, and that same preset plus manual AI-agent-file cleanup — both failed for reasons explained below):**
 
-**Critical: `--skipGit` is required.** `create-nx-workspace` performs its own internal `git` finalization step (it stages and commits the generated files itself, and has been observed using `git commit --amend`). `backoffice/` is a subdirectory of this already-existing git repository (the worktree), not a fresh standalone repo — without `--skipGit`, the tool's internal git step operates against *this* repo and can silently amend whatever commit is currently `HEAD` (this has actually happened twice while developing this plan, each time amending an unrelated prior commit to bundle in a stray `backoffice/README.md` — recovered both times via `git reflog` + `git reset`, no data lost, but it must not happen again). `--skipGit` disables the tool's git integration entirely; this task commits `backoffice/` itself, explicitly, in Step 8.
+`create-nx-workspace`'s legacy `--preset` values (including `apps`) are implemented as **GitHub template clones**, not generators (the tool logs `Mapping legacy preset 'apps' to template 'nrwl/empty-template'`). This causes two independent problems: (1) the cloned template ships Nx's "TS solution" `tsconfig.base.json` (`"composite": true`) with project references, which `@nx/angular:application` explicitly refuses to scaffold into (`The Angular framework doesn't support a TypeScript setup with project references`) — no combination of `create-nx-workspace` flags changes this, since workspace-shaping flags are inert against a static template clone; and (2) `.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.opencode/`, `.agents/`, `AGENTS.md`, `CLAUDE.md`, `opencode.json` are checked into that same template repo, so `--aiAgents=none` (which only suppresses *generating additional* agent config) cannot remove them either.
 
-- [ ] **Step 1: Generate the bare Nx workspace (no demo apps, no AI-agent scaffolding)**
+The working alternative is `nx init`, which **is** a generator (not a template clone) and produces a classic, Angular-compatible `tsconfig.base.json` with no project references, while also genuinely honoring `--aiAgents=none` — no manual cleanup step needed.
+
+- [ ] **Step 1: Generate the bare Nx workspace via `nx init`**
 
 Run, from the repository root:
 
 ```bash
-npx create-nx-workspace@23.1.1 backoffice --preset=apps --interactive=false --aiAgents=none --nxCloud=skip --packageManager=npm --defaultBase=main --skipGit
-```
-
-Expected: `backoffice/` created with `nx.json`, `package.json`, `tsconfig.base.json`. The demo-workspace half of this gate (`packages/api`, `packages/shared`, `packages/shop`) should NOT appear — `--interactive=false` prevents that; `packages/` should contain only a `.gitkeep`. If `packages/api` or `packages/shop` DO appear, stop and report BLOCKED — that half of the gate failing means something more fundamental changed and needs investigation before proceeding.
-
-**Known, expected, and already-diagnosed:** in this Nx version, presets are implemented as GitHub template clones (verified: the tool logs `Mapping legacy preset 'apps' to template 'nrwl/empty-template'`), and `.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.opencode/`, `.agents/`, `AGENTS.md`, `CLAUDE.md`, `opencode.json` are checked into that template repo itself — `--aiAgents=none` only suppresses *generating additional* agent config, it cannot un-clone files the template already contains. **This is not a failure — do not report BLOCKED for these specific files appearing.** Proceed to Step 1b to remove them.
-
-- [ ] **Step 1b: Remove the AI-agent template artifacts**
-
-These files carry real behavioral/security risk if left in place: `CLAUDE.md`/`AGENTS.md` would be read as live instructions by a future Claude Code (or other agent) session opened against `backoffice/`, and `opencode.json` registers an `npx nx mcp` server that would auto-run in a future session. None of this is part of the Backoffice application — remove it:
-
-```bash
+mkdir backoffice
 cd backoffice
-rm -rf .claude .codex .cursor .gemini .opencode .agents
-rm -f AGENTS.md CLAUDE.md opencode.json
-cd ..
 ```
 
-Leave `.github/`, `.vscode/`, `.prettierrc`, `.prettierignore`, `.editorconfig`, and `tsconfig.json` (alongside `tsconfig.base.json`) in place if the template generated them — these are inert generic project scaffolding (editor/CI config, not agent instructions or auto-registered tooling) and not worth fighting the template over.
+`nx init` in a truly empty directory silently falls back to Nx's standalone `.nx` wrapper install (producing `nx`, `nx.bat`, `.nx/nxw.js`, an `"installation"` block in `nx.json`, and no `package.json`) even with `--useDotNxInstallation=false`. Avoid this by seeding a minimal `package.json` first:
 
-- [ ] **Step 2: Install the Angular and Nest plugins**
+```json
+{
+  "name": "backoffice",
+  "version": "0.0.0",
+  "private": true
+}
+```
 
-Run, from `backoffice/`:
+Write that to `backoffice/package.json`, then:
 
 ```bash
-npm install -D @nx/angular @nx/nest
+npm install -D nx@23.1.1 @nx/angular@23.1.1 @nx/nest@23.1.1
+npx nx init --interactive=false --aiAgents=none --nxCloud=false --plugins=skip
 ```
 
-- [ ] **Step 3: Check the exact generator flags before using them**
+Expected: `nx.json`, `tsconfig.base.json` (no `"composite": true`, no `references`) created alongside `package.json`. No `apps/`, `packages/`, or AI-agent dotfiles/AGENTS.md/CLAUDE.md/opencode.json should appear — if any do, stop and report BLOCKED with the exact output.
+
+**Verify `.gitignore` exists and ignores `node_modules` before proceeding to any later step.** `nx init` only reliably emits a `.gitignore` when it also creates `package.json` itself; since this sequence pre-seeds `package.json`, check explicitly:
+
+```bash
+cat .gitignore 2>&1
+git status --short | grep -c node_modules
+```
+
+If `.gitignore` is missing or the `node_modules` count is nonzero, create/fix `backoffice/.gitignore` to include at minimum `node_modules/`, `dist/`, `.nx/cache/`, `.angular/cache/` before continuing — this must be caught here, not at the Step 8 commit, where staging tens of thousands of `node_modules` files would be easy to miss.
+
+- [ ] **Step 2: Check the exact generator flags before using them**
 
 Run: `npx nx g @nx/angular:application --help` and `npx nx g @nx/nest:application --help`. Modern Nx generators typically take the target directory as the first positional argument (e.g. `npx nx g @nx/angular:application apps/shell`), deriving the project name from the last path segment — but confirm this against the actual `--help` output for the installed version rather than assuming. Note the exact flags for: standalone components, a CSS stylesheet, routing, and E2E test runner (Angular), and for Nest, the equivalent app-generation flags.
 
-- [ ] **Step 4: Generate the Shell app**
+- [ ] **Step 3: Generate the Shell app**
 
-Run the `@nx/angular:application` generator targeting `apps/shell` (using the flags confirmed in Step 3) with: standalone components, CSS stylesheet, routing enabled, Playwright as the e2e test runner, `--interactive=false`. Example (adjust flag names only if Step 3's `--help` output disagrees):
+Run the `@nx/angular:application` generator targeting `apps/shell` (using the flags confirmed in Step 2) with: standalone components, CSS stylesheet, routing enabled, Playwright as the e2e test runner, `--interactive=false`. Example (adjust flag names only if Step 2's `--help` output disagrees):
 
 ```bash
 npx nx g @nx/angular:application apps/shell --style=css --routing --standalone --e2eTestRunner=playwright --interactive=false
@@ -393,7 +399,7 @@ npx nx g @nx/angular:application apps/shell --style=css --routing --standalone -
 
 Expected: `backoffice/apps/shell` created (and `backoffice/apps/shell-e2e` if the e2e generator ran). Verify with `npx nx build shell && npx nx test shell` — both PASS.
 
-- [ ] **Step 5: Generate the integration-mfe Angular app**
+- [ ] **Step 4: Generate the integration-mfe Angular app**
 
 Run the same generator targeting `apps/integration-mfe`, no e2e runner needed for this one:
 
@@ -403,22 +409,24 @@ npx nx g @nx/angular:application apps/integration-mfe --style=css --routing --st
 
 Expected: `backoffice/apps/integration-mfe` created.
 
-- [ ] **Step 6: Generate the BFF NestJS app**
+- [ ] **Step 5: Generate the BFF NestJS app**
 
-Run the `@nx/nest:application` generator (using the flags confirmed in Step 3) targeting `apps/bff`:
+Run the `@nx/nest:application` generator (using the flags confirmed in Step 2) targeting `apps/bff`. The generator's `--unitTestRunner` choices are `jest|none` and default to `none` — pass `jest` explicitly, otherwise `nx test bff` (required by this task's Interfaces contract, and relied on by later BFF tasks) has no target to run:
 
 ```bash
-npx nx g @nx/nest:application apps/bff --interactive=false
+npx nx g @nx/nest:application apps/bff --unitTestRunner=jest --interactive=false
 ```
 
-Expected: `backoffice/apps/bff` created with a default NestJS `AppModule`/`AppController`.
+Expected: `backoffice/apps/bff` created with a default NestJS `AppModule`/`AppController` and a working `jest` test target.
 
-- [ ] **Step 7: Verify all three projects build**
+**Known necessary fix:** running `npx nx test bff` at this point may fail with a TypeScript error (`TS2591`, `Cannot find name 'require'` or similar) in `jest.config.cts`, because `apps/bff/tsconfig.json` has no `types` array and ts-node resolves the app's own tsconfig rather than the workspace root's. Fix by adding `"types": ["node"]` to the `compilerOptions` of `backoffice/apps/bff/tsconfig.json` (scoped to `bff` only — do not add this to `tsconfig.base.json` or to the Angular apps' tsconfigs, which must not gain Node types). Confirm `npx nx test bff` passes after this change.
+
+- [ ] **Step 6: Verify all three projects build**
 
 Run: `npx nx run-many -t build -p shell,integration-mfe,bff`
 Expected: PASS — three separate `dist/` outputs under `backoffice/dist/`.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 7: Commit**
 
 **Never use `git commit --amend`, `git rebase`, or `git reset` on any commit other than your own uncommitted work in this task.** This repository has prior commits from earlier tasks (Task 1, Task 2) already reviewed and closed — do not alter them under any circumstance. Record the current HEAD before committing, so you can immediately tell if anything unexpected touches it:
 
