@@ -1,15 +1,12 @@
 import { defineConfig, devices } from '@playwright/test';
-import { nxE2EPreset } from '@nx/playwright/preset';
-import { workspaceRoot } from '@nx/devkit';
+import { join, resolve } from 'node:path';
 
 // For CI, you may want to set BASE_URL to the deployed application.
-const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
+const baseURL = process.env['BASE_URL'] || 'http://localhost:4201';
 
-/**
- * Read environment variables from file.
- * https://github.com/motdotla/dotenv
- */
-// import 'dotenv/config';
+const projectRoot = import.meta.dirname;
+const workspaceRoot = resolve(projectRoot, '..', '..');
+const outputBase = join(workspaceRoot, 'dist', '.playwright', 'apps', 'shell-e2e');
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -20,56 +17,69 @@ const baseURL = process.env['BASE_URL'] || 'http://localhost:4200';
  * `.mts` directly. Playwright's configLoader auto-discovers
  * `playwright.config.mts` via its extension list
  * (.ts/.js/.mts/.mjs/.cts/.cjs).
+ *
+ * The Nx-recommended defaults (`nxE2EPreset`) are inlined rather than
+ * imported: under Playwright's ESM loader, `@nx/playwright/preset` pulls in
+ * `nx/dist/src/native/index.js`, which does `delete require.cache[...]`. In
+ * that loader `require.cache` is undefined, so loading the config crashes with
+ * `TypeError: Cannot convert undefined or null to object`. Keeping the config
+ * free of Nx imports keeps `nx e2e shell-e2e` runnable.
  */
 export default defineConfig({
-  ...nxE2EPreset(import.meta.dirname, { testDir: './src' }),
+  testDir: './src',
+  outputDir: join(outputBase, 'test-output'),
+  /* Run tests in files in parallel */
+  fullyParallel: true,
+  /* Fail the build on CI if you accidentally left test.only in the source code. */
+  forbidOnly: !!process.env.CI,
+  /* Retry on CI only */
+  retries: process.env.CI ? 2 : 0,
+  /* Opt out of parallel tests on CI. */
+  workers: process.env.CI ? 1 : undefined,
+  reporter: [
+    ['list'],
+    ['html', { outputFolder: join(outputBase, 'playwright-report'), open: 'never' }],
+  ],
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
   use: {
     baseURL,
     /* Collect trace when retrying the failed test. See https://playwright.dev/docs/trace-viewer */
     trace: 'on-first-retry',
   },
-  /* Run your local dev server before starting the tests */
-  webServer: {
-    command: 'npx nx run shell:serve',
-    url: 'http://localhost:4200',
-    reuseExistingServer: true,
-    cwd: workspaceRoot
-  },
+  /*
+   * Run both federated dev servers before starting the tests: the Shell
+   * (dynamic host, 4201) and the integration MicroUI remote (4202). The Shell
+   * resolves the remote at runtime from the URL in `app.routes.ts`, so the
+   * remote has to be reachable for the `/integration` route to render.
+   */
+  webServer: [
+    {
+      command: 'npx nx run integration-mfe:serve',
+      url: 'http://localhost:4202/remoteEntry.json',
+      reuseExistingServer: true,
+      timeout: 180_000,
+      cwd: workspaceRoot,
+    },
+    {
+      command: 'npx nx run shell:serve',
+      url: 'http://localhost:4201',
+      reuseExistingServer: true,
+      timeout: 180_000,
+      cwd: workspaceRoot,
+    },
+  ],
   projects: [
     {
-      name: "chromium",
-      use: { ...devices["Desktop Chrome"] },
-    },
-
-    {
-      name: "firefox",
-      use: { ...devices["Desktop Firefox"] },
-    },
-
-    {
-      name: "webkit",
-      use: { ...devices["Desktop Safari"] },
-    },
-
-    // Uncomment for mobile browsers support
-    /* {
-      name: 'Mobile Chrome',
-      use: { ...devices['Pixel 5'] },
+      name: 'chromium',
+      use: { ...devices['Desktop Chrome'] },
     },
     {
-      name: 'Mobile Safari',
-      use: { ...devices['iPhone 12'] },
-    }, */
-
-    // Uncomment for branded browsers
-    /* {
-      name: 'Microsoft Edge',
-      use: { ...devices['Desktop Edge'], channel: 'msedge' },
+      name: 'firefox',
+      use: { ...devices['Desktop Firefox'] },
     },
     {
-      name: 'Google Chrome',
-      use: { ...devices['Desktop Chrome'], channel: 'chrome' },
-    } */
+      name: 'webkit',
+      use: { ...devices['Desktop Safari'] },
+    },
   ],
 });
