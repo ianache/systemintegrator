@@ -342,46 +342,77 @@ git commit -m "feat(gateway): trust realms/Apps alongside realms/microservicios 
 **Interfaces:**
 - Produces: `nx build shell`, `nx build integration-mfe`, `nx build bff`, `nx test <project>` executors for every later task in this plan.
 
-- [ ] **Step 1: Generate the Nx workspace with the Shell app**
+**Environment note (verified against the Nx CLI actually installed in this environment, v23.1.1 — do not assume an older Nx's defaults):** `create-nx-workspace`'s `--interactive` flag defaults to `true`, and this environment sets `CLAUDECODE=1`, which the CLI itself documents as entering its own "AI Agent Mode." Left implicit, this produces a generic fullstack demo workspace (`packages/api`, `packages/shared`, `packages/shop`) plus unwanted AI-agent-tool scaffolding (`.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.opencode/`, `AGENTS.md`, `CLAUDE.md`, `opencode.json`) instead of the intended layout. Every command below passes `--interactive=false` and `--aiAgents=none` explicitly to avoid this, and uses the bare `apps` preset (no demo template) followed by explicit per-app generators.
+
+- [ ] **Step 1: Generate the bare Nx workspace (no demo apps, no AI-agent scaffolding)**
 
 Run, from the repository root:
 
 ```bash
-npx create-nx-workspace@latest backoffice --preset=angular-monorepo --appName=shell --style=css --e2eTestRunner=playwright --nxCloud=skip --packageManager=npm
+npx create-nx-workspace@latest backoffice --preset=apps --interactive=false --aiAgents=none --nxCloud=skip --packageManager=npm --defaultBase=main
 ```
 
-Expected: `backoffice/` created with `apps/shell` and `apps/shell-e2e`, `nx.json`, `package.json`.
+Expected: `backoffice/` created with `nx.json`, `package.json`, `tsconfig.base.json`, and **no** `apps/`, `packages/`, or dotfile AI-agent directories yet. If you see `packages/api`, `packages/shop`, `.claude/`, `.codex/`, `AGENTS.md`, or similar — stop, do not proceed, and report BLOCKED with the exact command and output; do not attempt to manually delete and improvise around it.
 
-- [ ] **Step 2: Verify the generated Shell app builds and tests pass**
+- [ ] **Step 2: Install the Angular and Nest plugins**
 
-Run: `cd backoffice && npx nx build shell && npx nx test shell`
-Expected: both PASS with the default Nx-generated scaffold.
-
-- [ ] **Step 3: Generate the integration-mfe Angular app**
-
-Run: `npx nx g @nx/angular:app apps/integration-mfe --style=css --routing --standalone --e2eTestRunner=none`
-Expected: `backoffice/apps/integration-mfe` created.
-
-- [ ] **Step 4: Add the NestJS plugin and generate the BFF app**
-
-Run:
+Run, from `backoffice/`:
 
 ```bash
-npm install -D @nx/nest
-npx nx g @nx/nest:app apps/bff
+npm install -D @nx/angular @nx/nest
+```
+
+- [ ] **Step 3: Check the exact generator flags before using them**
+
+Run: `npx nx g @nx/angular:application --help` and `npx nx g @nx/nest:application --help`. Modern Nx generators typically take the target directory as the first positional argument (e.g. `npx nx g @nx/angular:application apps/shell`), deriving the project name from the last path segment — but confirm this against the actual `--help` output for the installed version rather than assuming. Note the exact flags for: standalone components, a CSS stylesheet, routing, and E2E test runner (Angular), and for Nest, the equivalent app-generation flags.
+
+- [ ] **Step 4: Generate the Shell app**
+
+Run the `@nx/angular:application` generator targeting `apps/shell` (using the flags confirmed in Step 3) with: standalone components, CSS stylesheet, routing enabled, Playwright as the e2e test runner, `--interactive=false`. Example (adjust flag names only if Step 3's `--help` output disagrees):
+
+```bash
+npx nx g @nx/angular:application apps/shell --style=css --routing --standalone --e2eTestRunner=playwright --interactive=false
+```
+
+Expected: `backoffice/apps/shell` created (and `backoffice/apps/shell-e2e` if the e2e generator ran). Verify with `npx nx build shell && npx nx test shell` — both PASS.
+
+- [ ] **Step 5: Generate the integration-mfe Angular app**
+
+Run the same generator targeting `apps/integration-mfe`, no e2e runner needed for this one:
+
+```bash
+npx nx g @nx/angular:application apps/integration-mfe --style=css --routing --standalone --e2eTestRunner=none --interactive=false
+```
+
+Expected: `backoffice/apps/integration-mfe` created.
+
+- [ ] **Step 6: Generate the BFF NestJS app**
+
+Run the `@nx/nest:application` generator (using the flags confirmed in Step 3) targeting `apps/bff`:
+
+```bash
+npx nx g @nx/nest:application apps/bff --interactive=false
 ```
 
 Expected: `backoffice/apps/bff` created with a default NestJS `AppModule`/`AppController`.
 
-- [ ] **Step 5: Verify all three projects build**
+- [ ] **Step 7: Verify all three projects build**
 
 Run: `npx nx run-many -t build -p shell,integration-mfe,bff`
 Expected: PASS — three separate `dist/` outputs under `backoffice/dist/`.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Commit**
+
+**Never use `git commit --amend`, `git rebase`, or `git reset` on any commit other than your own uncommitted work in this task.** This repository has prior commits from earlier tasks (Task 1, Task 2) already reviewed and closed — do not alter them under any circumstance, including accidentally reusing a previous commit message or running `git commit` without first confirming with `git status`/`git diff --cached` exactly what is staged.
 
 ```bash
 git add backoffice/
+git status
+```
+
+Review the `git status` output: it must show only new files under `backoffice/`, nothing under `gateway/` or any other existing top-level directory. Only then:
+
+```bash
 git commit -m "chore(backoffice): scaffold Nx workspace with shell, integration-mfe, bff"
 ```
 
