@@ -344,12 +344,14 @@ git commit -m "feat(gateway): trust realms/Apps alongside realms/microservicios 
 
 **Environment note (verified against the Nx CLI actually installed in this environment, v23.1.1 — do not assume an older Nx's defaults):** `create-nx-workspace`'s `--interactive` flag defaults to `true`, and this environment sets `CLAUDECODE=1`, which the CLI itself documents as entering its own "AI Agent Mode." Left implicit, this produces a generic fullstack demo workspace (`packages/api`, `packages/shared`, `packages/shop`) plus unwanted AI-agent-tool scaffolding (`.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.opencode/`, `AGENTS.md`, `CLAUDE.md`, `opencode.json`) instead of the intended layout. Every command below passes `--interactive=false` and `--aiAgents=none` explicitly to avoid this, and uses the bare `apps` preset (no demo template) followed by explicit per-app generators.
 
+**Critical: `--skipGit` is required.** `create-nx-workspace` performs its own internal `git` finalization step (it stages and commits the generated files itself, and has been observed using `git commit --amend`). `backoffice/` is a subdirectory of this already-existing git repository (the worktree), not a fresh standalone repo — without `--skipGit`, the tool's internal git step operates against *this* repo and can silently amend whatever commit is currently `HEAD` (this has actually happened twice while developing this plan, each time amending an unrelated prior commit to bundle in a stray `backoffice/README.md` — recovered both times via `git reflog` + `git reset`, no data lost, but it must not happen again). `--skipGit` disables the tool's git integration entirely; this task commits `backoffice/` itself, explicitly, in Step 8.
+
 - [ ] **Step 1: Generate the bare Nx workspace (no demo apps, no AI-agent scaffolding)**
 
 Run, from the repository root:
 
 ```bash
-npx create-nx-workspace@latest backoffice --preset=apps --interactive=false --aiAgents=none --nxCloud=skip --packageManager=npm --defaultBase=main
+npx create-nx-workspace@latest backoffice --preset=apps --interactive=false --aiAgents=none --nxCloud=skip --packageManager=npm --defaultBase=main --skipGit
 ```
 
 Expected: `backoffice/` created with `nx.json`, `package.json`, `tsconfig.base.json`, and **no** `apps/`, `packages/`, or dotfile AI-agent directories yet. If you see `packages/api`, `packages/shop`, `.claude/`, `.codex/`, `AGENTS.md`, or similar — stop, do not proceed, and report BLOCKED with the exact command and output; do not attempt to manually delete and improvise around it.
@@ -403,9 +405,10 @@ Expected: PASS — three separate `dist/` outputs under `backoffice/dist/`.
 
 - [ ] **Step 8: Commit**
 
-**Never use `git commit --amend`, `git rebase`, or `git reset` on any commit other than your own uncommitted work in this task.** This repository has prior commits from earlier tasks (Task 1, Task 2) already reviewed and closed — do not alter them under any circumstance, including accidentally reusing a previous commit message or running `git commit` without first confirming with `git status`/`git diff --cached` exactly what is staged.
+**Never use `git commit --amend`, `git rebase`, or `git reset` on any commit other than your own uncommitted work in this task.** This repository has prior commits from earlier tasks (Task 1, Task 2) already reviewed and closed — do not alter them under any circumstance. Record the current HEAD before committing, so you can immediately tell if anything unexpected touches it:
 
 ```bash
+git log -1 --oneline
 git add backoffice/
 git status
 ```
@@ -414,7 +417,10 @@ Review the `git status` output: it must show only new files under `backoffice/`,
 
 ```bash
 git commit -m "chore(backoffice): scaffold Nx workspace with shell, integration-mfe, bff"
+git log -2 --oneline
 ```
+
+The second `git log` must show your new commit on top, with the pre-commit `git log -1` output as its immediate parent, unchanged. If the parent commit's hash or subject differs from what you recorded before committing, something rewrote history — stop immediately and report BLOCKED rather than investigating further yourself.
 
 ---
 
