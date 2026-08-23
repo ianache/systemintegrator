@@ -351,10 +351,25 @@ git commit -m "feat(gateway): trust realms/Apps alongside realms/microservicios 
 Run, from the repository root:
 
 ```bash
-npx create-nx-workspace@latest backoffice --preset=apps --interactive=false --aiAgents=none --nxCloud=skip --packageManager=npm --defaultBase=main --skipGit
+npx create-nx-workspace@23.1.1 backoffice --preset=apps --interactive=false --aiAgents=none --nxCloud=skip --packageManager=npm --defaultBase=main --skipGit
 ```
 
-Expected: `backoffice/` created with `nx.json`, `package.json`, `tsconfig.base.json`, and **no** `apps/`, `packages/`, or dotfile AI-agent directories yet. If you see `packages/api`, `packages/shop`, `.claude/`, `.codex/`, `AGENTS.md`, or similar — stop, do not proceed, and report BLOCKED with the exact command and output; do not attempt to manually delete and improvise around it.
+Expected: `backoffice/` created with `nx.json`, `package.json`, `tsconfig.base.json`. The demo-workspace half of this gate (`packages/api`, `packages/shared`, `packages/shop`) should NOT appear — `--interactive=false` prevents that; `packages/` should contain only a `.gitkeep`. If `packages/api` or `packages/shop` DO appear, stop and report BLOCKED — that half of the gate failing means something more fundamental changed and needs investigation before proceeding.
+
+**Known, expected, and already-diagnosed:** in this Nx version, presets are implemented as GitHub template clones (verified: the tool logs `Mapping legacy preset 'apps' to template 'nrwl/empty-template'`), and `.claude/`, `.codex/`, `.cursor/`, `.gemini/`, `.opencode/`, `.agents/`, `AGENTS.md`, `CLAUDE.md`, `opencode.json` are checked into that template repo itself — `--aiAgents=none` only suppresses *generating additional* agent config, it cannot un-clone files the template already contains. **This is not a failure — do not report BLOCKED for these specific files appearing.** Proceed to Step 1b to remove them.
+
+- [ ] **Step 1b: Remove the AI-agent template artifacts**
+
+These files carry real behavioral/security risk if left in place: `CLAUDE.md`/`AGENTS.md` would be read as live instructions by a future Claude Code (or other agent) session opened against `backoffice/`, and `opencode.json` registers an `npx nx mcp` server that would auto-run in a future session. None of this is part of the Backoffice application — remove it:
+
+```bash
+cd backoffice
+rm -rf .claude .codex .cursor .gemini .opencode .agents
+rm -f AGENTS.md CLAUDE.md opencode.json
+cd ..
+```
+
+Leave `.github/`, `.vscode/`, `.prettierrc`, `.prettierignore`, `.editorconfig`, and `tsconfig.json` (alongside `tsconfig.base.json`) in place if the template generated them — these are inert generic project scaffolding (editor/CI config, not agent instructions or auto-registered tooling) and not worth fighting the template over.
 
 - [ ] **Step 2: Install the Angular and Nest plugins**
 
