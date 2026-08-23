@@ -19,6 +19,7 @@
 - All new frontend/BFF code lives under `backoffice/` in this repository, as an Nx workspace (ADR-0005).
 - The Backoffice is a single public origin: the BFF serves the built Shell and exposes the API under the same origin/port, avoiding cross-origin cookie issues (refines ADR-0006 for this phase; a dedicated static-asset host can be introduced later without changing this architecture).
 - No secrets (OIDC client secret, session secret) are committed; they flow through `.env`, the same pattern already used for `KEYCLOAK_ISSUER_URI`.
+- `gateway/` is a standalone Maven project (its own `spring-boot-starter-parent`), **not** a module of the root `pom.xml` (root only aggregates `application` and `e2e`). All Gateway Maven commands in this plan use `mvn -f gateway/pom.xml ...`, never `mvn -f gateway/pom.xml ...`.
 
 ---
 
@@ -158,7 +159,7 @@ class TrustedIssuersAuthenticationManagerResolverTest {
 
 - [ ] **Step 2: Run the test to verify it fails**
 
-Run: `mvn -pl gateway test -Dtest=TrustedIssuersAuthenticationManagerResolverTest`
+Run: `mvn -f gateway/pom.xml test -Dtest=TrustedIssuersAuthenticationManagerResolverTest`
 Expected: FAIL — compile error, `TrustedIssuersAuthenticationManagerResolver` does not exist.
 
 - [ ] **Step 3: Write the minimal implementation**
@@ -190,7 +191,7 @@ final class TrustedIssuersAuthenticationManagerResolver {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `mvn -pl gateway test -Dtest=TrustedIssuersAuthenticationManagerResolverTest`
+Run: `mvn -f gateway/pom.xml test -Dtest=TrustedIssuersAuthenticationManagerResolverTest`
 Expected: PASS — 3 tests, no network access (all issuers are locally-signed, no real HTTP call).
 
 - [ ] **Step 5: Commit**
@@ -256,7 +257,7 @@ Remove the now-unused imports `BadJwtException` and `ReactiveJwtDecoder` from th
 
 - [ ] **Step 3: Run the test to verify it fails**
 
-Run: `mvn -pl gateway test -Dtest=GatewaySecurityTest`
+Run: `mvn -f gateway/pom.xml test -Dtest=GatewaySecurityTest`
 Expected: FAIL — compile error, `GatewaySecurityConfig` has no `issuerAuthenticationManagerResolver` bean of type `ReactiveAuthenticationManagerResolver<ServerWebExchange>` for the test bean to back off from (Spring context fails to start because `ConditionalOnMissingBean` doesn't exist yet).
 
 - [ ] **Step 4: Implement `GatewaySecurityConfig`**
@@ -313,7 +314,7 @@ public class GatewaySecurityConfig {
 
 - [ ] **Step 5: Run the full Gateway test suite to verify it passes**
 
-Run: `mvn -pl gateway test`
+Run: `mvn -f gateway/pom.xml test`
 Expected: PASS — `GatewaySecurityTest`, `TenantClaimGatewayFilterTest`, `LocalJwtValidationTest`, `TrustedIssuersAuthenticationManagerResolverTest`, `GatewayApplicationTest` all green, no network access.
 
 - [ ] **Step 6: Verify Compose config still renders without secrets**
@@ -602,7 +603,7 @@ Run: `cd backoffice && npm install express-session connect-redis redis @nestjs/c
 ```typescript
 // backoffice/apps/bff/src/session/session.module.spec.ts
 import { Test } from '@nestjs/testing';
-import { ConfigModule } from '@nestjs/config';
+import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { Controller, Get, Req } from '@nestjs/common';
@@ -628,7 +629,7 @@ describe('configureSession', () => {
       controllers: [ProbeController],
     }).compile();
     app = moduleRef.createNestApplication();
-    configureSession(app, app.get('ConfigService'));
+    configureSession(app, app.get(ConfigService));
     await app.init();
   });
 
@@ -1169,6 +1170,8 @@ git commit -m "feat(bff): add session status endpoint, session guard, and logout
 
 Run: `cd backoffice && npm install http-proxy-middleware`
 
+**Design note:** the proxy is a Nest **controller** method guarded with `@UseGuards(SessionAuthGuard)` — not raw Express middleware registered via `MiddlewareConsumer`, and not a global `APP_GUARD`. Middleware that terminates the response (as `http-proxy-middleware` does) runs *before* Nest's guard pipeline, so a guard can never actually protect a middleware-only route; and `APP_GUARD` would apply to every route in the app, including `/auth/login`, causing a lockout. A controller-scoped guard avoids both problems and is what `overrideGuard` in the test below actually exercises.
+
 - [ ] **Step 2: Write the failing test**
 
 ```typescript
@@ -1204,46 +1207,56 @@ describe('GatewayProxyController (guard)', () => {
 Run: `npx nx test bff`
 Expected: FAIL — `GatewayProxyModule` does not exist.
 
-- [ ] **Step 4: Implement the proxy module**
+- [ ] **Step 4: Implement the proxy controller and module**
+
+```typescript
+// backoffice/apps/bff/src/gateway-proxy/gateway-proxy.controller.ts
+import { All, Controller, Req, Res, UseGuards } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import type { Request, Response } from 'express';
+import { createProxyMiddleware } from 'http-proxy-middleware';
+import { SessionAuthGuard } from '../auth/session-auth.guard';
+
+@Controller('bff/api')
+@UseGuards(SessionAuthGuard)
+export class GatewayProxyController {
+  private readonly proxy = createProxyMiddleware({
+    target: this.config.getOrThrow('GATEWAY_URI'),
+    pathRewrite: { '^/bff/api': '/api' },
+    on: {
+      proxyReq: (proxyReq, req: any) => {
+        const accessToken = req.session?.tokens?.access_token;
+        if (accessToken) proxyReq.setHeader('Authorization', `Bearer ${accessToken}`);
+      },
+    },
+  });
+
+  constructor(private readonly config: ConfigService) {}
+
+  @All('*')
+  forward(@Req() req: Request, @Res() res: Response) {
+    this.proxy(req, res, () => undefined);
+  }
+}
+```
 
 ```typescript
 // backoffice/apps/bff/src/gateway-proxy/gateway-proxy.module.ts
-import { MiddlewareConsumer, Module, NestModule } from '@nestjs/common';
-import { ConfigModule, ConfigService } from '@nestjs/config';
-import { createProxyMiddleware } from 'http-proxy-middleware';
-import { SessionAuthGuard } from '../auth/session-auth.guard';
-import { APP_GUARD } from '@nestjs/core';
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { GatewayProxyController } from './gateway-proxy.controller';
 
 @Module({
   imports: [ConfigModule],
-  providers: [{ provide: APP_GUARD, useClass: SessionAuthGuard }],
+  controllers: [GatewayProxyController],
 })
-export class GatewayProxyModule implements NestModule {
-  constructor(private readonly config: ConfigService) {}
-
-  configure(consumer: MiddlewareConsumer) {
-    consumer
-      .apply(
-        createProxyMiddleware({
-          target: this.config.getOrThrow('GATEWAY_URI'),
-          pathRewrite: { '^/bff/api': '/api' },
-          on: {
-            proxyReq: (proxyReq, req: any) => {
-              const accessToken = req.session?.tokens?.access_token;
-              if (accessToken) proxyReq.setHeader('Authorization', `Bearer ${accessToken}`);
-            },
-          },
-        }),
-      )
-      .forRoutes('/bff/api');
-  }
-}
+export class GatewayProxyModule {}
 ```
 
 - [ ] **Step 5: Run the test to verify it passes**
 
 Run: `npx nx test bff`
-Expected: PASS. (`SessionAuthGuard` applied via `APP_GUARD` returns `false` → Nest responds `403 Forbidden` for the unauthenticated request.)
+Expected: PASS. (`SessionAuthGuard`, overridden in the test, runs as part of Nest's guard pipeline for the `GatewayProxyController` route and returns `false` → Nest responds `403 Forbidden` without ever invoking the proxy.)
 
 - [ ] **Step 6: Register `GatewayProxyModule` in `AppModule` and commit**
 
