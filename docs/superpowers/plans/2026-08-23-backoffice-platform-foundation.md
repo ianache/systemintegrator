@@ -457,11 +457,25 @@ The second `git log` must show your new commit on top, with the pre-commit `git 
 **Interfaces:**
 - Produces: `MicroUiRouteManifest` type and `buildMicroUiRoute(manifest: MicroUiRouteManifest): Route` (Angular `Route`), consumed by Task 5's Shell routing.
 
-- [ ] **Step 1: Generate the library**
+**Dependency note (moved up from Task 5):** Step 4's implementation imports `@angular-architects/native-federation` for `loadRemoteModule`. That package was originally planned to be installed in Task 5, but this task needs it at compile time — install it here instead, so Task 4 is self-contained. Task 5 no longer installs it (already present).
+
+- [ ] **Step 1: Install `@angular-architects/native-federation`**
+
+Run, from `backoffice/`:
+
+```bash
+npm install @angular-architects/native-federation@latest
+```
+
+The installed Angular version in this workspace is `~22.0.4` (confirm with `grep '"@angular/core"' package.json` if in doubt) — `@latest` should resolve a compatible release, since this package tracks Angular's major version closely. If `npm install` reports a peer-dependency conflict with the installed Angular version, stop and report BLOCKED with the exact error rather than forcing it with `--legacy-peer-deps` or `--force`.
+
+- [ ] **Step 2: Generate the library**
 
 Run: `cd backoffice && npx nx g @nx/js:lib libs/shell-contracts --bundler=none --unitTestRunner=jest`
 
-- [ ] **Step 2: Write the failing test**
+**Known necessary fix (same pattern as Task 3's `apps/bff/tsconfig.json`):** the generated `libs/shell-contracts/tsconfig.json` will likely be missing a `types` array, which breaks Jest's parsing of `jest.config.cts` before any test runs. If `npx nx test shell-contracts` fails with a TS error pointing at `jest.config.cts` before you've even written Step 4's code, add `"types": ["node"]` to `libs/shell-contracts/tsconfig.json`'s `compilerOptions` (scoped to this library only, matching how `apps/bff/tsconfig.json` was already fixed in Task 3) and retry.
+
+- [ ] **Step 3: Write the failing test**
 
 ```typescript
 // backoffice/libs/shell-contracts/src/lib/micro-ui-route.spec.ts
@@ -482,12 +496,12 @@ describe('buildMicroUiRoute', () => {
 });
 ```
 
-- [ ] **Step 3: Run the test to verify it fails**
+- [ ] **Step 4: Run the test to verify it fails**
 
 Run: `npx nx test shell-contracts`
 Expected: FAIL — `micro-ui-route` module does not exist.
 
-- [ ] **Step 4: Write the minimal implementation**
+- [ ] **Step 5: Write the minimal implementation**
 
 ```typescript
 // backoffice/libs/shell-contracts/src/lib/micro-ui-route.ts
@@ -520,15 +534,15 @@ export function buildMicroUiRoute(manifest: MicroUiRouteManifest): Route {
 export * from './lib/micro-ui-route';
 ```
 
-- [ ] **Step 5: Run the test to verify it passes**
+- [ ] **Step 6: Run the test to verify it passes**
 
 Run: `npx nx test shell-contracts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
-git add backoffice/libs/shell-contracts
+git add backoffice/libs/shell-contracts backoffice/package.json backoffice/package-lock.json
 git commit -m "feat(shell-contracts): add MicroUI route manifest contract"
 ```
 
@@ -545,17 +559,15 @@ git commit -m "feat(shell-contracts): add MicroUI route manifest contract"
 - Consumes: `buildMicroUiRoute` from Task 4.
 - Produces: a running Shell at `http://localhost:4201` that lazily loads `integration-mfe` at `http://localhost:4202/remoteEntry.json` under route `/integration`.
 
-- [ ] **Step 1: Install Native Federation and initialize the host**
+- [ ] **Step 1: Initialize the Shell as a dynamic host**
 
-Run:
+`@angular-architects/native-federation` is already installed (moved to Task 4, since `shell-contracts` needed it at compile time). Run, from `backoffice/`:
 
 ```bash
-cd backoffice
-npm install @angular-architects/native-federation
 npx ng g @angular-architects/native-federation:init --project=shell --port=4201 --type=dynamic-host
 ```
 
-Expected: `backoffice/apps/shell/federation.config.js` created; `project.json` for `shell` gains federation build/serve targets.
+Expected: `backoffice/apps/shell/federation.config.js` created; `project.json` for `shell` gains federation build/serve targets, and its `serve` target's default port should become `4201` (confirm this — see the note on Step 6 below; Nx's default Angular app scaffold puts both `shell` and `integration-mfe` on port `4200`, and this generator's `--port` flag is what's expected to resolve that collision).
 
 - [ ] **Step 2: Initialize integration-mfe as a remote**
 
@@ -622,6 +634,8 @@ test('shell loads the integration MicroUI via Native Federation', async ({ page 
 ```
 
 - [ ] **Step 6: Run the e2e test to verify it fails**
+
+**Before running this, confirm `shell` and `integration-mfe` are configured to serve on different ports** (`4201` and `4202` respectively, matching the `--port` flags from Steps 1-2 and the URL used in Step 4). Check each project's `project.json` `serve` target. Nx's default Angular app scaffold puts every app's `serve` target on port `4200` by default — if the federation `:init` generator did not override this for one or both projects, set it explicitly (e.g. `"options": { "port": 4201 }` on `shell`'s `serve` target, `4202` on `integration-mfe`'s) before starting both dev servers, or the second one to start will fail to bind and the e2e test will get confusing connection errors instead of a clean federation-wiring failure.
 
 Run (two terminals, or an Nx `run-many` serve target if configured): `npx nx serve integration-mfe & npx nx serve shell & npx nx e2e shell-e2e`
 Expected: FAIL — route `/integration` does not resolve yet (federation wiring incomplete) or `remoteEntry.json` not found.
