@@ -10,9 +10,11 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Import;
 import org.springframework.http.HttpHeaders;
 import org.springframework.test.context.ActiveProfiles;
-import org.springframework.security.oauth2.jwt.BadJwtException;
-import org.springframework.security.oauth2.jwt.ReactiveJwtDecoder;
+import org.springframework.security.authentication.ReactiveAuthenticationManagerResolver;
+import org.springframework.security.oauth2.core.OAuth2AuthenticationException;
+import org.springframework.security.oauth2.core.OAuth2Error;
 import org.springframework.test.web.reactive.server.WebTestClient;
+import org.springframework.web.server.ServerWebExchange;
 import reactor.core.publisher.Mono;
 
 import static org.springframework.security.test.web.reactive.server.SecurityMockServerConfigurers.mockJwt;
@@ -20,7 +22,10 @@ import static org.springframework.security.test.web.reactive.server.SecurityMock
 
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.MOCK,
-        properties = "KEYCLOAK_ISSUER_URI=https://issuer.example.test/realms/integration")
+        properties = {
+                "KEYCLOAK_ISSUER_URI=https://issuer.example.test/realms/integration",
+                "spring.main.allow-bean-definition-overriding=true"
+        })
 @ActiveProfiles("qa-e2e")
 @Import(GatewaySecurityTest.TestSecurityConfiguration.class)
 class GatewaySecurityTest {
@@ -73,8 +78,8 @@ class GatewaySecurityTest {
     static class TestSecurityConfiguration {
 
         @Bean
-        ReactiveJwtDecoder jwtDecoder() {
-            return token -> Mono.error(new BadJwtException("invalid test token"));
+        ReactiveAuthenticationManagerResolver<ServerWebExchange> issuerAuthenticationManagerResolver() {
+            return exchange -> Mono.error(new OAuth2AuthenticationException(new OAuth2Error("invalid_token")));
         }
     }
 }
