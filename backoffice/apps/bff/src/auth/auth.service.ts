@@ -1,6 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import * as client from 'openid-client';
+import { SessionTokens } from './session-types';
 
 export interface AuthorizationRequest {
   url: string;
@@ -49,5 +50,49 @@ export class AuthService {
       state,
     });
     return { url: url.href, codeVerifier, state };
+  }
+
+  async completeAuthorizationCallback(
+    code: string,
+    state: string,
+    codeVerifier: string,
+  ): Promise<SessionTokens> {
+    const callbackUrl = new URL(
+      `${this.config.getOrThrow('BFF_PUBLIC_URL')}/auth/callback`,
+    );
+    callbackUrl.searchParams.set('code', code);
+    callbackUrl.searchParams.set('state', state);
+
+    const tokenSet = await client.authorizationCodeGrant(
+      await this.getConfiguration(),
+      callbackUrl,
+      {
+        expectedState: state,
+        pkceCodeVerifier: codeVerifier,
+        idTokenExpected: true,
+      },
+    );
+    const claims = tokenSet.claims();
+    const tenantId = claims.tenant_id;
+    const expiresAt = claims.exp;
+
+    if (
+      typeof tokenSet.access_token !== 'string' ||
+      typeof tokenSet.id_token !== 'string' ||
+      typeof tenantId !== 'string' ||
+      typeof expiresAt !== 'number'
+    ) {
+      throw new Error('OIDC token response is missing required session claims');
+    }
+
+    return {
+      access_token: tokenSet.access_token,
+      id_token: tokenSet.id_token,
+      ...(typeof tokenSet.refresh_token === 'string'
+        ? { refresh_token: tokenSet.refresh_token }
+        : {}),
+      tenantId,
+      expiresAt,
+    };
   }
 }

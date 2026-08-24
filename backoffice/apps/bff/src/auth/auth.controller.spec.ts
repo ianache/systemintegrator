@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { AuthController } from './auth.controller';
 import { AuthService } from './auth.service';
+import { SessionTokens } from './session-types';
 
 describe('AuthController.login', () => {
   it('stores the PKCE verifier and state in the session and redirects to Keycloak', async () => {
@@ -26,5 +27,33 @@ describe('AuthController.login', () => {
     expect(res.redirect).toHaveBeenCalledWith(
       'https://oauth2.qa.comsatel.com.pe/realms/Apps/protocol/openid-connect/auth?...',
     );
+  });
+
+  it('returns only a safe authenticated session projection', () => {
+    const authService = {};
+    const controller = new AuthController(authService as AuthService);
+    const req: any = {
+      session: {
+        tokens: {
+          access_token: 'private-access-token',
+          refresh_token: 'private-refresh-token',
+          id_token: 'private-id-token',
+          tenantId: 'tenant-a',
+          expiresAt: 1893456000,
+        } satisfies SessionTokens,
+      },
+    };
+
+    expect(controller.session(req)).toEqual({
+      authenticated: true,
+      tenantId: 'tenant-a',
+      expiresAt: 1893456000,
+    });
+  });
+
+  it('returns an anonymous projection when the session has no tokens', () => {
+    const controller = new AuthController({} as AuthService);
+
+    expect(controller.session({ session: {} } as any)).toEqual({ authenticated: false });
   });
 });
