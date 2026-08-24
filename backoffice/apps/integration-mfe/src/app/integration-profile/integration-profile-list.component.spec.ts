@@ -75,7 +75,7 @@ describe('IntegrationProfileListComponent', () => {
     expect(assign).toHaveBeenCalledWith('/auth/login');
   });
 
-  it('shows a generic unavailable state for a 502 response', () => {
+  it('retries a 502 profile request from the unavailable state', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 
@@ -88,5 +88,16 @@ describe('IntegrationProfileListComponent', () => {
     const alert = fixture.nativeElement.querySelector('[role="alert"]')?.textContent;
     expect(alert).toContain('temporarily unavailable');
     expect(alert).not.toContain('Gateway failure details');
+
+    const retryButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
+    expect(retryButton.textContent).toContain('Retry');
+    retryButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('Loading integration profiles');
+    http.expectOne('/bff/api/v1/integration-profiles').flush([]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('No integration profiles are available');
   });
 });

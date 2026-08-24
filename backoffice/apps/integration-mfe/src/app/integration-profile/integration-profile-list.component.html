@@ -35,5 +35,6 @@
     <p role="alert">Your session is no longer active. Redirecting to sign in.</p>
   } @else {
     <p role="alert">Integration profiles are temporarily unavailable. Please try again later.</p>
+    <button type="button" (click)="retry()">Retry</button>
   }
 </section>

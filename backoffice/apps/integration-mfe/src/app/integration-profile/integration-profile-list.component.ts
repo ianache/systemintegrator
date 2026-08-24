@@ -18,6 +18,11 @@ export class IntegrationProfileListComponent implements OnInit {
   readonly state = signal<ProfileListState>('loading');
 
   ngOnInit(): void {
+    this.retry();
+  }
+
+  retry(): void {
+    this.state.set('loading');
     this.profileService.list().subscribe({
       next: (profiles) => {
         this.profiles.set(profiles);
