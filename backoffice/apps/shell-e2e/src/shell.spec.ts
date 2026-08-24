@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-test('shell loads the integration MicroUI via Native Federation', async ({ page }) => {
+test('integration route renders the Native Federation remote marker', async ({ page }) => {
   await page.goto('/integration');
   // The Shell resolves the remote at runtime: it fetches
   // http://localhost:4202/remoteEntry.json, extends the import map, then imports
