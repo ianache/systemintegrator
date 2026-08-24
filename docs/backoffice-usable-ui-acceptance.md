@@ -21,11 +21,16 @@ From `backoffice/`, start the credential-free structural browser checks:
 npx nx e2e shell-e2e
 ```
 
-For a single-origin manual check, build the Shell and BFF, start Redis and the authorized Gateway/identity-provider dependencies, provide private BFF configuration through the approved secret mechanism, then start the BFF:
+For a single-origin manual check, build the Shell, Integration MicroUI, and BFF. Task 6 packages the Shell into `dist/apps/bff/shell-static`, so the BFF serves the Shell and its API from `http://localhost:4000`. The federated Integration MicroUI is intentionally packaged separately at `dist/apps/integration-mfe/browser`; it is not copied into the BFF output. Keep that built remote available at `http://localhost:4202/remoteEntry.json`, which is the URL configured by the Shell's `/integration` route. Start Redis and the authorized Gateway/identity-provider dependencies, provide private BFF configuration through the approved secret mechanism, then run the remote and BFF in separate terminals:
 
 ```powershell
 npx nx run shell:build
+npx nx run integration-mfe:build
 npx nx run bff:build
+npx nx run integration-mfe:serve-static --port=4202
+```
+
+```powershell
 $env:PORT = '4000'
 $env:BFF_PUBLIC_URL = 'http://localhost:4000'
 $env:REDIS_URL = 'redis://localhost:6379'
@@ -39,7 +44,7 @@ node dist/apps/bff/main.js
 - [ ] Request `GET /auth/session` without a session. It returns `200` with `{"authenticated":false}` and does not include access or refresh tokens.
 - [ ] Select **Log in**. The browser navigates to `/auth/login`, which redirects to the authorized Apps Keycloak realm. Complete login only with an approved test account; do not record credentials or tokens.
 - [ ] After the callback returns to `/`, verify the header says **Signed in** and displays the authenticated tenant identifier.
-- [ ] Open `/integration`. The Integration MicroUI loads and calls `GET /bff/api/v1/integration-profiles`; an authenticated valid session receives `200` with only that tenant's profiles.
+- [ ] Open `/integration`. The Integration MicroUI loads from `http://localhost:4202/remoteEntry.json` and calls `GET /bff/api/v1/integration-profiles`; an authenticated valid session receives `200` with only that tenant's profiles.
 - [ ] Check list states using approved tenant data or controlled downstream responses: populated list (`200` with entries), empty list (`200` with `[]`), session-expired (`401`), forbidden (`403`), and unavailable downstream (`502`). No edit, create, delete, or tenant-switch action is present.
 - [ ] Tenant isolation: while signed in as tenant A, send a browser request with an altered `X-Tenant-ID` header and confirm it cannot change the profiles returned. Repeat with authorized tenant B and confirm only tenant B data appears. Do not use copied bearer tokens to perform this check.
 - [ ] Select **Log out**. The browser navigates through `/auth/logout` and returns to the anonymous Shell. A subsequent `GET /bff/api/v1/integration-profiles` returns `401`; the old browser session no longer grants access.

@@ -56,14 +56,14 @@ export default defineConfig({
     {
       command: 'npx nx run integration-mfe:serve',
       url: 'http://localhost:4202/remoteEntry.json',
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 180_000,
       cwd: workspaceRoot,
     },
     {
       command: 'npx nx run shell:serve',
       url: 'http://localhost:4201',
-      reuseExistingServer: true,
+      reuseExistingServer: false,
       timeout: 180_000,
       cwd: workspaceRoot,
     },
