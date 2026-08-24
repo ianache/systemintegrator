@@ -1,0 +1,25 @@
+:host {
+  background: #f0f4f8;
+  display: block;
+  padding: 1rem;
+}
+
+nav {
+  display: grid;
+  gap: 0.25rem;
+}
+
+a {
+  border-radius: 0.25rem;
+  color: #243b53;
+  padding: 0.625rem 0.75rem;
+  text-decoration: none;
+}
+
+a:hover,
+a:focus-visible,
+a.active {
+  background: #d9e2ec;
+  color: #102a43;
+  font-weight: 600;
+}

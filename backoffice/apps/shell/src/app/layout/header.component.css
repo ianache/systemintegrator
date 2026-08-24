@@ -1,0 +1,47 @@
+:host {
+  display: block;
+}
+
+.header {
+  align-items: center;
+  background: #102a43;
+  color: #f0f4f8;
+  display: flex;
+  gap: 1rem;
+  justify-content: space-between;
+  min-height: 4rem;
+  padding: 0 1.5rem;
+}
+
+.brand {
+  color: inherit;
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.session {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.75rem;
+}
+
+.tenant {
+  color: #d9e2ec;
+}
+
+button {
+  background: #f0f4f8;
+  border: 0;
+  border-radius: 0.25rem;
+  color: #102a43;
+  cursor: pointer;
+  font: inherit;
+  padding: 0.5rem 0.75rem;
+}
+
+button:hover,
+button:focus-visible {
+  background: #bcccdc;
+}

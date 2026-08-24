@@ -1,0 +1,32 @@
+.shell {
+  background: #fff;
+  color: #102a43;
+  min-height: 100vh;
+}
+
+.shell-body {
+  display: grid;
+  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
+  min-height: calc(100vh - 4rem);
+}
+
+main {
+  padding: clamp(1rem, 3vw, 2rem);
+}
+
+:host ::ng-deep .welcome {
+  max-width: 48rem;
+}
+
+:host ::ng-deep .eyebrow {
+  color: #486581;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+@media (max-width: 48rem) {
+  .shell-body {
+    grid-template-columns: 1fr;
+  }
+}
