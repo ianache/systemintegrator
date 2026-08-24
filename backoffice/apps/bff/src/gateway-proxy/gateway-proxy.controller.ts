@@ -4,6 +4,7 @@ import {
   ExecutionContext,
   Get,
   Injectable,
+  Req,
   UnauthorizedException,
   UseGuards,
 } from '@nestjs/common';
@@ -33,7 +34,7 @@ export class GatewayProxyController {
   constructor(private readonly gatewayProxy: GatewayProxyService) {}
 
   @Get('integration-profiles')
-  getIntegrationProfiles(request: AuthenticatedRequest) {
+  getIntegrationProfiles(@Req() request: AuthenticatedRequest) {
     return this.gatewayProxy.getIntegrationProfiles(request.session.tokens!.access_token!);
   }
 }

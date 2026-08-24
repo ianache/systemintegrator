@@ -52,6 +52,7 @@ describe('Gateway profile proxy', () => {
       .expect({
         statusCode: HttpStatus.UNAUTHORIZED,
         message: 'Authentication required',
+        error: 'Unauthorized',
       });
   });
 
@@ -74,16 +75,16 @@ describe('Gateway profile proxy', () => {
   });
 
   it.each([
-    [HttpStatus.UNAUTHORIZED, 'Gateway rejected the session credentials'],
-    [HttpStatus.FORBIDDEN, 'Gateway denied access to integration profiles'],
-    [HttpStatus.BAD_GATEWAY, 'Gateway is unavailable'],
-  ])('maps downstream failure to a stable browser error (%i)', async (status, message) => {
+    [HttpStatus.UNAUTHORIZED, 'Gateway rejected the session credentials', 'Unauthorized'],
+    [HttpStatus.FORBIDDEN, 'Gateway denied access to integration profiles', 'Forbidden'],
+    [HttpStatus.BAD_GATEWAY, 'Gateway is unavailable', 'Bad Gateway'],
+  ])('maps downstream failure to a stable browser error (%i)', async (status, message, error) => {
     get.mockRejectedValue({ response: status === HttpStatus.BAD_GATEWAY ? undefined : { status } });
 
     await request(app.getHttpServer())
       .get('/api/bff/api/v1/integration-profiles')
       .set('Cookie', 'session=authenticated')
       .expect(status)
-      .expect({ statusCode: status, message });
+      .expect({ statusCode: status, message, error });
   });
 });
