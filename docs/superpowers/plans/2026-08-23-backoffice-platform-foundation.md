@@ -954,6 +954,8 @@ git commit -m "feat(bff): add OIDC login redirect with PKCE"
 - Consumes: `req.session.oidc` written by Task 7.
 - Produces: `req.session.tokens = { access_token, refresh_token, id_token, expires_at }`, consumed by Task 9 (session status) and Task 10 (authenticated proxy).
 
+**Note (verified in Task 7):** Task 7 added `backoffice/apps/bff/src/types/express-session.d.ts`, a real type augmentation for `req.session` (the brief's original `(req.session as any)` casts don't compile under this workspace's `tsconfig` `types` restriction, and are unnecessary now). Extend that file's interface with the `tokens` shape above rather than reintroducing `as any`.
+
 - [ ] **Step 1: Write the failing test**
 
 ```typescript
