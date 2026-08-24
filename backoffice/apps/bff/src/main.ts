@@ -21,6 +21,10 @@ async function bootstrap() {
       { path: 'auth/callback', method: RequestMethod.GET },
       { path: 'auth/session', method: RequestMethod.GET },
       { path: 'auth/logout', method: RequestMethod.GET },
+      {
+        path: 'bff/api/v1/integration-profiles',
+        method: RequestMethod.GET,
+      },
     ],
   });
   configureSession(app, readBackofficeConfig(app.get(ConfigService)));

@@ -1,4 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express';
+import { HttpStatus, RequestMethod } from '@nestjs/common';
 import { Test } from '@nestjs/testing';
 import { existsSync, mkdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
@@ -28,6 +29,10 @@ describe('BFF static Shell fallback', () => {
         { path: 'auth/callback', method: 'GET' },
         { path: 'auth/session', method: 'GET' },
         { path: 'auth/logout', method: 'GET' },
+        {
+          path: 'bff/api/v1/integration-profiles',
+          method: RequestMethod.GET,
+        },
       ],
     });
     configureStaticShell(app);
@@ -68,8 +73,13 @@ describe('BFF static Shell fallback', () => {
   it('does not serve Shell HTML for an anonymous BFF API request', async () => {
     await request(app.getHttpServer())
       .get('/bff/api/v1/integration-profiles')
-      .expect(404)
-      .expect('Content-Type', /json/);
+      .expect(HttpStatus.UNAUTHORIZED)
+      .expect('Content-Type', /json/)
+      .expect({
+        statusCode: HttpStatus.UNAUTHORIZED,
+        message: 'Authentication required',
+        error: 'Unauthorized',
+      });
   });
 
   it('does not serve Shell HTML for an auth route', async () => {

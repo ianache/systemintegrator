@@ -36,7 +36,11 @@ describe('Gateway profile proxy', () => {
       }
       next();
     });
-    app.setGlobalPrefix('api');
+    app.setGlobalPrefix('api', {
+      exclude: [
+        { path: 'bff/api/v1/integration-profiles', method: 'GET' },
+      ],
+    });
     await app.init();
   });
 
@@ -47,7 +51,7 @@ describe('Gateway profile proxy', () => {
 
   it('rejects an anonymous browser session', async () => {
     await request(app.getHttpServer())
-      .get('/api/bff/api/v1/integration-profiles')
+      .get('/bff/api/v1/integration-profiles')
       .expect(HttpStatus.UNAUTHORIZED)
       .expect({
         statusCode: HttpStatus.UNAUTHORIZED,
@@ -62,7 +66,7 @@ describe('Gateway profile proxy', () => {
     >);
 
     const response = await request(app.getHttpServer())
-      .get('/api/bff/api/v1/integration-profiles')
+      .get('/bff/api/v1/integration-profiles')
       .set('X-Tenant-ID', 'browser-controlled-tenant')
       .set('Cookie', 'session=authenticated')
       .expect(HttpStatus.OK);
@@ -82,7 +86,7 @@ describe('Gateway profile proxy', () => {
     get.mockRejectedValue({ response: status === HttpStatus.BAD_GATEWAY ? undefined : { status } });
 
     await request(app.getHttpServer())
-      .get('/api/bff/api/v1/integration-profiles')
+      .get('/bff/api/v1/integration-profiles')
       .set('Cookie', 'session=authenticated')
       .expect(status)
       .expect({ statusCode: status, message, error });

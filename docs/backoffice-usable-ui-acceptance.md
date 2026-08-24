@@ -42,6 +42,7 @@ node dist/apps/bff/main.js
 
 - [ ] Open `http://localhost:4000/`. It returns Shell HTML from the BFF origin and shows the Backoffice header, primary navigation, welcome content, and an anonymous status; the generated Nx welcome component is absent.
 - [ ] Request `GET /auth/session` without a session. It returns `200` with `{"authenticated":false}` and does not include access or refresh tokens.
+- [ ] Request the exact public `GET /bff/api/v1/integration-profiles` path without a session. It returns JSON `401` with `"Authentication required"`, rather than Shell HTML or a `404`.
 - [ ] Select **Log in**. The browser navigates to `/auth/login`, which redirects to the authorized Apps Keycloak realm. Complete login only with an approved test account; do not record credentials or tokens.
 - [ ] After the callback returns to `/`, verify the header says **Signed in** and displays the authenticated tenant identifier.
 - [ ] Open `/integration`. The Integration MicroUI loads from `http://localhost:4202/remoteEntry.json` and calls `GET /bff/api/v1/integration-profiles`; an authenticated valid session receives `200` with only that tenant's profiles.
