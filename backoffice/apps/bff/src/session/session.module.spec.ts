@@ -3,6 +3,7 @@ import { ConfigModule, ConfigService } from '@nestjs/config';
 import * as request from 'supertest';
 import { INestApplication } from '@nestjs/common';
 import { Controller, Get, Req } from '@nestjs/common';
+import { readBackofficeConfig } from '../config/backoffice-config';
 import { configureSession } from './configure-session';
 
 @Controller()
@@ -18,14 +19,21 @@ describe('configureSession', () => {
   let app: INestApplication;
 
   beforeAll(async () => {
-    process.env.BFF_SESSION_SECRET = 'test-secret';
-    process.env.REDIS_URL = 'redis://localhost:6379';
+    Object.assign(process.env, {
+      KEYCLOAK_APPS_ISSUER_URI: 'https://issuer.example/realms/Apps',
+      BFF_OIDC_CLIENT_ID: 'backoffice',
+      BFF_OIDC_CLIENT_SECRET: 'client-secret',
+      BFF_SESSION_SECRET: 'test-secret',
+      BFF_PUBLIC_URL: 'http://localhost:4000',
+      GATEWAY_URI: 'http://localhost:8081',
+      REDIS_URL: 'redis://localhost:6379',
+    });
     const moduleRef = await Test.createTestingModule({
       imports: [ConfigModule.forRoot({ isGlobal: true })],
       controllers: [ProbeController],
     }).compile();
     app = moduleRef.createNestApplication();
-    configureSession(app, app.get(ConfigService));
+    configureSession(app, readBackofficeConfig(app.get(ConfigService)));
     await app.init();
   });
 
