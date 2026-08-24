@@ -1,20 +1,25 @@
 import { TestBed } from '@angular/core/testing';
+import { provideRouter } from '@angular/router';
 import { App } from './app';
-import { NxWelcome } from './nx-welcome';
+import { SessionService } from './session/session.service';
 
 describe('App', () => {
   beforeEach(async () => {
     await TestBed.configureTestingModule({
-      imports: [App, NxWelcome],
+      imports: [App],
+      providers: [
+        provideRouter([]),
+        { provide: SessionService, useValue: { refresh: () => undefined } },
+      ],
     }).compileComponents();
   });
 
-  it('should render title', async () => {
+  it('should render the shell layout', async () => {
     const fixture = TestBed.createComponent(App);
     await fixture.whenStable();
     const compiled = fixture.nativeElement as HTMLElement;
-    expect(compiled.querySelector('h1')?.textContent).toContain(
-      'Welcome shell'
-    );
+    expect(compiled.querySelector('app-header')).not.toBeNull();
+    expect(compiled.querySelector('app-sidebar')).not.toBeNull();
+    expect(compiled.querySelector('main#main-content')).not.toBeNull();
   });
 });
