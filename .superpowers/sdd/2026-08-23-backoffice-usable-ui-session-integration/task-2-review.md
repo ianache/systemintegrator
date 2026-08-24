@@ -4,7 +4,7 @@
 
 **PASS WITH NOTES**
 
-The public-path finding is resolved. The BFF keeps its legacy global `/api`
+The public-path finding is resolved by `4109900`. The BFF keeps its legacy global `/api`
 prefix for other controllers while explicitly excluding the four approved
 browser-facing authentication routes: `/auth/login`, `/auth/callback`,
 `/auth/session`, and `/auth/logout`. This aligns the actual Nest route mapping

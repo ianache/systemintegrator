@@ -8,7 +8,7 @@ Implemented the OIDC session lifecycle and corrected its public-route wiring.
 
 Initial implementation: `937f235 feat(backoffice): complete OIDC session lifecycle`.
 
-Public-route remediation: `fix(backoffice): expose public auth paths`.
+Public-route remediation: `4109900 fix(backoffice): expose public auth paths`.
 
 ## Changed files
 
