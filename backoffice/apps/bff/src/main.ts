@@ -6,12 +6,14 @@
 import { Logger, RequestMethod } from '@nestjs/common';
 import { NestFactory } from '@nestjs/core';
 import { ConfigService } from '@nestjs/config';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { AppModule } from './app/app.module';
 import { readBackofficeConfig } from './config/backoffice-config';
 import { configureSession } from './session/configure-session';
+import { configureStaticShell } from './app/static-shell';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
   const globalPrefix = 'api';
   app.setGlobalPrefix(globalPrefix, {
     exclude: [
@@ -22,6 +24,8 @@ async function bootstrap() {
     ],
   });
   configureSession(app, readBackofficeConfig(app.get(ConfigService)));
+  await app.init();
+  configureStaticShell(app);
   const port = process.env.PORT || 3000;
   await app.listen(port);
   Logger.log(
