@@ -30,8 +30,8 @@ describe('BFF static Shell fallback', () => {
         { path: 'auth/logout', method: 'GET' },
       ],
     });
-    await app.init();
     configureStaticShell(app);
+    await app.init();
   });
 
   afterAll(async () => {
@@ -49,12 +49,27 @@ describe('BFF static Shell fallback', () => {
       .expect(/Backoffice Shell/);
   });
 
+  it('serves the Shell entry point for the integration SPA route', async () => {
+    await request(app.getHttpServer())
+      .get('/integration')
+      .expect(200)
+      .expect('Content-Type', /html/)
+      .expect(/Backoffice Shell/);
+  });
+
   it('does not shadow the prefixed BFF API route', async () => {
     await request(app.getHttpServer())
       .get('/api')
       .expect(200)
       .expect('Content-Type', /json/)
       .expect({ message: 'Hello API' });
+  });
+
+  it('does not serve Shell HTML for an anonymous BFF API request', async () => {
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/integration-profiles')
+      .expect(404)
+      .expect('Content-Type', /json/);
   });
 
   it('does not serve Shell HTML for an auth route', async () => {

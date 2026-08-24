@@ -24,8 +24,8 @@ async function bootstrap() {
     ],
   });
   configureSession(app, readBackofficeConfig(app.get(ConfigService)));
-  await app.init();
   configureStaticShell(app);
+  await app.init();
   const port = process.env.PORT || 3000;
   await app.listen(port);
   Logger.log(
