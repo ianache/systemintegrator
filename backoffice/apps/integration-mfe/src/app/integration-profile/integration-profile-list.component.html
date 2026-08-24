@@ -1,0 +1,39 @@
+<section aria-labelledby="integration-profiles-heading">
+  <h1 id="integration-profiles-heading">Integration Profiles</h1>
+
+  @if (state() === 'loading') {
+    <p aria-live="polite">Loading integration profiles…</p>
+  } @else if (state() === 'ready') {
+    <table>
+      <caption>Configured integration profiles</caption>
+      <thead>
+        <tr>
+          <th scope="col">ID</th>
+          <th scope="col">Business domain</th>
+          <th scope="col">External source</th>
+          <th scope="col">Sync direction</th>
+          <th scope="col">Status</th>
+          <th scope="col">Version</th>
+        </tr>
+      </thead>
+      <tbody>
+        @for (profile of profiles(); track profile.id) {
+          <tr>
+            <td>{{ profile.id }}</td>
+            <td>{{ profile.businessDomain }}</td>
+            <td>{{ profile.externalSource }}</td>
+            <td>{{ profile.syncDirection }}</td>
+            <td>{{ profile.active ? 'Active' : 'Inactive' }}</td>
+            <td>{{ profile.version }}</td>
+          </tr>
+        }
+      </tbody>
+    </table>
+  } @else if (state() === 'empty') {
+    <p>No integration profiles are available.</p>
+  } @else if (state() === 'session-expired') {
+    <p role="alert">Your session is no longer active. Redirecting to sign in.</p>
+  } @else {
+    <p role="alert">Integration profiles are temporarily unavailable. Please try again later.</p>
+  }
+</section>
