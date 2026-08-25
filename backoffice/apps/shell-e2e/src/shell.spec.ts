@@ -8,8 +8,5 @@ test('integration route renders the Native Federation remote marker', async ({ p
   // well past Playwright's 5s default (Firefox is the slowest here), so give the
   // assertion room. The assertion itself still only passes if the remote really
   // rendered — this text exists only in integration-mfe.
-  await expect(page.getByTestId('integration-mfe-loaded')).toHaveText(
-    'Integration MicroUI loaded',
-    { timeout: 30_000 },
-  );
+  await expect(page.getByTestId('integration-mfe-loaded').getByRole('heading', { name: 'Integration Profiles' })).toBeVisible({ timeout: 30_000 });
 });
