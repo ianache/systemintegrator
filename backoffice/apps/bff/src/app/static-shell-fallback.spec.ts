@@ -25,10 +25,10 @@ describe('BFF static Shell fallback', () => {
     app = moduleRef.createNestApplication<NestExpressApplication>();
     app.setGlobalPrefix('api', {
       exclude: [
-        { path: 'auth/login', method: 'GET' },
-        { path: 'auth/callback', method: 'GET' },
-        { path: 'auth/session', method: 'GET' },
-        { path: 'auth/logout', method: 'GET' },
+        { path: 'auth/login', method: RequestMethod.GET },
+        { path: 'auth/callback', method: RequestMethod.GET },
+        { path: 'auth/session', method: RequestMethod.GET },
+        { path: 'auth/logout', method: RequestMethod.GET },
         {
           path: 'bff/api/v1/integration-profiles',
           method: RequestMethod.GET,

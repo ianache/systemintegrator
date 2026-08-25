@@ -1,4 +1,4 @@
-import { HttpStatus, INestApplication } from '@nestjs/common';
+import { HttpStatus, INestApplication, RequestMethod } from '@nestjs/common';
 import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import axios from 'axios';
@@ -38,7 +38,7 @@ describe('Gateway profile proxy', () => {
     });
     app.setGlobalPrefix('api', {
       exclude: [
-        { path: 'bff/api/v1/integration-profiles', method: 'GET' },
+        { path: 'bff/api/v1/integration-profiles', method: RequestMethod.GET },
       ],
     });
     await app.init();
