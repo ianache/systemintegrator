@@ -1,15 +1,21 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { IntegrationProfileListComponent } from './integration-profile-list.component';
+import { IntegrationProfileListComponent, WINDOW } from './integration-profile-list.component';
 
 describe('IntegrationProfileListComponent', () => {
   let http: HttpTestingController;
+  let assign: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
+    assign = vi.fn();
     await TestBed.configureTestingModule({
       imports: [IntegrationProfileListComponent],
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: WINDOW, useValue: { location: { assign } } },
+      ],
     }).compileComponents();
 
     http = TestBed.inject(HttpTestingController);
@@ -59,7 +65,6 @@ describe('IntegrationProfileListComponent', () => {
   });
 
   it.each([401, 403])('shows a session state and redirects to login for %i responses', (status) => {
-    const assign = vi.spyOn(window.location, 'assign').mockImplementation(() => undefined);
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 

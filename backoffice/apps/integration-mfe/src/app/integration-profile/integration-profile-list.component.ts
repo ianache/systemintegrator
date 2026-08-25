@@ -1,9 +1,17 @@
-import { Component, OnInit, inject, signal } from '@angular/core';
+import { Component, InjectionToken, OnInit, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { IntegrationProfile } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
 
 type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'unavailable';
+
+export interface BrowserWindow {
+  location: Pick<Location, 'assign'>;
+}
+
+export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
+  factory: () => window,
+});
 
 @Component({
   selector: 'app-integration-profile-list',
@@ -13,6 +21,7 @@ type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'una
 })
 export class IntegrationProfileListComponent implements OnInit {
   private readonly profileService = inject(IntegrationProfileService);
+  private readonly browserWindow = inject(WINDOW);
 
   readonly profiles = signal<IntegrationProfile[]>([]);
   readonly state = signal<ProfileListState>('loading');
@@ -31,7 +40,7 @@ export class IntegrationProfileListComponent implements OnInit {
       error: (error: HttpErrorResponse) => {
         if (error.status === 401 || error.status === 403) {
           this.state.set('session-expired');
-          window.location.assign('/auth/login');
+          this.browserWindow.location.assign('/auth/login');
           return;
         }
 
