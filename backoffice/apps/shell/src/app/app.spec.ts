@@ -9,7 +9,13 @@ describe('App', () => {
       imports: [App],
       providers: [
         provideRouter([]),
-        { provide: SessionService, useValue: { refresh: () => undefined } },
+        {
+          provide: SessionService,
+          useValue: {
+            refresh: () => undefined,
+            session: () => ({ authenticated: false }),
+          },
+        },
       ],
     }).compileComponents();
   });

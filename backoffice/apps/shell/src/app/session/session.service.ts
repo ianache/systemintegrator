@@ -1,5 +1,5 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
+import { Injectable, InjectionToken, inject, signal } from '@angular/core';
 
 export interface Session {
   authenticated: boolean;
@@ -7,9 +7,19 @@ export interface Session {
   expiresAt?: number;
 }
 
+interface BrowserWindow {
+  location: Pick<Location, 'assign'>;
+}
+
+export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
+  factory: () => window,
+  providedIn: 'root',
+});
+
 @Injectable({ providedIn: 'root' })
 export class SessionService {
   private readonly http = inject(HttpClient);
+  private readonly window = inject(WINDOW);
 
   readonly session = signal<Session>({ authenticated: false });
 
@@ -23,10 +33,10 @@ export class SessionService {
   }
 
   login(): void {
-    window.location.assign('/auth/login');
+    this.window.location.assign('/auth/login');
   }
 
   logout(): void {
-    window.location.assign('/auth/logout');
+    this.window.location.assign('/auth/logout');
   }
 }

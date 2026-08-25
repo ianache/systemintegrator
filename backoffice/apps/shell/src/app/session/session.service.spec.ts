@@ -1,15 +1,21 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
 import { TestBed } from '@angular/core/testing';
-import { SessionService } from './session.service';
+import { SessionService, WINDOW } from './session.service';
 
 describe('SessionService', () => {
   let service: SessionService;
   let http: HttpTestingController;
+  let assign: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
+    assign = vi.fn();
     TestBed.configureTestingModule({
-      providers: [provideHttpClient(), provideHttpClientTesting()],
+      providers: [
+        provideHttpClient(),
+        provideHttpClientTesting(),
+        { provide: WINDOW, useValue: { location: { assign } } },
+      ],
     });
 
     service = TestBed.inject(SessionService);
@@ -56,9 +62,6 @@ describe('SessionService', () => {
   });
 
   it('navigates to the BFF login and logout endpoints', () => {
-    const location = window.location;
-    const assign = vi.spyOn(location, 'assign').mockImplementation(() => undefined);
-
     service.login();
     expect(assign).toHaveBeenLastCalledWith('/auth/login');
 
