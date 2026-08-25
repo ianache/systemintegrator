@@ -1,8 +1,14 @@
 import { Component } from '@angular/core';
+import { IntegrationProfileListComponent } from '../integration-profile/integration-profile-list.component';
 
 @Component({
   selector: 'app-integration-root',
   standalone: true,
-  template: `<p data-testid="integration-mfe-loaded">Integration MicroUI loaded</p>`,
+  imports: [IntegrationProfileListComponent],
+  template: `
+    <section data-testid="integration-mfe-loaded">
+      <app-integration-profile-list />
+    </section>
+  `,
 })
 export class IntegrationRootComponent {}

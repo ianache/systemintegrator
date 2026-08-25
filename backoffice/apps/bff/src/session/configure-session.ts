@@ -1,11 +1,14 @@
 import { INestApplication } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import session from 'express-session';
 import { createClient } from 'redis';
 import { RedisStore } from 'connect-redis';
+import { BackofficeConfig } from '../config/backoffice-config';
 
-export function configureSession(app: INestApplication, config: ConfigService): void {
-  const redisClient = createClient({ url: config.getOrThrow('REDIS_URL') });
+export function configureSession(
+  app: INestApplication,
+  config: BackofficeConfig,
+): void {
+  const redisClient = createClient({ url: config.REDIS_URL });
   redisClient.connect().catch((error) => {
     throw error;
   });
@@ -26,12 +29,12 @@ export function configureSession(app: INestApplication, config: ConfigService): 
   app.use(
     session({
       store: new RedisStore({ client: redisClient, prefix: 'backoffice-session:' }),
-      secret: config.getOrThrow('BFF_SESSION_SECRET'),
+      secret: config.BFF_SESSION_SECRET,
       resave: false,
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: config.get('NODE_ENV') === 'production',
+        secure: process.env.NODE_ENV === 'production',
         sameSite: 'lax',
         maxAge: 8 * 60 * 60 * 1000,
       },

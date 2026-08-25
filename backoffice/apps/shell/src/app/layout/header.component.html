@@ -1,0 +1,16 @@
+<header class="header">
+  <a class="brand" routerLink="/" aria-label="Backoffice home">Backoffice</a>
+
+  <div class="session" aria-live="polite">
+    @if (sessionService.session().authenticated) {
+      <span class="status">Signed in</span>
+      @if (sessionService.session().tenantId; as tenantId) {
+        <span class="tenant">Tenant: {{ tenantId }}</span>
+      }
+      <button type="button" (click)="sessionService.logout()">Log out</button>
+    } @else {
+      <span class="status">You are not signed in</span>
+      <button type="button" (click)="sessionService.login()">Log in</button>
+    }
+  </div>
+</header>

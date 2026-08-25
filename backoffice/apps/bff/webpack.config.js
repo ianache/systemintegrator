@@ -15,7 +15,14 @@ module.exports = {
       compiler: 'tsc',
       main: './src/main.ts',
       tsConfig: './tsconfig.app.json',
-      assets: ['./src/assets'],
+      assets: [
+        './src/assets',
+        {
+          glob: '**/*',
+          input: '../../dist/apps/shell/browser',
+          output: 'shell-static',
+        },
+      ],
       optimization: false,
       outputHashing: 'none',
       generatePackageJson: true,
