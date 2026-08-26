@@ -245,10 +245,8 @@ public class GenericRestAdapter {
             case "POST" -> HttpMethod.POST;
             case "PUT" -> HttpMethod.PUT;
             case "PATCH" -> HttpMethod.PATCH;
-            case "HEAD" -> HttpMethod.HEAD;
-            case "OPTIONS" -> HttpMethod.OPTIONS;
-            case "DELETE", "TRACE", "CONNECT" ->
-                    throw new IllegalArgumentException("Unsupported extraction HTTP method: " + normalizedMethod);
+            case "DELETE", "TRACE", "CONNECT", "HEAD", "OPTIONS" ->
+                throw new IllegalArgumentException("Unsupported extraction HTTP method: " + normalizedMethod);
             default -> throw new IllegalArgumentException("Unsupported extraction HTTP method: " + normalizedMethod);
         };
     }

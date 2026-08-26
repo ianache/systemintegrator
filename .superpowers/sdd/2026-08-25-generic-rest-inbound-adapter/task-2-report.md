@@ -73,3 +73,48 @@ Green run output after production fix
 
 Notes
 - The focused red run failures matched the reviewer findings: method dispatch stayed on `GET`, unsupported watermark formats were not validated before the HTTP call, and endpoints containing userinfo were accepted through request construction.
+
+Fix Round 2
+
+Summary
+- Added a focused regression test proving `OPTIONS` must be rejected before any HTTP request is attempted.
+- Tightened `GenericRestAdapter.resolveMethod` so only `GET`, `POST`, `PUT`, and `PATCH` are accepted; `HEAD`, `OPTIONS`, and all other methods now fail fast with `IllegalArgumentException`.
+
+Files changed
+- Modified `application/src/test/java/com/cl2/integration/adapter/out/generic/GenericRestAdapterTest.java`
+- Modified `application/src/main/java/com/cl2/integration/adapter/out/generic/GenericRestAdapter.java`
+
+Verification Commands and Output
+
+Command
+```text
+mvn -pl application -Dtest=GenericRestAdapterTest test
+```
+
+Sandboxed red run output
+```text
+Acceso denegado.
+[ERROR] Non-resolvable parent POM for com.cl2:integration-parent:0.0.1-SNAPSHOT: Could not transfer artifact org.springframework.boot:spring-boot-starter-parent:pom:3.4.5 from/to central (https://repo.maven.apache.org/maven2): Permission denied: getsockopt
+```
+
+Focused red run output with network-enabled Maven
+```text
+[INFO] Running com.cl2.integration.adapter.out.generic.GenericRestAdapterTest
+[ERROR] Tests run: 9, Failures: 1, Errors: 0, Skipped: 0, Time elapsed: 3.783 s <<< FAILURE! -- in com.cl2.integration.adapter.out.generic.GenericRestAdapterTest
+[ERROR] com.cl2.integration.adapter.out.generic.GenericRestAdapterTest.shouldRejectUnsupportedOptionsExtractionMethod ... Expecting actual throwable to be an instance of: java.lang.IllegalArgumentException but was: org.springframework.web.client.HttpClientErrorException$NotFound
+[INFO] BUILD FAILURE
+```
+
+Green run output after production fix
+```text
+[INFO] Running com.cl2.integration.adapter.out.generic.GenericRestAdapterTest
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0, Time elapsed: 3.866 s -- in com.cl2.integration.adapter.out.generic.GenericRestAdapterTest
+[INFO] Results:
+[INFO] Tests run: 9, Failures: 0, Errors: 0, Skipped: 0
+[INFO] BUILD SUCCESS
+[INFO] Total time: 18.342 s
+[INFO] Finished at: 2026-08-25T23:35:23-05:00
+```
+
+Notes
+- The red regression confirmed `OPTIONS` still flowed into a real HTTP call before the fix; after restricting the allowlist to `GET`, `POST`, `PUT`, and `PATCH`, the suite returned to green.

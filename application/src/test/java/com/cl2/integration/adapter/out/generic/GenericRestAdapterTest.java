@@ -323,6 +323,32 @@ class GenericRestAdapterTest {
                 .hasMessageContaining("userinfo");
     }
 
+    @Test
+    @DisplayName("Should reject unsupported OPTIONS extraction method")
+    void shouldRejectUnsupportedOptionsExtractionMethod() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "OPTIONS",
+                "/api/customers/options",
+                Map.of("updatedSince", ":lastSyncWithBuffer"),
+                Map.of(),
+                "$.items[*]",
+                "ISO_8601",
+                "customerId",
+                "updatedAt"
+        );
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported extraction HTTP method");
+    }
+
     private List<Map<String, Object>> extract(
             IntegrationProfile profile,
             ExtractionConfig config,
