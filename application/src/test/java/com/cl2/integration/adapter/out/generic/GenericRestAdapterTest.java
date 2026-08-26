@@ -63,7 +63,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should GET customers with watermark substitution, limit, and JSONPath extraction")
     void shouldGetCustomersWithWatermarkSubstitutionLimitAndJsonPathExtraction() {
-        GenericRestAdapter adapter = newAdapter(mock(OAuth2TokenCacheManager.class));
+        GenericRestAdapter adapter = newAdapter();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers",
@@ -79,7 +79,9 @@ class GenericRestAdapterTest {
 
         List<Map<String, Object>> result = adapter.extract(profile, config, secret, WATERMARK);
 
-        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers")));
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100")));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
     }
@@ -87,7 +89,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should send Basic authentication in Authorization header")
     void shouldSendBasicAuthenticationHeader() {
-        GenericRestAdapter adapter = newAdapter(mock(OAuth2TokenCacheManager.class));
+        GenericRestAdapter adapter = newAdapter();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/basic",
@@ -105,7 +107,10 @@ class GenericRestAdapterTest {
 
         List<Map<String, Object>> result = adapter.extract(profile, config, secret, WATERMARK);
 
-        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/basic")));
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/basic"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100"))
+                .withHeader("Authorization", equalTo(expectedAuth)));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
     }
@@ -113,7 +118,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should send Bearer token in Authorization header")
     void shouldSendBearerAuthenticationHeader() {
-        GenericRestAdapter adapter = newAdapter(mock(OAuth2TokenCacheManager.class));
+        GenericRestAdapter adapter = newAdapter();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/bearer",
@@ -130,7 +135,10 @@ class GenericRestAdapterTest {
 
         List<Map<String, Object>> result = adapter.extract(profile, config, secret, WATERMARK);
 
-        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/bearer")));
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/bearer"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100"))
+                .withHeader("Authorization", equalTo("Bearer test-token")));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
     }
@@ -138,7 +146,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should send API Key header")
     void shouldSendApiKeyHeader() {
-        GenericRestAdapter adapter = newAdapter(mock(OAuth2TokenCacheManager.class));
+        GenericRestAdapter adapter = newAdapter();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/api-key",
@@ -155,7 +163,10 @@ class GenericRestAdapterTest {
 
         List<Map<String, Object>> result = adapter.extract(profile, config, secret, WATERMARK);
 
-        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/api-key")));
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/api-key"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100"))
+                .withHeader("X-API-Key", equalTo("test-api-key")));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
     }
@@ -204,9 +215,18 @@ class GenericRestAdapterTest {
                 eq("secret-123"),
                 eq("read:customers")
         );
-        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/oauth2")));
+        wireMockServer.verify(1, getRequestedFor(urlPathEqualTo("/api/customers/oauth2"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100"))
+                .withHeader("Authorization", equalTo("Bearer oauth-access-token"))
+                .withHeader("X-Client-App", equalTo("inbound-sync"))
+                .withHeader("X-Source-System", equalTo("crm")));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
+    }
+
+    private GenericRestAdapter newAdapter() {
+        return newAdapter(mock(OAuth2TokenCacheManager.class));
     }
 
     private GenericRestAdapter newAdapter(OAuth2TokenCacheManager tokenCacheManager) {
