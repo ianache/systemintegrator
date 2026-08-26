@@ -120,7 +120,7 @@ El agregado `IntegrationProfile` es el corazón declarativo del sistema:
 - **`configuration`**:
   - `endpoint`: URL REST o JDBC Connection String.
   - `credentialRef`: Referencia al secreto en Vault (`vault:secret/data/...` o `secret/...`).
-  - `extractionConfig`: Configuración de query SQL, columna watermark y paginación para JDBC, o endpoints y JSONPaths para REST Inbound.
+  - `extractionConfig`: Configuración de query SQL y columna watermark para JDBC, o endpoints, JSONPaths y `keyProperty` para REST Inbound (sin paginación en este slice).
   - `transformation`: Script declarativo `JSLT` o mapeo de campos `FIELD_MAPPING`.
   - `syncPolicy`: Expresión CRON de ejecución periódica (ej. `*/30 * * * * *`).
   - `retryPolicy`: Configuración de reintentos (`maxAttempts`, `backoffMs`).
