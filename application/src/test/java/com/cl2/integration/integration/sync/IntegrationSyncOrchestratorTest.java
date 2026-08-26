@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.sync;
 
+import com.cl2.integration.adapter.out.generic.GenericRestAdapter;
 import com.cl2.integration.adapter.out.generic.GenericJdbcAdapter;
 import com.cl2.integration.adapter.out.generic.model.ExtractionConfig;
 import com.cl2.integration.domain.model.IntegrationProfile;
@@ -20,6 +21,7 @@ import org.junit.jupiter.api.Test;
 import org.mockito.ArgumentCaptor;
 import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
+import java.lang.reflect.Constructor;
 import java.time.Instant;
 import java.util.List;
 import java.util.Map;
@@ -41,6 +43,7 @@ class IntegrationSyncOrchestratorTest {
     private SecretResolver secretResolver;
     private JdbcDataSourceFactory jdbcDataSourceFactory;
     private GenericJdbcAdapter genericJdbcAdapter;
+    private GenericRestAdapter genericRestAdapter;
     private TransformationService transformationService;
     private ResilienceExecutor resilienceExecutor;
     private OutboxRepository outboxRepository;
@@ -57,6 +60,7 @@ class IntegrationSyncOrchestratorTest {
         secretResolver = mock(SecretResolver.class);
         jdbcDataSourceFactory = mock(JdbcDataSourceFactory.class);
         genericJdbcAdapter = mock(GenericJdbcAdapter.class);
+        genericRestAdapter = mock(GenericRestAdapter.class);
         transformationService = mock(TransformationService.class);
         resilienceExecutor = mock(ResilienceExecutor.class);
         outboxRepository = mock(OutboxRepository.class);
@@ -64,9 +68,7 @@ class IntegrationSyncOrchestratorTest {
         syncStateRecorder = mock(SyncStateRecorder.class);
         metrics = mock(com.cl2.integration.infrastructure.metrics.IntegrationMetrics.class);
 
-        orchestrator = new IntegrationSyncOrchestrator(
-                secretResolver, jdbcDataSourceFactory, genericJdbcAdapter, transformationService,
-                resilienceExecutor, outboxRepository, syncStateRepository, syncStateRecorder, new ObjectMapper(), metrics);
+        orchestrator = instantiateOrchestrator();
 
         // ResilienceExecutor just runs the supplier synchronously in these tests
         when(resilienceExecutor.execute(any(), anyString(), any())).thenAnswer(invocation -> {
@@ -76,12 +78,67 @@ class IntegrationSyncOrchestratorTest {
     }
 
     private IntegrationProfile profileWith(String extractionConfigJson, String syncPolicyJson) {
+        return profileWith(IntegrationProtocol.JDBC, "jdbc:mysql://localhost:3306/integration", extractionConfigJson, syncPolicyJson);
+    }
+
+    private IntegrationProfile profileWith(
+            IntegrationProtocol protocol,
+            String endpoint,
+            String extractionConfigJson,
+            String syncPolicyJson
+    ) {
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
-                IntegrationProtocol.JDBC, "generic-jdbc", "generic-jdbc-adapter",
-                "jdbc:mysql://localhost:3306/integration", "secret/sap/hana",
+                protocol, "generic-jdbc", "generic-jdbc-adapter",
+                endpoint, "secret/sap/hana",
                 "{\"customerId\":\"CardCode\"}", null, syncPolicyJson, null, null, extractionConfigJson);
         return IntegrationProfile.rehydrate(profileId, tenantId, "customers", "sap-hana",
                 SyncDirection.INBOUND, SourceOfTruth.EXTERNAL, config, true, Instant.now(), Instant.now(), 0);
+    }
+
+    private IntegrationSyncOrchestrator instantiateOrchestrator() {
+        try {
+            Constructor<IntegrationSyncOrchestrator> constructor = IntegrationSyncOrchestrator.class.getConstructor(
+                    SecretResolver.class,
+                    JdbcDataSourceFactory.class,
+                    GenericJdbcAdapter.class,
+                    GenericRestAdapter.class,
+                    TransformationService.class,
+                    ResilienceExecutor.class,
+                    OutboxRepository.class,
+                    SyncStateRepository.class,
+                    SyncStateRecorder.class,
+                    ObjectMapper.class,
+                    com.cl2.integration.infrastructure.metrics.IntegrationMetrics.class
+            );
+            return constructor.newInstance(
+                    secretResolver,
+                    jdbcDataSourceFactory,
+                    genericJdbcAdapter,
+                    genericRestAdapter,
+                    transformationService,
+                    resilienceExecutor,
+                    outboxRepository,
+                    syncStateRepository,
+                    syncStateRecorder,
+                    new ObjectMapper(),
+                    metrics
+            );
+        } catch (NoSuchMethodException ignored) {
+            return new IntegrationSyncOrchestrator(
+                    secretResolver,
+                    jdbcDataSourceFactory,
+                    genericJdbcAdapter,
+                    transformationService,
+                    resilienceExecutor,
+                    outboxRepository,
+                    syncStateRepository,
+                    syncStateRecorder,
+                    new ObjectMapper(),
+                    metrics
+            );
+        } catch (ReflectiveOperationException ex) {
+            throw new IllegalStateException("Failed to instantiate IntegrationSyncOrchestrator for test", ex);
+        }
     }
 
     @Test
@@ -180,6 +237,167 @@ class IntegrationSyncOrchestratorTest {
         ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxRepository).save(outboxCaptor.capture());
         assertThat(outboxCaptor.getValue().topic()).isEqualTo("integration.customers.events");
+    }
+
+    @Test
+    void restProfilesDelegateToGenericRestAdapterAndSkipJdbcExtraction() throws Exception {
+        String extractionConfigJson = "{\"method\":\"GET\",\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
+                + "\"keyProperty\":\"externalId\",\"keyColumn\":\"legacyId\",\"watermarkParam\":\"updatedSince\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(
+                IntegrationProtocol.REST,
+                "https://api.example.com",
+                extractionConfigJson,
+                "{\"cronExpression\":\"0 */10 * * * *\",\"overlapBufferSeconds\":60}");
+
+        ResolvedSecret secret = ResolvedSecret.bearer("secret/sap/hana", "token-123");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> restRows = List.of(Map.of(
+                "externalId", "CLI-REST-001",
+                "legacyId", "CLI-001",
+                "updated_at", java.sql.Timestamp.from(rowTimestamp)
+        ));
+        when(genericRestAdapter.extract(any(IntegrationProfile.class), any(ExtractionConfig.class), eq(secret), eq(Instant.EPOCH)))
+                .thenReturn(restRows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-REST-001\"}");
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of("legacyId", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp))));
+
+        orchestrator.run(profile);
+
+        verify(genericRestAdapter).extract(any(IntegrationProfile.class), any(ExtractionConfig.class), eq(secret), eq(Instant.EPOCH));
+        verify(genericJdbcAdapter, never()).extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), any());
+        verify(jdbcDataSourceFactory, never()).create(anyString(), any());
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getValue().payload()).isEqualTo("{\"customerId\":\"CLI-REST-001\"}");
+
+        ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
+        verify(syncStateRepository).upsert(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(rowTimestamp.minusSeconds(60));
+    }
+
+    @Test
+    void jdbcProfilesContinueToDelegateToGenericJdbcAdapter() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"cronExpression\":\"0 */10 * * * *\"}");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(eq("jdbc:mysql://localhost:3306/integration"), eq(secret))).thenReturn(dataSource);
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp)));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        orchestrator.run(profile);
+
+        verify(genericJdbcAdapter).extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH));
+        verify(genericRestAdapter, never()).extract(any(), any(), any(), any());
+    }
+
+    @Test
+    void unsupportedProtocolFailsExplicitlyBeforeWritingEvents() {
+        String extractionConfigJson = "{\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
+                + "\"keyProperty\":\"externalId\",\"keyColumn\":\"legacyId\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(
+                IntegrationProtocol.SOAP,
+                "https://api.example.com",
+                extractionConfigJson,
+                "{\"cronExpression\":\"0 */10 * * * *\"}");
+
+        ResolvedSecret secret = ResolvedSecret.bearer("secret/sap/hana", "token-123");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of("legacyId", "CLI-001", "updated_at", java.sql.Timestamp.from(Instant.parse("2026-08-01T10:00:00Z")))));
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        assertThatThrownBy(() -> orchestrator.run(profile))
+                .isInstanceOf(IntegrationSyncException.class)
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Sync failed for profile " + profileId);
+
+        verify(outboxRepository, never()).save(any());
+        verify(syncStateRepository, never()).upsert(any());
+    }
+
+    @Test
+    void missingRestKeyFailsBeforeOutboxSave() {
+        String extractionConfigJson = "{\"method\":\"GET\",\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
+                + "\"keyProperty\":\"externalId\",\"keyColumn\":\"legacyId\",\"watermarkParam\":\"updatedSince\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(
+                IntegrationProtocol.REST,
+                "https://api.example.com",
+                extractionConfigJson,
+                "{\"cronExpression\":\"0 */10 * * * *\"}");
+
+        ResolvedSecret secret = ResolvedSecret.bearer("secret/sap/hana", "token-123");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        when(genericRestAdapter.extract(any(IntegrationProfile.class), any(ExtractionConfig.class), eq(secret), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of("legacyId", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp))));
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of("legacyId", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp))));
+
+        assertThatThrownBy(() -> orchestrator.run(profile))
+                .isInstanceOf(IntegrationSyncException.class)
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasMessageContaining("Sync failed for profile " + profileId);
+
+        verify(outboxRepository, never()).save(any());
+        verify(syncStateRepository, never()).upsert(any());
+        verify(syncStateRecorder).recordFailure(eq(profileId), any(Instant.class), anyString());
+    }
+
+    @Test
+    void restAdapterFailureRecordsFailureWithoutPersistingSuccessfulWatermark() {
+        String extractionConfigJson = "{\"method\":\"GET\",\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
+                + "\"keyProperty\":\"externalId\",\"keyColumn\":\"legacyId\",\"watermarkParam\":\"updatedSince\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(
+                IntegrationProtocol.REST,
+                "https://api.example.com",
+                extractionConfigJson,
+                "{\"cronExpression\":\"0 */10 * * * *\"}");
+
+        ResolvedSecret secret = ResolvedSecret.bearer("secret/sap/hana", "token-123");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(genericRestAdapter.extract(any(IntegrationProfile.class), any(ExtractionConfig.class), eq(secret), eq(Instant.EPOCH)))
+                .thenThrow(new IllegalArgumentException("REST adapter boom"));
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(dataSource);
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of("legacyId", "CLI-001", "updated_at", java.sql.Timestamp.from(Instant.parse("2026-08-01T10:00:00Z")))));
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        assertThatThrownBy(() -> orchestrator.run(profile)).isInstanceOf(IntegrationSyncException.class);
+
+        verify(syncStateRecorder).recordFailure(eq(profileId), any(Instant.class), anyString());
+        verify(syncStateRepository, never()).upsert(any());
+        verify(outboxRepository, never()).save(any());
     }
 
     @Test

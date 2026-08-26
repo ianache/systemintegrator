@@ -1,8 +1,10 @@
 package com.cl2.integration.integration.sync;
 
 import com.cl2.integration.adapter.out.generic.GenericJdbcAdapter;
+import com.cl2.integration.adapter.out.generic.GenericRestAdapter;
 import com.cl2.integration.adapter.out.generic.model.ExtractionConfig;
 import com.cl2.integration.domain.model.IntegrationProfile;
+import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.integration.outbox.OutboxEvent;
 import com.cl2.integration.integration.outbox.OutboxRepository;
 import com.cl2.integration.integration.resilience.ResilienceExecutor;
@@ -35,6 +37,7 @@ public class IntegrationSyncOrchestrator {
     private final SecretResolver secretResolver;
     private final JdbcDataSourceFactory jdbcDataSourceFactory;
     private final GenericJdbcAdapter genericJdbcAdapter;
+    private final GenericRestAdapter genericRestAdapter;
     private final TransformationService transformationService;
     private final ResilienceExecutor resilienceExecutor;
     private final OutboxRepository outboxRepository;
@@ -48,6 +51,7 @@ public class IntegrationSyncOrchestrator {
             SecretResolver secretResolver,
             JdbcDataSourceFactory jdbcDataSourceFactory,
             GenericJdbcAdapter genericJdbcAdapter,
+            GenericRestAdapter genericRestAdapter,
             TransformationService transformationService,
             ResilienceExecutor resilienceExecutor,
             OutboxRepository outboxRepository,
@@ -58,6 +62,7 @@ public class IntegrationSyncOrchestrator {
         this.secretResolver = secretResolver;
         this.jdbcDataSourceFactory = jdbcDataSourceFactory;
         this.genericJdbcAdapter = genericJdbcAdapter;
+        this.genericRestAdapter = genericRestAdapter;
         this.transformationService = transformationService;
         this.resilienceExecutor = resilienceExecutor;
         this.outboxRepository = outboxRepository;
@@ -76,8 +81,23 @@ public class IntegrationSyncOrchestrator {
             OutboxRepository outboxRepository,
             SyncStateRepository syncStateRepository,
             SyncStateRecorder syncStateRecorder,
+            ObjectMapper objectMapper,
+            IntegrationMetrics metrics) {
+        this(secretResolver, jdbcDataSourceFactory, genericJdbcAdapter, null, transformationService,
+                resilienceExecutor, outboxRepository, syncStateRepository, syncStateRecorder, objectMapper, metrics);
+    }
+
+    public IntegrationSyncOrchestrator(
+            SecretResolver secretResolver,
+            JdbcDataSourceFactory jdbcDataSourceFactory,
+            GenericJdbcAdapter genericJdbcAdapter,
+            TransformationService transformationService,
+            ResilienceExecutor resilienceExecutor,
+            OutboxRepository outboxRepository,
+            SyncStateRepository syncStateRepository,
+            SyncStateRecorder syncStateRecorder,
             ObjectMapper objectMapper) {
-        this(secretResolver, jdbcDataSourceFactory, genericJdbcAdapter, transformationService,
+        this(secretResolver, jdbcDataSourceFactory, genericJdbcAdapter, null, transformationService,
                 resilienceExecutor, outboxRepository, syncStateRepository, syncStateRecorder, objectMapper, null);
     }
 
@@ -87,20 +107,14 @@ public class IntegrationSyncOrchestrator {
         long startedNanos = System.nanoTime();
         try {
             ExtractionConfig extractionConfig = readExtractionConfig(profile);
-            if (extractionConfig.watermarkColumn() == null || extractionConfig.watermarkColumn().isBlank()) {
-                throw new IllegalStateException("extractionConfig.watermarkColumn is required for JDBC profiles");
-            }
             ResolvedSecret secret = secretResolver.resolve(profile.configuration().credentialRef(), profile.tenantId());
             Instant watermark = syncStateRepository.find(profile.id())
                     .map(SyncState::lastWatermark)
                     .orElse(Instant.EPOCH);
 
-            List<Map<String, Object>> rows;
-            try (HikariDataSource dataSource = jdbcDataSourceFactory.create(profile.configuration().endpoint(), secret)) {
-                NamedParameterJdbcTemplate jdbcTemplate = new NamedParameterJdbcTemplate(dataSource);
-                rows = resilienceExecutor.execute(profile.tenantId(), profile.configuration().connector(),
-                        () -> genericJdbcAdapter.extract(jdbcTemplate, extractionConfig, watermark));
-            }
+            IntegrationProtocol protocol = profile.configuration().protocol();
+            List<Map<String, Object>> rows = extractRows(profile, extractionConfig, secret, watermark, protocol);
+            String keyField = readKeyField(extractionConfig, protocol);
 
             String aggregateType = deriveAggregateType(profile.businessDomain());
             String eventType = deriveEventType(profile.businessDomain());
@@ -114,7 +128,7 @@ public class IntegrationSyncOrchestrator {
                 }
                 String rowJson = objectMapper.writeValueAsString(row);
                 String canonicalJson = transformationService.transform(rowJson, profile);
-                UUID aggregateId = deriveAggregateId(profile.tenantId(), String.valueOf(row.get(extractionConfig.keyColumn())));
+                UUID aggregateId = deriveAggregateId(profile.tenantId(), readBusinessKey(row, keyField, protocol));
 
                 boolean isDuplicate = outboxRepository.findLatestByAggregateId(profile.tenantId(), aggregateId)
                         .map(latestEvent -> canonicalJson.equals(latestEvent.payload()))
@@ -189,6 +203,62 @@ public class IntegrationSyncOrchestrator {
         }
     }
 
+    private List<Map<String, Object>> extractRows(
+            IntegrationProfile profile,
+            ExtractionConfig extractionConfig,
+            ResolvedSecret secret,
+            Instant watermark,
+            IntegrationProtocol protocol
+    ) {
+        return switch (protocol) {
+            case JDBC -> extractJdbcRows(profile, extractionConfig, secret, watermark);
+            case REST -> extractRestRows(profile, extractionConfig, secret, watermark);
+            default -> throw new IllegalStateException("Unsupported integration protocol for sync orchestration: " + protocol);
+        };
+    }
+
+    private List<Map<String, Object>> extractJdbcRows(
+            IntegrationProfile profile,
+            ExtractionConfig extractionConfig,
+            ResolvedSecret secret,
+            Instant watermark
+    ) {
+        if (extractionConfig.watermarkColumn() == null || extractionConfig.watermarkColumn().isBlank()) {
+            throw new IllegalStateException("extractionConfig.watermarkColumn is required for JDBC profiles");
+        }
+        try (HikariDataSource dataSource = jdbcDataSourceFactory.create(profile.configuration().endpoint(), secret)) {
+            NamedParameterJdbcTemplate jdbcTemplate = new NamedParameterJdbcTemplate(dataSource);
+            return resilienceExecutor.execute(profile.tenantId(), profile.configuration().connector(),
+                    () -> genericJdbcAdapter.extract(jdbcTemplate, extractionConfig, watermark));
+        }
+    }
+
+    private List<Map<String, Object>> extractRestRows(
+            IntegrationProfile profile,
+            ExtractionConfig extractionConfig,
+            ResolvedSecret secret,
+            Instant watermark
+    ) {
+        if (genericRestAdapter == null) {
+            throw new IllegalStateException("GenericRestAdapter is required for REST profiles");
+        }
+        return resilienceExecutor.execute(profile.tenantId(), profile.configuration().connector(),
+                () -> genericRestAdapter.extract(profile, extractionConfig, secret, watermark));
+    }
+
+    private String readKeyField(ExtractionConfig extractionConfig, IntegrationProtocol protocol) {
+        return switch (protocol) {
+            case JDBC -> extractionConfig.keyColumn();
+            case REST -> {
+                if (extractionConfig.keyProperty() == null || extractionConfig.keyProperty().isBlank()) {
+                    throw new IllegalStateException("extractionConfig.keyProperty is required for REST profiles");
+                }
+                yield extractionConfig.keyProperty();
+            }
+            default -> throw new IllegalStateException("Unsupported integration protocol for sync orchestration: " + protocol);
+        };
+    }
+
     private int readOverlapBufferSeconds(IntegrationProfile profile) {
         String json = profile.configuration() != null ? profile.configuration().syncPolicy() : null;
         if (json == null || json.isBlank()) {
@@ -203,6 +273,14 @@ public class IntegrationSyncOrchestrator {
 
     private UUID deriveAggregateId(UUID tenantId, String businessKey) {
         return UUID.nameUUIDFromBytes((tenantId + ":" + businessKey).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String readBusinessKey(Map<String, Object> row, String keyField, IntegrationProtocol protocol) {
+        Object keyValue = row.get(keyField);
+        if (protocol == IntegrationProtocol.REST && keyValue == null) {
+            throw new IllegalStateException("REST row is missing keyProperty '" + keyField + "'");
+        }
+        return String.valueOf(keyValue);
     }
 
     private String deriveAggregateType(String businessDomain) {
