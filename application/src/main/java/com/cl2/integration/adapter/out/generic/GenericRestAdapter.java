@@ -8,9 +8,10 @@ import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
 import com.cl2.integration.integration.security.AuthType;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.jayway.jsonpath.InvalidPathException;
 import com.jayway.jsonpath.JsonPath;
+import com.jayway.jsonpath.PathNotFoundException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
@@ -19,6 +20,7 @@ import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
+import org.springframework.web.client.RestClientResponseException;
 import org.springframework.web.util.UriComponentsBuilder;
 
 import java.net.URI;
@@ -69,11 +71,18 @@ public class GenericRestAdapter {
                     SensitiveDataRedactor.redactHeaders(loggableHeaders));
         }
 
-        String body = restClient.method(method)
-                .uri(requestUri)
-                .headers(httpHeaders -> httpHeaders.putAll(headers))
-                .retrieve()
-                .body(STRING_RESPONSE);
+        String body;
+        try {
+            body = restClient.method(method)
+                    .uri(requestUri)
+                    .headers(httpHeaders -> httpHeaders.putAll(headers))
+                    .retrieve()
+                    .body(STRING_RESPONSE);
+        } catch (RestClientResponseException ex) {
+            throw new IllegalArgumentException(
+                    "Generic REST extraction failed with HTTP " + ex.getStatusCode().value() + " for " + requestUri.getPath()
+            );
+        }
 
         return extractRows(body, config.responseJsonPath());
     }
@@ -164,33 +173,54 @@ public class GenericRestAdapter {
             return List.of();
         }
 
-        Object extracted = JsonPath.read(body, jsonPath != null && !jsonPath.isBlank() ? jsonPath : "$");
+        String normalizedJsonPath = jsonPath != null && !jsonPath.isBlank() ? jsonPath : "$";
+        Object parsedBody = parseResponseBody(body);
+        Object extracted = readJsonPath(parsedBody, normalizedJsonPath);
+
         if (extracted instanceof List<?> items) {
+            if (items.isEmpty()) {
+                throw new IllegalArgumentException("JSONPath did not match any records: " + normalizedJsonPath);
+            }
             List<Map<String, Object>> rows = new ArrayList<>(items.size());
             for (Object item : items) {
-                rows.add(convertToMap(item));
+                rows.add(convertToMap(item, normalizedJsonPath));
             }
             return rows;
         }
 
-        return List.of(convertToMap(extracted));
+        return List.of(convertToMap(extracted, normalizedJsonPath));
     }
 
-    private Map<String, Object> convertToMap(Object value) {
+    private Object parseResponseBody(String body) {
+        try {
+            return objectMapper.readValue(body, Object.class);
+        } catch (JsonProcessingException ex) {
+            throw new IllegalArgumentException("Malformed JSON response");
+        }
+    }
+
+    private Object readJsonPath(Object body, String jsonPath) {
+        try {
+            JsonPath.compile(jsonPath);
+        } catch (InvalidPathException ex) {
+            throw new IllegalArgumentException("Invalid JSONPath: " + jsonPath);
+        }
+
+        try {
+            return JsonPath.read(body, jsonPath);
+        } catch (PathNotFoundException ex) {
+            throw new IllegalArgumentException("JSONPath did not match any records: " + jsonPath);
+        }
+    }
+
+    private Map<String, Object> convertToMap(Object value, String jsonPath) {
         if (value instanceof Map<?, ?> mapValue) {
             Map<String, Object> copy = new LinkedHashMap<>();
             mapValue.forEach((key, itemValue) -> copy.put(String.valueOf(key), itemValue));
             return copy;
         }
 
-        try {
-            return objectMapper.readValue(
-                    objectMapper.writeValueAsString(value),
-                    new TypeReference<>() {}
-            );
-        } catch (JsonProcessingException ex) {
-            throw new IllegalArgumentException("Unable to parse response payload into extraction rows", ex);
-        }
+        throw new IllegalArgumentException("JSONPath must resolve to an object or array of objects: " + jsonPath);
     }
 
     private IntegrationProfileConfiguration requireConfiguration(IntegrationProfile profile) {

@@ -42,6 +42,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
@@ -278,6 +279,199 @@ class GenericRestAdapterTest {
                 .withHeader("Authorization", equalTo("Bearer test-token")));
         assertThat(result).hasSize(1);
         assertThat(result.get(0)).containsEntry("customerId", "c-2");
+    }
+
+    @Test
+    @DisplayName("Should extract multiple rows from JSONPath array responses")
+    void shouldExtractMultipleRowsFromJsonPathArrayResponses() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = extractionConfig(
+                "/api/customers/array",
+                Map.of(),
+                Map.of("updatedSince", ":lastSyncWithBuffer")
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/array"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(okJson("{\"items\":[{\"customerId\":\"c-1\"},{\"customerId\":\"c-2\"}]}")));
+
+        List<Map<String, Object>> result = extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK);
+
+        assertThat(result).containsExactly(
+                Map.of("customerId", "c-1"),
+                Map.of("customerId", "c-2")
+        );
+    }
+
+    @Test
+    @DisplayName("Should extract a single row from a root object response")
+    void shouldExtractSingleRowFromRootObjectResponse() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "GET",
+                "/api/customers/root-object",
+                Map.of("updatedSince", ":lastSyncWithBuffer"),
+                Map.of(),
+                "$",
+                "ISO_8601",
+                "customerId",
+                "updatedAt"
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/root-object"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(okJson("{\"customerId\":\"c-root\",\"status\":\"active\"}")));
+
+        List<Map<String, Object>> result = extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK);
+
+        assertThat(result).containsExactly(Map.of("customerId", "c-root", "status", "active"));
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the response JSON is malformed")
+    void shouldFailExplicitlyWhenResponseJsonIsMalformed() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = extractionConfig(
+                "/api/customers/malformed-json",
+                Map.of(),
+                Map.of("updatedSince", ":lastSyncWithBuffer")
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/malformed-json"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(okJson("{\"items\":[{\"customerId\":\"c-1\"}]")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Malformed JSON response")
+                .hasMessageNotContaining("customerId")
+                .hasMessageNotContaining("test-token");
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the response JSONPath is invalid")
+    void shouldFailExplicitlyWhenResponseJsonPathIsInvalid() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "GET",
+                "/api/customers/invalid-json-path",
+                Map.of("updatedSince", ":lastSyncWithBuffer"),
+                Map.of(),
+                "$.items[abc]",
+                "ISO_8601",
+                "customerId",
+                "updatedAt"
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/invalid-json-path"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(okJson("{\"items\":[{\"customerId\":\"c-1\"}]}")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid JSONPath")
+                .hasMessageContaining("$.items[abc]")
+                .hasMessageNotContaining("test-token");
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the response JSONPath is missing")
+    void shouldFailExplicitlyWhenResponseJsonPathIsMissing() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "GET",
+                "/api/customers/missing-json-path",
+                Map.of("updatedSince", ":lastSyncWithBuffer"),
+                Map.of(),
+                "$.items[*]",
+                "ISO_8601",
+                "customerId",
+                "updatedAt"
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/missing-json-path"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(okJson("{\"results\":[{\"customerId\":\"c-1\"}]}")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("JSONPath did not match any records")
+                .hasMessageContaining("$.items[*]")
+                .hasMessageNotContaining("results");
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the response JSONPath resolves to a scalar")
+    void shouldFailExplicitlyWhenResponseJsonPathResolvesToScalar() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "GET",
+                "/api/customers/scalar-json-path",
+                Map.of("updatedSince", ":lastSyncWithBuffer"),
+                Map.of(),
+                "$.items[0].customerId",
+                "ISO_8601",
+                "customerId",
+                "updatedAt"
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/scalar-json-path"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(okJson("{\"items\":[{\"customerId\":\"c-1\"}]}")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("JSONPath must resolve to an object or array of objects")
+                .hasMessageContaining("$.items[0].customerId")
+                .hasMessageNotContaining("c-1");
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the upstream response is non-2xx")
+    void shouldFailExplicitlyWhenUpstreamResponseIsNon2xx() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = extractionConfig(
+                "/api/customers/server-error",
+                Map.of(),
+                Map.of("updatedSince", ":lastSyncWithBuffer")
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/server-error"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(serverError().withBody("{\"error\":\"upstream failure\",\"token\":\"test-token\"}")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("HTTP 500")
+                .hasMessageContaining("/api/customers/server-error")
+                .hasMessageNotContaining("test-token")
+                .hasMessageNotContaining("upstream failure");
     }
 
     @Test
