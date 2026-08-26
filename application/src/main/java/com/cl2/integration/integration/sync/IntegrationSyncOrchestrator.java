@@ -24,6 +24,7 @@ import java.nio.charset.StandardCharsets;
 import java.sql.Timestamp;
 import java.time.Instant;
 import java.time.LocalDateTime;
+import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -314,6 +315,21 @@ public class IntegrationSyncOrchestrator {
         }
         if (value instanceof LocalDateTime localDateTime) {
             return localDateTime.toInstant(ZoneOffset.UTC);
+        }
+        if (value instanceof String text && !text.isBlank()) {
+            try {
+                return Instant.parse(text);
+            } catch (java.time.format.DateTimeParseException ignored) {
+                try {
+                    return OffsetDateTime.parse(text).toInstant();
+                } catch (java.time.format.DateTimeParseException ignoredOffset) {
+                    try {
+                        return LocalDateTime.parse(text).toInstant(ZoneOffset.UTC);
+                    } catch (java.time.format.DateTimeParseException ignoredLocal) {
+                        // Fall through to the consistent unsupported-value error below.
+                    }
+                }
+            }
         }
         throw new IllegalStateException("Unsupported watermark column type: "
                 + (value == null ? "null" : value.getClass()));

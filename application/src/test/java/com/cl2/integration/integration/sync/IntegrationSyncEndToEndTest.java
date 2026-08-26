@@ -113,7 +113,7 @@ class IntegrationSyncEndToEndTest {
 
         IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
                 IntegrationProtocol.JDBC, "generic-jdbc", "generic-jdbc-adapter",
-                "jdbc:mysql://localhost:3306/integration?connectionTimeZone=UTC&allowPublicKeyRetrieval=true&useSSL=false",
+                MYSQL.getJdbcUrl(),
                 credentialRef,
                 "{\"customerId\":\"card_code\",\"legalName\":\"card_name\"}",
                 null,

@@ -42,6 +42,7 @@ import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
 import static com.github.tomakehurst.wiremock.client.WireMock.post;
 import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
+import static com.github.tomakehurst.wiremock.client.WireMock.aResponse;
 import static com.github.tomakehurst.wiremock.client.WireMock.serverError;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
@@ -351,6 +352,55 @@ class GenericRestAdapterTest {
                 .isInstanceOf(IllegalArgumentException.class)
                 .hasMessageContaining("Malformed JSON response")
                 .hasMessageNotContaining("customerId")
+                .hasMessageNotContaining("test-token");
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the upstream response body is blank")
+    void shouldFailExplicitlyWhenUpstreamResponseBodyIsBlank() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = extractionConfig(
+                "/api/customers/blank-body",
+                Map.of(),
+                Map.of("updatedSince", ":lastSyncWithBuffer")
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/blank-body"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(aResponse()
+                        .withStatus(200)
+                        .withHeader("Content-Type", "application/json")
+                        .withBody("   ")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid JSON response")
+                .hasMessageNotContaining("test-token");
+    }
+
+    @Test
+    @DisplayName("Should fail explicitly when the upstream response body is missing")
+    void shouldFailExplicitlyWhenUpstreamResponseBodyIsMissing() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = extractionConfig(
+                "/api/customers/missing-body",
+                Map.of(),
+                Map.of("updatedSince", ":lastSyncWithBuffer")
+        );
+
+        wireMockServer.stubFor(get(urlPathEqualTo("/api/customers/missing-body"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .willReturn(aResponse()
+                        .withStatus(204)
+                        .withHeader("Content-Type", "application/json")));
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Invalid JSON response")
                 .hasMessageNotContaining("test-token");
     }
 
