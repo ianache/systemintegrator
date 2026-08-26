@@ -40,8 +40,11 @@ import static com.github.tomakehurst.wiremock.client.WireMock.equalTo;
 import static com.github.tomakehurst.wiremock.client.WireMock.get;
 import static com.github.tomakehurst.wiremock.client.WireMock.getRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.okJson;
+import static com.github.tomakehurst.wiremock.client.WireMock.post;
+import static com.github.tomakehurst.wiremock.client.WireMock.postRequestedFor;
 import static com.github.tomakehurst.wiremock.client.WireMock.urlPathEqualTo;
 import static org.assertj.core.api.Assertions.assertThat;
+import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.reset;
@@ -241,6 +244,85 @@ class GenericRestAdapterTest {
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
     }
 
+    @Test
+    @DisplayName("Should honor POST extraction method")
+    void shouldHonorPostExtractionMethod() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "POST",
+                "/api/customers/post",
+                Map.of("updatedSince", ":lastSyncWithBuffer", "limit", "100"),
+                Map.of(),
+                "$.items[*]",
+                "ISO_8601",
+                "customerId",
+                "updatedAt"
+        );
+        ResolvedSecret secret = ResolvedSecret.bearer("vault:secret/data/post", "test-token");
+
+        wireMockServer.stubFor(post(urlPathEqualTo("/api/customers/post"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100"))
+                .withHeader("Authorization", equalTo("Bearer test-token"))
+                .willReturn(okJson("{\"items\":[{\"customerId\":\"c-2\"}]}")));
+
+        List<Map<String, Object>> result = extract(profile, config, secret, WATERMARK);
+
+        wireMockServer.verify(1, postRequestedFor(urlPathEqualTo("/api/customers/post"))
+                .withQueryParam("updatedSince", equalTo("2026-01-01T00:00:00Z"))
+                .withQueryParam("limit", equalTo("100"))
+                .withHeader("Authorization", equalTo("Bearer test-token")));
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0)).containsEntry("customerId", "c-2");
+    }
+
+    @Test
+    @DisplayName("Should reject unsupported watermark formats explicitly")
+    void shouldRejectUnsupportedWatermarkFormatsExplicitly() {
+        IntegrationProfile profile = restProfile();
+        ExtractionConfig config = new ExtractionConfig(
+                null,
+                "lastSyncWithBuffer",
+                "customerId",
+                100,
+                "GET",
+                "/api/customers",
+                Map.of("updatedSince", ":lastSyncWithBuffer"),
+                Map.of(),
+                "$.items[*]",
+                "UNIX_EPOCH",
+                "customerId",
+                "updatedAt"
+        );
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("Unsupported watermark format");
+    }
+
+    @Test
+    @DisplayName("Should reject endpoints containing userinfo")
+    void shouldRejectEndpointsContainingUserinfo() {
+        IntegrationProfile profile = restProfile(baseUrl.replace("://", "://user:pass@"));
+        ExtractionConfig config = extractionConfig(
+                "/api/customers",
+                Map.of(),
+                Map.of("updatedSince", ":lastSyncWithBuffer")
+        );
+
+        assertThatThrownBy(() -> extract(profile, config, ResolvedSecret.bearer("vault:secret/data/customers", "test-token"), WATERMARK))
+                .isInstanceOf(IllegalStateException.class)
+                .rootCause()
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("userinfo");
+    }
+
     private List<Map<String, Object>> extract(
             IntegrationProfile profile,
             ExtractionConfig config,
@@ -272,11 +354,15 @@ class GenericRestAdapterTest {
     }
 
     private IntegrationProfile restProfile() {
+        return restProfile(baseUrl);
+    }
+
+    private IntegrationProfile restProfile(String endpoint) {
         IntegrationProfileConfiguration configuration = new IntegrationProfileConfiguration(
                 IntegrationProtocol.REST,
                 "generic-rest",
                 "generic-rest",
-                baseUrl,
+                endpoint,
                 "vault:secret/data/rest",
                 null,
                 null,

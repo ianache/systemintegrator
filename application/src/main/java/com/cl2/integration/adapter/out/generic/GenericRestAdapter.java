@@ -15,6 +15,7 @@ import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.core.ParameterizedTypeReference;
 import org.springframework.http.HttpHeaders;
+import org.springframework.http.HttpMethod;
 import org.springframework.http.MediaType;
 import org.springframework.stereotype.Component;
 import org.springframework.web.client.RestClient;
@@ -55,18 +56,20 @@ public class GenericRestAdapter {
             ResolvedSecret secret,
             Instant watermarkTimestamp
     ) {
+        HttpMethod method = resolveMethod(config.method());
         URI requestUri = buildRequestUri(profile, config, watermarkTimestamp);
         HttpHeaders headers = buildHeaders(profile, config, secret);
 
         if (log.isDebugEnabled()) {
             Map<String, String> loggableHeaders = new LinkedHashMap<>();
             headers.forEach((name, values) -> loggableHeaders.put(name, String.join(", ", values)));
-            log.debug("Generic REST request -> GET {}\nHeaders: {}",
+            log.debug("Generic REST request -> {} {}\nHeaders: {}",
+                    method,
                     requestUri,
                     SensitiveDataRedactor.redactHeaders(loggableHeaders));
         }
 
-        String body = restClient.get()
+        String body = restClient.method(method)
                 .uri(requestUri)
                 .headers(httpHeaders -> httpHeaders.putAll(headers))
                 .retrieve()
@@ -83,7 +86,10 @@ public class GenericRestAdapter {
 
         Map<String, String> queryParams = config.queryParams() != null ? new LinkedHashMap<>(config.queryParams()) : Map.of();
         for (Map.Entry<String, String> entry : queryParams.entrySet()) {
-            builder.queryParam(entry.getKey(), resolveQueryValue(entry.getValue(), config.watermarkParam(), watermarkTimestamp));
+            builder.queryParam(
+                    entry.getKey(),
+                    resolveQueryValue(entry.getValue(), config.watermarkParam(), config.watermarkFormat(), watermarkTimestamp)
+            );
         }
 
         return builder.build(true).toUri();
@@ -204,6 +210,9 @@ public class GenericRestAdapter {
         if (!uri.isAbsolute() || scheme == null || (!"http".equalsIgnoreCase(scheme) && !"https".equalsIgnoreCase(scheme))) {
             throw new IllegalArgumentException("Profile endpoint must be an absolute http or https URL");
         }
+        if (uri.getUserInfo() != null && !uri.getUserInfo().isBlank()) {
+            throw new IllegalArgumentException("Profile endpoint must not contain userinfo credentials");
+        }
         return uri;
     }
 
@@ -214,15 +223,49 @@ public class GenericRestAdapter {
         return endpoint.resolve(path);
     }
 
-    private String resolveQueryValue(String value, String watermarkParam, Instant watermarkTimestamp) {
+    private String resolveQueryValue(String value, String watermarkParam, String watermarkFormat, Instant watermarkTimestamp) {
         if (value == null) {
             return null;
         }
 
         String expectedPlaceholder = ":" + (watermarkParam == null || watermarkParam.isBlank() ? "lastSyncWithBuffer" : watermarkParam);
         if (value.equals(expectedPlaceholder) || value.equals(":lastSyncWithBuffer")) {
-            return watermarkTimestamp.toString();
+            return formatWatermark(watermarkTimestamp, watermarkFormat);
         }
         return value;
+    }
+
+    private HttpMethod resolveMethod(String configuredMethod) {
+        String normalizedMethod = configuredMethod == null || configuredMethod.isBlank()
+                ? "GET"
+                : configuredMethod.trim().toUpperCase();
+
+        return switch (normalizedMethod) {
+            case "GET" -> HttpMethod.GET;
+            case "POST" -> HttpMethod.POST;
+            case "PUT" -> HttpMethod.PUT;
+            case "PATCH" -> HttpMethod.PATCH;
+            case "HEAD" -> HttpMethod.HEAD;
+            case "OPTIONS" -> HttpMethod.OPTIONS;
+            case "DELETE", "TRACE", "CONNECT" ->
+                    throw new IllegalArgumentException("Unsupported extraction HTTP method: " + normalizedMethod);
+            default -> throw new IllegalArgumentException("Unsupported extraction HTTP method: " + normalizedMethod);
+        };
+    }
+
+    private String formatWatermark(Instant watermarkTimestamp, String watermarkFormat) {
+        if (watermarkTimestamp == null) {
+            throw new IllegalArgumentException("Watermark timestamp is required");
+        }
+
+        String normalizedFormat = watermarkFormat == null || watermarkFormat.isBlank()
+                ? "ISO_8601"
+                : watermarkFormat.trim().toUpperCase();
+
+        if (!"ISO_8601".equals(normalizedFormat)) {
+            throw new IllegalArgumentException("Unsupported watermark format: " + normalizedFormat);
+        }
+
+        return watermarkTimestamp.toString();
     }
 }
