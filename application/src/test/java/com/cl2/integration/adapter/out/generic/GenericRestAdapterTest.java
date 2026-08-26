@@ -45,6 +45,7 @@ class GenericRestAdapterTest {
 
     private WireMockServer wireMockServer;
     private String baseUrl;
+    private final AdapterFactory adapterFactory = new AdapterFactory();
 
     @BeforeEach
     void setUp() {
@@ -63,7 +64,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should GET customers with watermark substitution, limit, and JSONPath extraction")
     void shouldGetCustomersWithWatermarkSubstitutionLimitAndJsonPathExtraction() {
-        GenericRestAdapter adapter = newAdapter();
+        GenericRestAdapter adapter = adapterFactory.create();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers",
@@ -89,7 +90,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should send Basic authentication in Authorization header")
     void shouldSendBasicAuthenticationHeader() {
-        GenericRestAdapter adapter = newAdapter();
+        GenericRestAdapter adapter = adapterFactory.create();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/basic",
@@ -118,7 +119,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should send Bearer token in Authorization header")
     void shouldSendBearerAuthenticationHeader() {
-        GenericRestAdapter adapter = newAdapter();
+        GenericRestAdapter adapter = adapterFactory.create();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/bearer",
@@ -146,7 +147,7 @@ class GenericRestAdapterTest {
     @Test
     @DisplayName("Should send API Key header")
     void shouldSendApiKeyHeader() {
-        GenericRestAdapter adapter = newAdapter();
+        GenericRestAdapter adapter = adapterFactory.create();
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/api-key",
@@ -175,7 +176,7 @@ class GenericRestAdapterTest {
     @DisplayName("Should use OAuth2 token cache boundary and forward configured headers")
     void shouldUseOAuth2TokenCacheBoundaryAndForwardConfiguredHeaders() {
         OAuth2TokenCacheManager tokenCacheManager = mock(OAuth2TokenCacheManager.class);
-        GenericRestAdapter adapter = newAdapter(tokenCacheManager);
+        GenericRestAdapter adapter = adapterFactory.create(tokenCacheManager);
         IntegrationProfile profile = restProfile();
         ExtractionConfig config = extractionConfig(
                 "/api/customers/oauth2",
@@ -225,17 +226,19 @@ class GenericRestAdapterTest {
         assertThat(result.get(0)).containsEntry("customerId", "c-1");
     }
 
-    private GenericRestAdapter newAdapter() {
-        return newAdapter(mock(OAuth2TokenCacheManager.class));
-    }
+    private static final class AdapterFactory {
+        GenericRestAdapter create() {
+            return create(mock(OAuth2TokenCacheManager.class));
+        }
 
-    private GenericRestAdapter newAdapter(OAuth2TokenCacheManager tokenCacheManager) {
-        return new GenericRestAdapter(
-                RestClient.builder(),
-                new ObjectMapper(),
-                tokenCacheManager,
-                Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
-        );
+        GenericRestAdapter create(OAuth2TokenCacheManager tokenCacheManager) {
+            return new GenericRestAdapter(
+                    RestClient.builder(),
+                    new ObjectMapper(),
+                    tokenCacheManager,
+                    Clock.fixed(Instant.parse("2026-01-01T00:00:00Z"), ZoneOffset.UTC)
+            );
+        }
     }
 
     private IntegrationProfile restProfile() {
