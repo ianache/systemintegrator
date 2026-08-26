@@ -242,7 +242,7 @@ class IntegrationSyncOrchestratorTest {
     @Test
     void restProfilesDelegateToGenericRestAdapterAndSkipJdbcExtraction() throws Exception {
         String extractionConfigJson = "{\"method\":\"GET\",\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
-                + "\"keyProperty\":\"externalId\",\"keyColumn\":\"legacyId\",\"watermarkParam\":\"updatedSince\",\"watermarkColumn\":\"updated_at\"}";
+                + "\"keyProperty\":\"externalId\",\"keyColumn\":\"legacyId\",\"watermarkParam\":\"updatedSince\",\"watermarkFormat\":\"ISO_8601\",\"watermarkColumn\":\"updated_at\"}";
         IntegrationProfile profile = profileWith(
                 IntegrationProtocol.REST,
                 "https://api.example.com",
@@ -277,6 +277,39 @@ class IntegrationSyncOrchestratorTest {
         ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
         verify(outboxRepository).save(outboxCaptor.capture());
         assertThat(outboxCaptor.getValue().payload()).isEqualTo("{\"customerId\":\"CLI-REST-001\"}");
+
+        ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
+        verify(syncStateRepository).upsert(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(rowTimestamp.minusSeconds(60));
+    }
+
+    @Test
+    void restProfilesAcceptIso8601StringWatermarksFromTheAdapter() throws Exception {
+        String extractionConfigJson = "{\"method\":\"GET\",\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
+                + "\"keyProperty\":\"externalId\",\"watermarkParam\":\"updatedSince\",\"watermarkFormat\":\"ISO_8601\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(
+                IntegrationProtocol.REST,
+                "https://api.example.com",
+                extractionConfigJson,
+                "{\"cronExpression\":\"0 */10 * * * *\",\"overlapBufferSeconds\":60}");
+
+        ResolvedSecret secret = ResolvedSecret.bearer("secret/sap/hana", "token-123");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        when(genericRestAdapter.extract(any(IntegrationProfile.class), any(ExtractionConfig.class), eq(secret), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of(
+                        "externalId", "CLI-REST-002",
+                        "updated_at", rowTimestamp.toString()
+                )));
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-REST-002\"}");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(outboxCaptor.capture());
+        assertThat(outboxCaptor.getValue().payload()).isEqualTo("{\"customerId\":\"CLI-REST-002\"}");
 
         ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
         verify(syncStateRepository).upsert(stateCaptor.capture());

@@ -170,7 +170,7 @@ public class GenericRestAdapter {
 
     private List<Map<String, Object>> extractRows(String body, String jsonPath) {
         if (body == null || body.isBlank()) {
-            return List.of();
+            throw new IllegalArgumentException("Invalid JSON response");
         }
 
         String normalizedJsonPath = jsonPath != null && !jsonPath.isBlank() ? jsonPath : "$";
