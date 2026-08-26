@@ -18,4 +18,11 @@ describe('AppController', () => {
       expect(appController.getData()).toEqual({ message: 'Hello API' });
     });
   });
+
+  describe('getHealth', () => {
+    it('should return an OK health response', () => {
+      const appController = app.get<AppController>(AppController);
+      expect(appController.getHealth()).toEqual({ status: 'ok' });
+    });
+  });
 });

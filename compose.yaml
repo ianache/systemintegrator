@@ -197,6 +197,85 @@ services:
       retries: 12
       start_period: 30s
 
+  backoffice-bff:
+    build:
+      context: ./backoffice
+      dockerfile: docker/bff.Dockerfile
+    container_name: backoffice-bff
+    hostname: backoffice-bff
+    environment:
+      PORT: 4000
+      BFF_PUBLIC_URL: ${BFF_PUBLIC_URL:-http://localhost:4000}
+      BFF_OIDC_CLIENT_ID: ${BFF_OIDC_CLIENT_ID:-backoffice-bff}
+      BFF_OIDC_CLIENT_SECRET: ${BFF_OIDC_CLIENT_SECRET:-local-dev-secret}
+      BFF_SESSION_SECRET: ${BFF_SESSION_SECRET:-local-backoffice-session-secret-change-me}
+      KEYCLOAK_APPS_ISSUER_URI: ${KEYCLOAK_APPS_ISSUER_URI:-http://host.docker.internal:8180/realms/backoffice}
+      GATEWAY_URI: http://middleware:8081
+      REDIS_URL: redis://integration-redis:6379
+    ports:
+      - "${BACKOFFICE_BFF_PORT:-4000}:4000"
+    depends_on:
+      middleware:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      integration-internal:
+        aliases:
+          - backoffice-bff
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:4000/health >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 20s
+
+  backoffice-microui:
+    build:
+      context: ./backoffice
+      dockerfile: docker/microui.Dockerfile
+    container_name: backoffice-microui
+    hostname: backoffice-microui
+    ports:
+      - "${BACKOFFICE_MICROUI_PORT:-4202}:80"
+    networks:
+      gateway-public:
+        aliases:
+          - backoffice-microui
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/remoteEntry.json >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
+  backoffice-shell:
+    build:
+      context: ./backoffice
+      dockerfile: docker/shell.Dockerfile
+    container_name: backoffice-shell
+    hostname: backoffice-shell
+    ports:
+      - "${BACKOFFICE_SHELL_PORT:-4200}:80"
+    depends_on:
+      backoffice-bff:
+        condition: service_healthy
+      backoffice-microui:
+        condition: service_healthy
+    networks:
+      integration-internal:
+        aliases:
+          - backoffice-shell
+      gateway-public:
+        aliases:
+          - backoffice-shell
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost/ >/dev/null"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
+
   prometheus:
     image: prom/prometheus:v3.0.0
     container_name: integration-prometheus
