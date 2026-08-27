@@ -134,8 +134,95 @@
               </div>
             </div>
           }
-          @case ('map') { <div data-testid="tab-map">Mapping & Transformation</div> }
-          @case ('pol') { <div data-testid="tab-pol">Políticas</div> }
+          @case ('map') {
+            <div data-testid="tab-map" class="tab-grid">
+              <div class="card">
+                <div class="card-header">
+                  <span>Mapping</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.mappingJson)">
+                    {{ isJsonValid(edit.mappingJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="mappingJson"
+                  class="json-editor"
+                  [value]="edit.mappingJson"
+                  (input)="updateField('mappingJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <span>Transformation</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.transformationJson)">
+                    {{ isJsonValid(edit.transformationJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="transformationJson"
+                  class="json-editor"
+                  [value]="edit.transformationJson"
+                  (input)="updateField('transformationJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+            </div>
+          }
+          @case ('pol') {
+            <div data-testid="tab-pol" class="tab-grid-3">
+              <div class="card">
+                <div class="card-header">
+                  <span>Sync policy</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.syncPolicyJson)">
+                    {{ isJsonValid(edit.syncPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="syncPolicyJson"
+                  class="json-editor"
+                  [value]="edit.syncPolicyJson"
+                  (input)="updateField('syncPolicyJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <span>Retry & backoff</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.retryPolicyJson)">
+                    {{ isJsonValid(edit.retryPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="retryPolicyJson"
+                  class="json-editor small"
+                  [value]="edit.retryPolicyJson"
+                  (input)="updateField('retryPolicyJson', $any($event.target).value)"
+                ></textarea>
+                @if (retrySequence().length > 0) {
+                  <div class="retry-sequence">
+                    <span class="mono seq-label">SECUENCIA CALCULADA</span>
+                    <div class="seq-chips">
+                      @for (step of retrySequence(); track $index) {
+                        <span class="mono seq-chip">{{ step }}</span>
+                      }
+                      <span class="mono seq-chip dlq">→ DLQ</span>
+                    </div>
+                  </div>
+                }
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <span>Rate limit</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.rateLimitPolicyJson)">
+                    {{ isJsonValid(edit.rateLimitPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="rateLimitPolicyJson"
+                  class="json-editor small"
+                  [value]="edit.rateLimitPolicyJson"
+                  (input)="updateField('rateLimitPolicyJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+            </div>
+          }
           @case ('sync') { <div data-testid="tab-sync">Sincronización</div> }
         }
       }

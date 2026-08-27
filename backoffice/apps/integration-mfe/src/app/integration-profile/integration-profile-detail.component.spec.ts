@@ -160,4 +160,50 @@ describe('IntegrationProfileDetailComponent', () => {
 
     expect(fixture.nativeElement.textContent).toContain('connector y adapter son obligatorios');
   });
+
+  it('pre-fills the Mapping tab textareas as pretty-printed JSON and flags invalid edits', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
+      ...FULL_PROFILE,
+      configuration: { protocol: null, connector: null, adapter: null, endpoint: null, credentialRef: null, mapping: { vin: '$.Vehiculo.Chasis' }, transformation: null, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null, extractionConfig: null },
+    });
+    fixture.detectChanges();
+
+    const mapTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Mapping & Transformation',
+    ) as HTMLButtonElement;
+    mapTabButton.click();
+    fixture.detectChanges();
+
+    const mappingArea = fixture.nativeElement.querySelector('[name="mappingJson"]') as HTMLTextAreaElement;
+    expect(mappingArea.value).toContain('"vin"');
+
+    mappingArea.value = '{ not json';
+    mappingArea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+    expect(fixture.nativeElement.textContent).toContain('JSON inválido');
+  });
+
+  it('computes a real retry sequence from the retry policy JSON typed by the user', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    const polTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Políticas',
+    ) as HTMLButtonElement;
+    polTabButton.click();
+    fixture.detectChanges();
+
+    const retryArea = fixture.nativeElement.querySelector('[name="retryPolicyJson"]') as HTMLTextAreaElement;
+    retryArea.value = JSON.stringify({ maxAttempts: 4, backoff: 'EXPONENTIAL', initialIntervalMs: 2000 });
+    retryArea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('2000ms');
+    expect(fixture.nativeElement.textContent).toContain('4000ms');
+    expect(fixture.nativeElement.textContent).toContain('8000ms');
+  });
 });

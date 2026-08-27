@@ -104,6 +104,26 @@ export class IntegrationProfileDetailComponent implements OnInit {
     return m.connector.trim().length > 0 && m.adapter.trim().length > 0;
   });
 
+  readonly retrySequence = computed(() => {
+    const raw = this.editModel()?.retryPolicyJson ?? '';
+    if (!raw.trim()) return [];
+    let parsed: { maxAttempts?: number; backoff?: string; initialIntervalMs?: number };
+    try {
+      parsed = JSON.parse(raw);
+    } catch {
+      return [];
+    }
+    if (parsed.backoff !== 'EXPONENTIAL' || !parsed.maxAttempts || parsed.maxAttempts < 2) return [];
+    const initial = parsed.initialIntervalMs ?? 1000;
+    const sequence: string[] = [];
+    let interval = initial;
+    for (let i = 0; i < parsed.maxAttempts - 1; i++) {
+      sequence.push(interval + 'ms');
+      interval *= 2;
+    }
+    return sequence;
+  });
+
   private profileId = '';
 
   ngOnInit(): void {
@@ -123,6 +143,16 @@ export class IntegrationProfileDetailComponent implements OnInit {
 
   reload(): void {
     if (this.profileId) this.load(this.profileId);
+  }
+
+  isJsonValid(raw: string): boolean {
+    if (!raw.trim()) return true;
+    try {
+      JSON.parse(raw);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   setTab(tab: DetailTab): void {
