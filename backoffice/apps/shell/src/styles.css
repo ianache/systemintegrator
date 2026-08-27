@@ -128,3 +128,9 @@ button { font-family: inherit; font-size: inherit; color: inherit; }
 
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 48px 24px; color: var(--text-muted); }
 .empty-state strong { color: var(--text); font-size: 13.5px; }
+
+.badge.active { color: var(--ok); background: color-mix(in oklab, var(--ok) 15%, var(--surface)); }
+.badge.inactive { color: var(--text-muted); background: var(--surface-2); }
+.badge.dir-inbound { color: var(--dir-in); background: color-mix(in oklab, var(--dir-in) 15%, var(--surface)); }
+.badge.dir-outbound { color: var(--dir-out); background: color-mix(in oklab, var(--dir-out) 15%, var(--surface)); }
+.badge.dir-bidirectional { color: var(--accent-fg); background: var(--accent-tint); }

@@ -1,9 +1,11 @@
-import { Component, InjectionToken, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, InjectionToken, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
-import { IntegrationProfile } from './integration-profile.model';
+import { Router } from '@angular/router';
+import { IntegrationProfile, SyncDirection } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
 
 type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'unavailable';
+type DirectionFilter = 'ALL' | SyncDirection;
 
 export interface BrowserWindow {
   location: Pick<Location, 'assign'>;
@@ -14,6 +16,7 @@ export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
 });
 
 @Component({
+  changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-integration-profile-list',
   standalone: true,
   templateUrl: './integration-profile-list.component.html',
@@ -22,9 +25,32 @@ export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
 export class IntegrationProfileListComponent implements OnInit {
   private readonly profileService = inject(IntegrationProfileService);
   private readonly browserWindow = inject(WINDOW);
+  private readonly router = inject(Router);
 
   readonly profiles = signal<IntegrationProfile[]>([]);
   readonly state = signal<ProfileListState>('loading');
+  readonly search = signal('');
+  readonly directionFilter = signal<DirectionFilter>('ALL');
+
+  readonly directions: DirectionFilter[] = ['ALL', 'INBOUND', 'OUTBOUND', 'BIDIRECTIONAL'];
+
+  readonly filteredProfiles = computed(() => {
+    const query = this.search().trim().toLowerCase();
+    const direction = this.directionFilter();
+    return this.profiles().filter((profile) => {
+      if (direction !== 'ALL' && profile.syncDirection !== direction) return false;
+      if (!query) return true;
+      const haystack = [
+        profile.businessDomain,
+        profile.externalSource,
+        profile.configuration?.connector ?? '',
+        profile.configuration?.adapter ?? '',
+      ]
+        .join(' ')
+        .toLowerCase();
+      return haystack.includes(query);
+    });
+  });
 
   ngOnInit(): void {
     this.retry();
@@ -43,9 +69,28 @@ export class IntegrationProfileListComponent implements OnInit {
           this.browserWindow.location.assign('/auth/login');
           return;
         }
-
         this.state.set('unavailable');
       },
     });
+  }
+
+  onSearch(value: string): void {
+    this.search.set(value);
+  }
+
+  setDirection(direction: DirectionFilter): void {
+    this.directionFilter.set(direction);
+  }
+
+  open(profile: IntegrationProfile): void {
+    this.router.navigate(['/integration/profiles', profile.id]);
+  }
+
+  directionBadgeClass(direction: SyncDirection): string {
+    return 'badge dir-' + direction.toLowerCase();
+  }
+
+  statusBadgeClass(active: boolean): string {
+    return 'badge ' + (active ? 'active' : 'inactive');
   }
 }
