@@ -92,4 +92,72 @@ describe('IntegrationProfileDetailComponent', () => {
     expect(fixture.nativeElement.querySelector('[data-testid="tab-map"]')).not.toBeNull();
     expect(navigateSpy).toHaveBeenCalledWith([], expect.objectContaining({ queryParams: { tab: 'map' } }));
   });
+
+  it('pre-fills the General tab from the loaded profile', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    const domainInput = fixture.nativeElement.querySelector('[name="businessDomain"]') as HTMLInputElement;
+    expect(domainInput.value).toBe('vehicle');
+  });
+
+  it('saves edited fields with the loaded version as expectedVersion', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    const domainInput = fixture.nativeElement.querySelector('[name="businessDomain"]') as HTMLInputElement;
+    domainInput.value = 'vehicle-fleet';
+    domainInput.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="save-profile"]') as HTMLButtonElement).click();
+
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1');
+    expect(request.request.method).toBe('PUT');
+    expect(request.request.body).toMatchObject({ businessDomain: 'vehicle-fleet', expectedVersion: 7 });
+    request.flush({ ...FULL_PROFILE, businessDomain: 'vehicle-fleet', version: 8 });
+  });
+
+  it('round-trips config fields with no dedicated editor instead of nulling them out on save', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
+      ...FULL_PROFILE,
+      configuration: {
+        protocol: 'KAFKA', connector: 'sigo-kafka-connector', adapter: 'SigoVehicleAdapter', endpoint: null, credentialRef: null,
+        mapping: { rules: 3 }, transformation: null, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null,
+        extractionConfig: { watermarkColumn: 'updated_at' },
+      },
+    });
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="save-profile"]') as HTMLButtonElement).click();
+
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1');
+    expect(request.request.body.mapping).toEqual({ rules: 3 });
+    expect(request.request.body.extractionConfig).toEqual({ watermarkColumn: 'updated_at' });
+    request.flush(FULL_PROFILE);
+  });
+
+  it('flags a protocol without connector/adapter in the Conectividad validation panel', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
+      ...FULL_PROFILE,
+      configuration: { protocol: 'KAFKA', connector: null, adapter: null, endpoint: null, credentialRef: null, mapping: null, transformation: null, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null, extractionConfig: null },
+    });
+    fixture.detectChanges();
+
+    const connTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Conectividad',
+    ) as HTMLButtonElement;
+    connTabButton.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('connector y adapter son obligatorios');
+  });
 });

@@ -27,7 +27,13 @@
             <span>actualizado {{ p.updatedAt.slice(0, 10) }}</span>
           </div>
         </div>
+        <div class="detail-actions">
+          <button type="button" data-testid="save-profile" class="btn btn-primary" [disabled]="saving()" (click)="save()">Guardar cambios</button>
+        </div>
       </div>
+      @if (saveError(); as err) {
+        <div class="wizard-error">{{ err }}</div>
+      }
       <div class="tabs">
         @for (t of tabs; track t.id) {
           <button type="button" class="tab" [class.active]="tab() === t.id" (click)="setTab(t.id)">{{ t.label }}</button>
@@ -36,12 +42,102 @@
     </div>
 
     <div class="detail-body">
-      @switch (tab()) {
-        @case ('general') { <div data-testid="tab-general">General</div> }
-        @case ('conn') { <div data-testid="tab-conn">Conectividad</div> }
-        @case ('map') { <div data-testid="tab-map">Mapping & Transformation</div> }
-        @case ('pol') { <div data-testid="tab-pol">Políticas</div> }
-        @case ('sync') { <div data-testid="tab-sync">Sincronización</div> }
+      @if (editModel(); as edit) {
+        @switch (tab()) {
+          @case ('general') {
+            <div data-testid="tab-general" class="tab-grid">
+              <div class="card">
+                <div class="card-header">Identidad del perfil</div>
+                <div class="card-grid">
+                  <label class="field">
+                    <span class="label">BUSINESS DOMAIN</span>
+                    <input name="businessDomain" [value]="edit.businessDomain" (input)="updateField('businessDomain', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">EXTERNAL SOURCE</span>
+                    <input name="externalSource" [value]="edit.externalSource" (input)="updateField('externalSource', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">SYNC DIRECTION</span>
+                    <select [value]="edit.syncDirection" (change)="updateField('syncDirection', $any($event.target).value)">
+                      <option value="INBOUND">INBOUND</option>
+                      <option value="OUTBOUND">OUTBOUND</option>
+                      <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="label">SOURCE OF TRUTH</span>
+                    <select [value]="edit.sourceOfTruth" (change)="updateField('sourceOfTruth', $any($event.target).value)">
+                      <option value="PLATFORM">PLATFORM</option>
+                      <option value="EXTERNAL">EXTERNAL</option>
+                      <option value="SHARED">SHARED</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">Metadatos</div>
+                <div class="meta-list">
+                  <div class="meta-row"><span class="mono meta-label">PROFILE ID</span><span class="mono">{{ p.id }}</span></div>
+                  <div class="meta-row"><span class="mono meta-label">TENANT ID</span><span class="mono">{{ p.tenantId }}</span></div>
+                  <div class="meta-row"><span class="mono meta-label">VERSION</span><span class="mono">v{{ p.version }} · control optimista</span></div>
+                  <div class="meta-row"><span class="mono meta-label">CREADO</span><span class="mono">{{ p.createdAt.slice(0, 10) }}</span></div>
+                  <div class="meta-row"><span class="mono meta-label">ACTUALIZADO</span><span class="mono">{{ p.updatedAt.slice(0, 10) }}</span></div>
+                </div>
+              </div>
+            </div>
+          }
+          @case ('conn') {
+            <div data-testid="tab-conn" class="tab-grid">
+              <div class="card">
+                <div class="card-header">Conector</div>
+                <div class="card-grid">
+                  <label class="field">
+                    <span class="label">PROTOCOL</span>
+                    <select [value]="edit.protocol" (change)="updateField('protocol', $any($event.target).value)">
+                      <option value="">—</option>
+                      <option value="REST">REST</option>
+                      <option value="SOAP">SOAP</option>
+                      <option value="JSON_RPC">JSON_RPC</option>
+                      <option value="KAFKA">KAFKA</option>
+                      <option value="JDBC">JDBC</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="label">CONNECTOR</span>
+                    <input [value]="edit.connector" (input)="updateField('connector', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">ADAPTER</span>
+                    <input [value]="edit.adapter" (input)="updateField('adapter', $any($event.target).value)" />
+                  </label>
+                  <label class="field full">
+                    <span class="label">ENDPOINT</span>
+                    <input [value]="edit.endpoint" (input)="updateField('endpoint', $any($event.target).value)" />
+                  </label>
+                  <label class="field full">
+                    <span class="label">CREDENTIAL REF</span>
+                    <input [value]="edit.credentialRef" (input)="updateField('credentialRef', $any($event.target).value)" />
+                  </label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">Validación (local)</div>
+                <div class="validation-panel">
+                  @if (connectivityValid()) {
+                    <div class="validation-row ok">✓ Protocol, connector y adapter son consistentes.</div>
+                  } @else {
+                    <div class="validation-row err">✗ Si defines protocol, connector y adapter son obligatorios.</div>
+                  }
+                  <p class="validation-note">Esta validación es local al formulario; no ejecuta un handshake real contra la fuente externa.</p>
+                </div>
+              </div>
+            </div>
+          }
+          @case ('map') { <div data-testid="tab-map">Mapping & Transformation</div> }
+          @case ('pol') { <div data-testid="tab-pol">Políticas</div> }
+          @case ('sync') { <div data-testid="tab-sync">Sincronización</div> }
+        }
       }
     </div>
   </div>
