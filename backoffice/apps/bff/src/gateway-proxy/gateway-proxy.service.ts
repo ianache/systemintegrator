@@ -1,34 +1,78 @@
 import {
   BadGatewayException,
   ForbiddenException,
+  HttpException,
   Injectable,
   UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import axios from 'axios';
 
+type HttpMethod = 'get' | 'post' | 'put' | 'delete';
+const PASSTHROUGH_STATUSES = new Set([400, 404, 409, 422]);
+
 @Injectable()
 export class GatewayProxyService {
   constructor(private readonly config: ConfigService) {}
 
-  async getIntegrationProfiles(accessToken: string): Promise<unknown> {
+  getIntegrationProfiles(accessToken: string, activeOnly: boolean): Promise<unknown> {
+    return this.forward('get', `/api/v1/integration-profiles?activeOnly=${activeOnly}`, accessToken);
+  }
+
+  getIntegrationProfile(accessToken: string, profileId: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/integration-profiles/${profileId}`, accessToken);
+  }
+
+  createIntegrationProfile(accessToken: string, body: unknown): Promise<unknown> {
+    return this.forward('post', '/api/v1/integration-profiles', accessToken, body);
+  }
+
+  updateIntegrationProfile(accessToken: string, profileId: string, body: unknown): Promise<unknown> {
+    return this.forward('put', `/api/v1/integration-profiles/${profileId}`, accessToken, body);
+  }
+
+  deactivateIntegrationProfile(accessToken: string, profileId: string): Promise<unknown> {
+    return this.forward('delete', `/api/v1/integration-profiles/${profileId}`, accessToken);
+  }
+
+  triggerSync(accessToken: string, profileId: string): Promise<unknown> {
+    return this.forward('post', `/api/v1/integration-profiles/${profileId}/sync`, accessToken, {});
+  }
+
+  replayDeadLetterQueue(accessToken: string): Promise<unknown> {
+    return this.forward('post', '/api/v1/inbox/dlq/replay', accessToken, {});
+  }
+
+  private async forward(method: HttpMethod, path: string, accessToken: string, body?: unknown): Promise<unknown> {
+    const url = `${this.config.getOrThrow<string>('GATEWAY_URI')}${path}`;
+    const options = { headers: { Authorization: `Bearer ${accessToken}` } };
+
     try {
-      const response = await axios.get(
-        `${this.config.getOrThrow<string>('GATEWAY_URI')}/api/v1/integration-profiles`,
-        { headers: { Authorization: `Bearer ${accessToken}` } },
-      );
+      const response =
+        method === 'get'
+          ? await axios.get(url, options)
+          : method === 'delete'
+            ? await axios.delete(url, options)
+            : await axios[method](url, body, options);
       return response.data;
     } catch (error) {
-      const downstreamStatus = (error as { response?: { status?: number } }).response
-        ?.status;
-
-      if (downstreamStatus === 401) {
-        throw new UnauthorizedException('Gateway rejected the session credentials');
-      }
-      if (downstreamStatus === 403) {
-        throw new ForbiddenException('Gateway denied access to integration profiles');
-      }
-      throw new BadGatewayException('Gateway is unavailable');
+      throw this.mapError(error);
     }
+  }
+
+  private mapError(error: unknown): Error {
+    const response = (error as { response?: { status?: number; data?: unknown } }).response;
+    const status = response?.status;
+
+    if (status === 401) {
+      return new UnauthorizedException('Gateway rejected the session credentials');
+    }
+    if (status === 403) {
+      return new ForbiddenException('Gateway denied access to integration profiles');
+    }
+    if (status !== undefined && PASSTHROUGH_STATUSES.has(status)) {
+      return new HttpException(response?.data as Record<string, unknown>, status);
+    }
+    return new BadGatewayException('Gateway is unavailable');
   }
 }
