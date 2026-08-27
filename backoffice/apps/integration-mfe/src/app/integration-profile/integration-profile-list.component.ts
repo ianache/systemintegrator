@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
 import { IntegrationProfile, SyncDirection } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
+import { IntegrationProfileWizardComponent } from './integration-profile-wizard.component';
 
 type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'unavailable';
 type DirectionFilter = 'ALL' | SyncDirection;
@@ -19,6 +20,7 @@ export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-integration-profile-list',
   standalone: true,
+  imports: [IntegrationProfileWizardComponent],
   templateUrl: './integration-profile-list.component.html',
   styleUrl: './integration-profile-list.component.css',
 })
@@ -92,5 +94,16 @@ export class IntegrationProfileListComponent implements OnInit {
 
   statusBadgeClass(active: boolean): string {
     return 'badge ' + (active ? 'active' : 'inactive');
+  }
+
+  readonly wizardOpen = signal(false);
+
+  openWizard(): void {
+    this.wizardOpen.set(true);
+  }
+
+  onCreated(profile: IntegrationProfile): void {
+    this.wizardOpen.set(false);
+    this.router.navigate(['/integration/profiles', profile.id]);
   }
 }

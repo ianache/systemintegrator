@@ -136,12 +136,25 @@ describe('IntegrationProfileListComponent', () => {
     });
     fixture.detectChanges();
 
-    const retryButton = fixture.nativeElement.querySelector('button.btn') as HTMLButtonElement;
-    expect(retryButton.textContent).toContain('Reintentar');
+    const retryButton = Array.from(fixture.nativeElement.querySelectorAll('button.btn')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Reintentar',
+    ) as HTMLButtonElement;
+    expect(retryButton).not.toBeUndefined();
     retryButton.click();
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('Cargando integration profiles');
     http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([]);
+  });
+
+  it('opens the create wizard from the toolbar button', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([]);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('.new-profile-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-integration-profile-wizard')).not.toBeNull();
   });
 });

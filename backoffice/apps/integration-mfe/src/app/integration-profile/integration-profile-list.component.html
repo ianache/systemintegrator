@@ -4,6 +4,7 @@
       <h1 id="integration-profiles-heading">Integration Profiles</h1>
       <p>Un perfil define cómo un dominio de negocio se acopla a una fuente externa.</p>
     </div>
+    <button type="button" class="btn btn-primary new-profile-btn" (click)="openWizard()">＋ Nuevo profile</button>
   </div>
 
   @if (state() === 'loading') {
@@ -69,5 +70,9 @@
         </tbody>
       </table>
     </div>
+  }
+
+  @if (wizardOpen()) {
+    <app-integration-profile-wizard (closed)="wizardOpen.set(false)" (created)="onCreated($event)" />
   }
 </section>

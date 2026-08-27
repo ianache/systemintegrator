@@ -1,0 +1,104 @@
+<div class="modal-overlay">
+  <div class="modal">
+    <div class="modal-header">
+      <div>
+        <span class="modal-title">Nuevo Integration Profile</span>
+        <span class="modal-sub">{{ expert() ? 'Edición directa del payload' : stepLabels[step()] }}</span>
+      </div>
+      <button type="button" class="btn" (click)="toggleExpert()">{{ expert() ? 'Modo guiado' : 'Modo experto' }}</button>
+      <button type="button" class="btn-ghost close-btn" (click)="close()">×</button>
+    </div>
+
+    @if (errorMessage(); as message) {
+      <div class="wizard-error">{{ message }}</div>
+    }
+
+    @if (expert()) {
+      <div class="modal-body">
+        <textarea
+          class="expert-json"
+          [value]="expertJson()"
+          (input)="expertJson.set($any($event.target).value)"
+        ></textarea>
+      </div>
+    } @else {
+      <div class="modal-body">
+        @switch (step()) {
+          @case (0) {
+            <label class="field">
+              <span class="label">BUSINESS DOMAIN</span>
+              <input name="businessDomain" [value]="model().businessDomain" (input)="updateField('businessDomain', $any($event.target).value)" />
+            </label>
+            <label class="field">
+              <span class="label">EXTERNAL SOURCE</span>
+              <input name="externalSource" [value]="model().externalSource" (input)="updateField('externalSource', $any($event.target).value)" />
+            </label>
+          }
+          @case (1) {
+            <label class="field">
+              <span class="label">SYNC DIRECTION</span>
+              <select name="syncDirection" [value]="model().syncDirection" (change)="updateField('syncDirection', $any($event.target).value)">
+                <option value="INBOUND">INBOUND</option>
+                <option value="OUTBOUND">OUTBOUND</option>
+                <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">SOURCE OF TRUTH</span>
+              <select name="sourceOfTruth" [value]="model().sourceOfTruth" (change)="updateField('sourceOfTruth', $any($event.target).value)">
+                <option value="PLATFORM">PLATFORM</option>
+                <option value="EXTERNAL">EXTERNAL</option>
+                <option value="SHARED">SHARED</option>
+              </select>
+            </label>
+          }
+          @case (2) {
+            <label class="field">
+              <span class="label">PROTOCOL</span>
+              <select name="protocol" [value]="model().protocol" (change)="updateField('protocol', $any($event.target).value)">
+                <option value="">—</option>
+                <option value="REST">REST</option>
+                <option value="SOAP">SOAP</option>
+                <option value="JSON_RPC">JSON_RPC</option>
+                <option value="KAFKA">KAFKA</option>
+                <option value="JDBC">JDBC</option>
+              </select>
+            </label>
+            <label class="field">
+              <span class="label">CONNECTOR</span>
+              <input name="connector" [value]="model().connector" (input)="updateField('connector', $any($event.target).value)" />
+            </label>
+            <label class="field">
+              <span class="label">ADAPTER</span>
+              <input name="adapter" [value]="model().adapter" (input)="updateField('adapter', $any($event.target).value)" />
+            </label>
+            <label class="field">
+              <span class="label">ENDPOINT</span>
+              <input name="endpoint" [value]="model().endpoint" (input)="updateField('endpoint', $any($event.target).value)" />
+            </label>
+            <label class="field">
+              <span class="label">CREDENTIAL REF</span>
+              <input name="credentialRef" [value]="model().credentialRef" (input)="updateField('credentialRef', $any($event.target).value)" />
+            </label>
+          }
+          @case (3) {
+            <pre class="review-json">{{ this.model() | json }}</pre>
+          }
+        }
+      </div>
+    }
+
+    <div class="modal-footer">
+      <span class="mono footer-progress">{{ expert() ? 'POST /api/v1/integration-profiles' : 'Paso ' + (step() + 1) + ' de ' + stepLabels.length }}</span>
+      <div class="footer-actions">
+        <button type="button" class="btn" (click)="close()">Cancelar</button>
+        @if (!expert() && step() > 0) {
+          <button type="button" class="btn" (click)="back()">Atrás</button>
+        }
+        <button type="button" data-testid="wizard-next" class="btn btn-primary" [disabled]="submitting()" (click)="next()">
+          {{ expert() || step() === stepLabels.length - 1 ? 'Crear profile' : 'Continuar' }}
+        </button>
+      </div>
+    </div>
+  </div>
+</div>
