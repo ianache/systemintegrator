@@ -1,9 +1,17 @@
 import {
+  Body,
   CanActivate,
   Controller,
+  Delete,
   ExecutionContext,
   Get,
+  HttpCode,
+  HttpStatus,
   Injectable,
+  Param,
+  Post,
+  Put,
+  Query,
   Req,
   UnauthorizedException,
   UseGuards,
@@ -34,7 +42,45 @@ export class GatewayProxyController {
   constructor(private readonly gatewayProxy: GatewayProxyService) {}
 
   @Get('integration-profiles')
-  getIntegrationProfiles(@Req() request: AuthenticatedRequest) {
-    return this.gatewayProxy.getIntegrationProfiles(request.session.tokens!.access_token!);
+  getIntegrationProfiles(@Req() request: AuthenticatedRequest, @Query('activeOnly') activeOnly = 'true') {
+    return this.gatewayProxy.getIntegrationProfiles(request.session.tokens!.access_token!, activeOnly !== 'false');
+  }
+
+  @Get('integration-profiles/:profileId')
+  getIntegrationProfile(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string) {
+    return this.gatewayProxy.getIntegrationProfile(request.session.tokens!.access_token!, profileId);
+  }
+
+  @Post('integration-profiles')
+  @HttpCode(HttpStatus.OK)
+  createIntegrationProfile(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.gatewayProxy.createIntegrationProfile(request.session.tokens!.access_token!, body);
+  }
+
+  @Put('integration-profiles/:profileId')
+  updateIntegrationProfile(
+    @Req() request: AuthenticatedRequest,
+    @Param('profileId') profileId: string,
+    @Body() body: unknown,
+  ) {
+    return this.gatewayProxy.updateIntegrationProfile(request.session.tokens!.access_token!, profileId, body);
+  }
+
+  @Delete('integration-profiles/:profileId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  deactivateIntegrationProfile(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string) {
+    return this.gatewayProxy.deactivateIntegrationProfile(request.session.tokens!.access_token!, profileId);
+  }
+
+  @Post('integration-profiles/:profileId/sync')
+  @HttpCode(HttpStatus.OK)
+  triggerSync(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string) {
+    return this.gatewayProxy.triggerSync(request.session.tokens!.access_token!, profileId);
+  }
+
+  @Post('inbox/dlq/replay')
+  @HttpCode(HttpStatus.OK)
+  replayDeadLetterQueue(@Req() request: AuthenticatedRequest) {
+    return this.gatewayProxy.replayDeadLetterQueue(request.session.tokens!.access_token!);
   }
 }
