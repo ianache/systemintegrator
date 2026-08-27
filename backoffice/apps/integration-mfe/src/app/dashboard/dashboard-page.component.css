@@ -1,0 +1,35 @@
+.kpi-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; }
+.kpi { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.kpi-label { font-size: 10px; letter-spacing: 0.08em; color: var(--text-dim); text-transform: uppercase; }
+.kpi-value { font-size: 26px; font-weight: 600; letter-spacing: -0.02em; }
+.kpi-value.muted { color: var(--text-dim); }
+.kpi-note { font-size: 11.5px; color: var(--text-muted); }
+
+.dashboard-columns { display: grid; grid-template-columns: 1.55fr 1fr; gap: 16px; align-items: start; }
+
+.see-all { margin-left: auto; }
+
+.attention-row {
+  display: grid; grid-template-columns: 1fr 130px 100px; gap: 12px; align-items: center;
+  padding: 11px 16px; border-bottom: 1px solid var(--border-soft); text-decoration: none; color: inherit;
+}
+.attention-row:hover { background: var(--surface-2); }
+.attention-name { display: flex; flex-direction: column; gap: 2px; }
+.attention-code { font-size: 10.5px; color: var(--text-dim); }
+.attention-issue { font-size: 11.5px; color: var(--text-muted); }
+.badge.inactive { color: var(--text-muted); background: var(--surface-2); justify-self: end; }
+
+.flow-card { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.flow-title { font-weight: 600; }
+.flow-row { display: flex; flex-direction: column; gap: 6px; }
+.flow-row-head { display: flex; justify-content: space-between; }
+.flow-bar { height: 6px; background: var(--border-soft); border-radius: 3px; overflow: hidden; }
+.flow-bar-fill { height: 100%; background: var(--dir-in); }
+.flow-note { font-size: 11px; color: var(--text-dim); }
+
+.sot-row { border-top: 1px solid var(--border-soft); padding-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.sot-title { font-size: 10px; letter-spacing: 0.08em; color: var(--text-dim); }
+.sot-chips { display: flex; gap: 6px; }
+.sot-chip { flex: 1; border: 1px solid var(--border); border-radius: 4px; padding: 8px; display: flex; flex-direction: column; gap: 2px; }
+.sot-count { font-size: 17px; font-weight: 600; }
+.sot-label { font-size: 9.5px; color: var(--text-dim); }
