@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, InjectionToken, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
@@ -7,10 +7,15 @@ import {
   IntegrationProtocol,
   SourceOfTruth,
   SyncDirection,
+  TriggerSyncResult,
   UpdateIntegrationProfilePayload,
 } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
 import { ToastService } from '../shared/toast.service';
+
+export const CONFIRM = new InjectionToken<(message: string) => boolean>('CONFIRM', {
+  factory: () => (message: string) => window.confirm(message),
+});
 
 export type DetailTab = 'general' | 'conn' | 'map' | 'pol' | 'sync';
 type DetailState = 'loading' | 'ready' | 'not-found' | 'unavailable';
@@ -89,6 +94,7 @@ export class IntegrationProfileDetailComponent implements OnInit {
   private readonly router = inject(Router);
   private readonly profileService = inject(IntegrationProfileService);
   private readonly toast = inject(ToastService);
+  private readonly confirm = inject(CONFIRM);
 
   readonly tabs = TABS;
   readonly state = signal<DetailState>('loading');
@@ -97,6 +103,8 @@ export class IntegrationProfileDetailComponent implements OnInit {
   readonly editModel = signal<EditModel | null>(null);
   readonly saving = signal(false);
   readonly saveError = signal<string | null>(null);
+  readonly syncing = signal(false);
+  readonly syncLog = signal<TriggerSyncResult[]>([]);
 
   readonly connectivityValid = computed(() => {
     const m = this.editModel();
@@ -143,6 +151,36 @@ export class IntegrationProfileDetailComponent implements OnInit {
 
   reload(): void {
     if (this.profileId) this.load(this.profileId);
+  }
+
+  triggerSync(): void {
+    const current = this.profile();
+    if (!current) return;
+    this.syncing.set(true);
+    this.profileService.triggerSync(current.id).subscribe({
+      next: (result) => {
+        this.syncing.set(false);
+        this.syncLog.update((log) => [result, ...log]);
+        this.toast.show('Sincronización disparada · ' + result.status);
+      },
+      error: () => {
+        this.syncing.set(false);
+        this.toast.show('No se pudo disparar la sincronización.');
+      },
+    });
+  }
+
+  deactivateProfile(): void {
+    const current = this.profile();
+    if (!current) return;
+    if (!this.confirm('Esta acción desactiva el perfil y no puede deshacerse desde la consola. ¿Continuar?')) return;
+    this.profileService.deactivate(current.id).subscribe({
+      next: () => {
+        this.profile.set({ ...current, active: false });
+        this.toast.show('Perfil desactivado.');
+      },
+      error: () => this.toast.show('No se pudo desactivar el perfil.'),
+    });
   }
 
   isJsonValid(raw: string): boolean {

@@ -28,6 +28,11 @@
           </div>
         </div>
         <div class="detail-actions">
+          @if (p.active) {
+            <button type="button" data-testid="deactivate-profile" class="btn" (click)="deactivateProfile()">Desactivar perfil</button>
+          } @else {
+            <span class="inactive-note">Perfil inactivo — no hay acción de reactivación disponible en la consola.</span>
+          }
           <button type="button" data-testid="save-profile" class="btn btn-primary" [disabled]="saving()" (click)="save()">Guardar cambios</button>
         </div>
       </div>
@@ -223,7 +228,32 @@
               </div>
             </div>
           }
-          @case ('sync') { <div data-testid="tab-sync">Sincronización</div> }
+          @case ('sync') {
+            <div data-testid="tab-sync" class="tab-grid">
+              <div class="card">
+                <div class="card-header">
+                  <span>Sincronización</span>
+                  <button type="button" data-testid="trigger-sync" class="btn btn-dark" [disabled]="syncing()" (click)="triggerSync()">Sincronizar ahora</button>
+                </div>
+                <p class="sync-hint">
+                  Dispara <span class="mono">POST /integration-profiles/{{ p.id }}/sync</span> contra el Gateway real. Confirma que el
+                  trigger fue aceptado; no ejecuta una prueba de conectividad de bajo nivel.
+                </p>
+                @if (syncLog().length === 0) {
+                  <div class="empty-state"><strong>Sin sincronizaciones en esta sesión</strong></div>
+                } @else {
+                  <div class="sync-log">
+                    @for (entry of syncLog(); track entry.triggeredAt) {
+                      <div class="sync-log-row">
+                        <span class="badge active">{{ entry.status }}</span>
+                        <span class="mono">{{ entry.triggeredAt }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
         }
       }
     </div>

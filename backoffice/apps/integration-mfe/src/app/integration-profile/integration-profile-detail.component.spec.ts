@@ -3,7 +3,7 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { TestBed } from '@angular/core/testing';
 import { ActivatedRoute, Router, convertToParamMap } from '@angular/router';
 import { BehaviorSubject } from 'rxjs';
-import { IntegrationProfileDetailComponent } from './integration-profile-detail.component';
+import { CONFIRM, IntegrationProfileDetailComponent } from './integration-profile-detail.component';
 
 const FULL_PROFILE = {
   id: 'p-1',
@@ -24,11 +24,13 @@ describe('IntegrationProfileDetailComponent', () => {
   let params: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
   let queryParams: BehaviorSubject<ReturnType<typeof convertToParamMap>>;
   let navigateSpy: ReturnType<typeof vi.fn>;
+  let confirmSpy: ReturnType<typeof vi.fn>;
 
   beforeEach(async () => {
     params = new BehaviorSubject(convertToParamMap({ profileId: 'p-1' }));
     queryParams = new BehaviorSubject(convertToParamMap({}));
     navigateSpy = vi.fn();
+    confirmSpy = vi.fn(() => true);
 
     await TestBed.configureTestingModule({
       imports: [IntegrationProfileDetailComponent],
@@ -40,6 +42,7 @@ describe('IntegrationProfileDetailComponent', () => {
           useValue: { paramMap: params.asObservable(), queryParamMap: queryParams.asObservable() },
         },
         { provide: Router, useValue: { navigate: navigateSpy } },
+        { provide: CONFIRM, useValue: confirmSpy },
       ],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
@@ -205,5 +208,55 @@ describe('IntegrationProfileDetailComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('2000ms');
     expect(fixture.nativeElement.textContent).toContain('4000ms');
     expect(fixture.nativeElement.textContent).toContain('8000ms');
+  });
+
+  it('triggers a real sync and appends the result to the session log', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    const syncTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Sincronización',
+    ) as HTMLButtonElement;
+    syncTabButton.click();
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="trigger-sync"]') as HTMLButtonElement).click();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1/sync').flush({
+      profileId: 'p-1',
+      status: 'TRIGGERED',
+      triggeredAt: '2026-08-26T10:00:00Z',
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('TRIGGERED');
+  });
+
+  it('deactivates the profile after confirmation and hides the action once inactive', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="deactivate-profile"]') as HTMLButtonElement).click();
+    expect(confirmSpy).toHaveBeenCalled();
+
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(null);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="deactivate-profile"]')).toBeNull();
+    expect(fixture.nativeElement.textContent).toContain('Inactivo');
+  });
+
+  it('does not deactivate when the confirmation is declined', () => {
+    confirmSpy.mockReturnValue(false);
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="deactivate-profile"]') as HTMLButtonElement).click();
+    http.expectNone('/bff/api/v1/integration-profiles/p-1');
   });
 });
