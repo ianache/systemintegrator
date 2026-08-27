@@ -1,32 +1,28 @@
+:host {
+  display: block;
+  height: 100vh;
+  overflow: hidden;
+}
+
 .shell {
-  background: #fff;
-  color: #102a43;
-  min-height: 100vh;
+  position: relative;
+  display: grid;
+  grid-template-columns: var(--console-rail-width, 232px) 1fr;
+  height: 100vh;
+  overflow: hidden;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  accent-color: var(--accent);
 }
 
 .shell-body {
-  display: grid;
-  grid-template-columns: minmax(12rem, 16rem) minmax(0, 1fr);
-  min-height: calc(100vh - 4rem);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
 }
 
 main {
-  padding: clamp(1rem, 3vw, 2rem);
-}
-
-:host ::ng-deep .welcome {
-  max-width: 48rem;
-}
-
-:host ::ng-deep .eyebrow {
-  color: #486581;
-  font-weight: 700;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-@media (max-width: 48rem) {
-  .shell-body {
-    grid-template-columns: 1fr;
-  }
+  flex: 1;
+  overflow: auto;
 }

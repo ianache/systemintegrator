@@ -28,4 +28,9 @@ describe('App', () => {
     expect(compiled.querySelector('app-sidebar')).not.toBeNull();
     expect(compiled.querySelector('main#main-content')).not.toBeNull();
   });
+
+  it('does not apply the dark theme class by default', () => {
+    TestBed.createComponent(App);
+    expect(document.documentElement.classList.contains('theme-dark')).toBe(false);
+  });
 });
