@@ -19,15 +19,3 @@ export class App {
     this.sessionService.refresh();
   }
 }
-
-@Component({
-  changeDetection: ChangeDetectionStrategy.OnPush,
-  template: `
-    <section class="welcome" aria-labelledby="welcome-title">
-      <p class="eyebrow">Administration</p>
-      <h1 id="welcome-title">Welcome to Backoffice</h1>
-      <p>Use the navigation to view your tenant's integration profiles.</p>
-    </section>
-  `,
-})
-export class WelcomeComponent {}

@@ -1,15 +1,11 @@
 import { Routes } from '@angular/router';
-import { WelcomeComponent } from './app';
-// Task 4 generated this library with the workspace import alias `shell-contracts`
-// (see `paths` in tsconfig.base.json); the `@backoffice/shell-contracts` scope used
-// in the plan text does not exist in this workspace.
 import { buildMicroUiRoute } from 'shell-contracts';
 
 export const appRoutes: Routes = [
   {
     path: '',
     pathMatch: 'full',
-    component: WelcomeComponent,
+    redirectTo: 'integration',
   },
   buildMicroUiRoute({
     path: 'integration',
@@ -23,6 +19,6 @@ export const appRoutes: Routes = [
   }),
   {
     path: '**',
-    redirectTo: '',
+    redirectTo: 'integration',
   },
 ];
