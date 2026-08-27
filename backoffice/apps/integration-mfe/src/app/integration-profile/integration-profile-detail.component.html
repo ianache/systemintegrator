@@ -1,0 +1,48 @@
+@if (state() === 'loading') {
+  <section class="page"><p aria-live="polite">Cargando perfil…</p></section>
+} @else if (state() === 'not-found') {
+  <section class="page">
+    <p role="alert">No se encontró el perfil solicitado.</p>
+    <a routerLink="/integration/profiles" class="btn">← Integration Profiles</a>
+  </section>
+} @else if (state() === 'unavailable') {
+  <section class="page">
+    <p role="alert">El perfil no está disponible temporalmente.</p>
+    <button type="button" class="btn" (click)="reload()">Reintentar</button>
+  </section>
+} @else if (profile(); as p) {
+  <div class="detail-shell">
+    <div class="detail-head">
+      <a routerLink="/integration/profiles" class="btn-ghost back-link">← Integration Profiles</a>
+      <div class="detail-title-row">
+        <div class="detail-title">
+          <div class="detail-title-line">
+            <h1>{{ p.businessDomain }} · {{ p.externalSource }}</h1>
+            <span [class]="'badge dir-' + p.syncDirection.toLowerCase()">{{ p.syncDirection }}</span>
+            <span [class]="'badge ' + (p.active ? 'active' : 'inactive')">{{ p.active ? 'Activo' : 'Inactivo' }}</span>
+          </div>
+          <div class="mono detail-meta-line">
+            <span>{{ p.businessDomain }}&#64;{{ p.externalSource }}</span>
+            <span>v{{ p.version }}</span>
+            <span>actualizado {{ p.updatedAt.slice(0, 10) }}</span>
+          </div>
+        </div>
+      </div>
+      <div class="tabs">
+        @for (t of tabs; track t.id) {
+          <button type="button" class="tab" [class.active]="tab() === t.id" (click)="setTab(t.id)">{{ t.label }}</button>
+        }
+      </div>
+    </div>
+
+    <div class="detail-body">
+      @switch (tab()) {
+        @case ('general') { <div data-testid="tab-general">General</div> }
+        @case ('conn') { <div data-testid="tab-conn">Conectividad</div> }
+        @case ('map') { <div data-testid="tab-map">Mapping & Transformation</div> }
+        @case ('pol') { <div data-testid="tab-pol">Políticas</div> }
+        @case ('sync') { <div data-testid="tab-sync">Sincronización</div> }
+      }
+    </div>
+  </div>
+}
