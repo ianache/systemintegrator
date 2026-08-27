@@ -27,7 +27,7 @@ export class SessionService {
     this.http
       .get<Session>('/auth/session', { withCredentials: true })
       .subscribe({
-        next: (session) => this.session.set(session),
+        next: (session: Session) => this.session.set(session),
         error: () => this.session.set({ authenticated: false }),
       });
   }
