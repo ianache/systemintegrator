@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.resilience;
 
+import com.cl2.integration.adapter.out.http.HttpOutboundException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
@@ -42,5 +43,37 @@ class ResilienceExecutorTest {
         assertThatThrownBy(() -> executor.execute(tenantId, "sigo", () -> "WOULD_FAIL"))
                 .isInstanceOf(CircuitBreakerOpenException.class)
                 .hasMessageContaining("Circuit breaker is OPEN");
+    }
+
+    @Test
+    void shouldNotOpenCircuitOnRepeatedPermanentClientErrors() {
+        UUID tenantId = UUID.randomUUID();
+
+        for (int i = 0; i < 10; i++) {
+            try {
+                executor.execute(tenantId, "comsatel-unidad-rest", () -> {
+                    throw new HttpOutboundException("duplicate", 400, "{\"codigo\":4003}", null);
+                });
+            } catch (HttpOutboundException ignored) {}
+        }
+
+        assertThat(executor.getCircuitBreakerState(tenantId, "comsatel-unidad-rest"))
+                .isEqualTo(CircuitBreaker.State.CLOSED);
+    }
+
+    @Test
+    void shouldStillOpenCircuitOnRepeatedServerErrors() {
+        UUID tenantId = UUID.randomUUID();
+
+        for (int i = 0; i < 5; i++) {
+            try {
+                executor.execute(tenantId, "flaky-upstream", () -> {
+                    throw new HttpOutboundException("upstream down", 503, "{}", null);
+                });
+            } catch (HttpOutboundException ignored) {}
+        }
+
+        assertThat(executor.getCircuitBreakerState(tenantId, "flaky-upstream"))
+                .isEqualTo(CircuitBreaker.State.OPEN);
     }
 }

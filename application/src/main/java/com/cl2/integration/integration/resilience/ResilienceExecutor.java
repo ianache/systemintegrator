@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.resilience;
 
+import com.cl2.integration.adapter.out.http.HttpOutboundException;
 import io.github.resilience4j.circuitbreaker.CallNotPermittedException;
 import io.github.resilience4j.circuitbreaker.CircuitBreaker;
 import io.github.resilience4j.circuitbreaker.CircuitBreakerConfig;
@@ -25,8 +26,21 @@ public class ResilienceExecutor {
                 .minimumNumberOfCalls(5)
                 .waitDurationInOpenState(Duration.ofSeconds(10))
                 .permittedNumberOfCallsInHalfOpenState(3)
+                // A 4xx response is a permanent business rejection (e.g. duplicate
+                // key) that will never succeed on retry. Counting it as a circuit
+                // failure lets a flood of duplicates (e.g. a DLQ replay) trip the
+                // breaker and block brand-new, valid traffic to the same connector.
+                .recordException(ResilienceExecutor::isTransientFailure)
                 .build();
         this.circuitBreakerRegistry = CircuitBreakerRegistry.of(defaultConfig);
+    }
+
+    private static boolean isTransientFailure(Throwable throwable) {
+        if (throwable instanceof HttpOutboundException httpOutboundException) {
+            Integer statusCode = httpOutboundException.getStatusCode();
+            return statusCode == null || statusCode >= 500;
+        }
+        return true;
     }
 
     public <T> T execute(UUID tenantId, String connector, Supplier<T> operation) {
