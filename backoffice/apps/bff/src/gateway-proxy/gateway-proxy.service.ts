@@ -39,6 +39,10 @@ export class GatewayProxyService {
     return this.forward('post', `/api/v1/integration-profiles/${profileId}/sync`, accessToken, {});
   }
 
+  mappingDryRun(accessToken: string, profileId: string, body: unknown): Promise<unknown> {
+    return this.forward('post', `/api/v1/integration-profiles/${profileId}/mapping/dry-run`, accessToken, body);
+  }
+
   replayDeadLetterQueue(accessToken: string): Promise<unknown> {
     return this.forward('post', '/api/v1/inbox/dlq/replay', accessToken, {});
   }

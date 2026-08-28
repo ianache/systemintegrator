@@ -61,6 +61,11 @@ export interface TriggerSyncResult {
   triggeredAt: string;
 }
 
+export interface MappingDryRunResult {
+  output: string | null;
+  error: string | null;
+}
+
 export interface ApiProblem {
   title?: string;
   status?: number;

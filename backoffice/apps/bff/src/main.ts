@@ -27,6 +27,7 @@ async function bootstrap() {
       { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.PUT },
       { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.DELETE },
       { path: 'bff/api/v1/integration-profiles/:profileId/sync', method: RequestMethod.POST },
+      { path: 'bff/api/v1/integration-profiles/:profileId/mapping/dry-run', method: RequestMethod.POST },
       { path: 'bff/api/v1/inbox/dlq/replay', method: RequestMethod.POST },
       { path: 'bff/api/v1/messages', method: RequestMethod.GET },
       { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },

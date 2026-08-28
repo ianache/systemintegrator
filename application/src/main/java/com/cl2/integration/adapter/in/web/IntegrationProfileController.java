@@ -2,12 +2,15 @@ package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.adapter.in.web.dto.CreateIntegrationProfileRequest;
 import com.cl2.integration.adapter.in.web.dto.IntegrationProfileResponse;
+import com.cl2.integration.adapter.in.web.dto.MappingDryRunRequest;
 import com.cl2.integration.adapter.in.web.dto.UpdateIntegrationProfileRequest;
 import com.cl2.integration.application.IntegrationProfileService;
 import com.cl2.integration.application.command.CreateIntegrationProfileCommand;
 import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
 import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
 import com.cl2.integration.infrastructure.tenant.TenantContext;
+import com.cl2.integration.integration.transformation.MappingDryRunResult;
+import com.cl2.integration.integration.transformation.MappingDryRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import java.util.List;
@@ -33,14 +36,17 @@ public class IntegrationProfileController {
 
     private final IntegrationProfileService service;
     private final IntegrationSyncService syncService;
+    private final MappingDryRunService mappingDryRunService;
     private final ObjectMapper objectMapper;
 
     public IntegrationProfileController(
             IntegrationProfileService service,
             IntegrationSyncService syncService,
+            MappingDryRunService mappingDryRunService,
             ObjectMapper objectMapper) {
         this.service = service;
         this.syncService = syncService;
+        this.mappingDryRunService = mappingDryRunService;
         this.objectMapper = objectMapper;
     }
 
@@ -80,6 +86,11 @@ public class IntegrationProfileController {
         return IntegrationProfileResponse.from(service.update(TenantContext.requireTenantId(), profileId,
                 new UpdateIntegrationProfileCommand(request.businessDomain(), request.externalSource(), request.syncDirection(),
                         request.sourceOfTruth(), configuration, request.expectedVersion())), objectMapper);
+    }
+
+    @PostMapping("/{profileId}/mapping/dry-run")
+    public MappingDryRunResult mappingDryRun(@PathVariable UUID profileId, @RequestBody MappingDryRunRequest request) {
+        return mappingDryRunService.run(TenantContext.requireTenantId(), profileId, request.payload(), request.transformationJson());
     }
 
     @DeleteMapping("/{profileId}")

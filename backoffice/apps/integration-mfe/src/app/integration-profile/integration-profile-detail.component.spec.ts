@@ -164,12 +164,11 @@ describe('IntegrationProfileDetailComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('connector y adapter son obligatorios');
   });
 
-  it('pre-fills the Mapping tab textareas as pretty-printed JSON and flags invalid edits', () => {
-    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+  function openMapTab(fixture: any, transformation: unknown = null): void {
     fixture.detectChanges();
     http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
       ...FULL_PROFILE,
-      configuration: { protocol: null, connector: null, adapter: null, endpoint: null, credentialRef: null, mapping: { vin: '$.Vehiculo.Chasis' }, transformation: null, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null, extractionConfig: null },
+      configuration: { protocol: null, connector: null, adapter: null, endpoint: null, credentialRef: null, mapping: null, transformation, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null, extractionConfig: null },
     });
     fixture.detectChanges();
 
@@ -178,14 +177,83 @@ describe('IntegrationProfileDetailComponent', () => {
     ) as HTMLButtonElement;
     mapTabButton.click();
     fixture.detectChanges();
+  }
 
-    const mappingArea = fixture.nativeElement.querySelector('[name="mappingJson"]') as HTMLTextAreaElement;
-    expect(mappingArea.value).toContain('"vin"');
+  it('detects FIELD_MAPPING from the saved config and renders its rules table', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, {
+      engine: 'FIELD_MAPPING',
+      fields: [{ target: 'vin', sourcePath: '$.Vehiculo.Chasis', transform: '', type: 'STRING', defaultValue: '', required: true }],
+    });
 
-    mappingArea.value = '{ not json';
-    mappingArea.dispatchEvent(new Event('input'));
+    const activeChip = fixture.nativeElement.querySelector('.chip.active');
+    expect(activeChip.textContent.trim()).toBe('FIELD_MAPPING');
+    expect(fixture.nativeElement.textContent).toContain('vin');
+    const sourcePathInput = fixture.nativeElement.querySelector('.mapping-row input') as HTMLInputElement;
+    expect(sourcePathInput.value).toBe('$.Vehiculo.Chasis');
+  });
+
+  it('adds and removes field-mapping rows', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, { engine: 'FIELD_MAPPING', fields: [] });
+
+    fixture.nativeElement.querySelector('.mapping-add-btn').click();
     fixture.detectChanges();
-    expect(fixture.nativeElement.textContent).toContain('JSON inválido');
+    expect(fixture.nativeElement.querySelectorAll('.mapping-row').length).toBe(1);
+
+    fixture.nativeElement.querySelector('.mapping-remove').click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelectorAll('.mapping-row').length).toBe(0);
+  });
+
+  it('switches to JSLT and edits the script', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture);
+
+    const jsltChip = Array.from(fixture.nativeElement.querySelectorAll('.chip')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'JSLT',
+    ) as HTMLButtonElement;
+    jsltChip.click();
+    fixture.detectChanges();
+
+    const scriptArea = fixture.nativeElement.querySelector('[data-testid="jslt-script"]') as HTMLTextAreaElement;
+    scriptArea.value = '{ "vin": .Vehiculo.Chasis }';
+    scriptArea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).not.toContain('El payload de origen se entrega sin alteración');
+  });
+
+  it('shows the passthrough explanation when no engine is configured', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture);
+
+    expect(fixture.nativeElement.textContent).toContain('El payload de origen se entrega sin alteración');
+  });
+
+  it('runs a real dry-run and shows the transformation output', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture);
+
+    fixture.nativeElement.querySelector('[data-testid="run-dry-run"]').click();
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1/mapping/dry-run');
+    expect(request.request.body.transformationJson).toContain('PASSTHROUGH');
+    request.flush({ output: '{"vin":"1"}', error: null });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('.mapping-result-pre').textContent).toContain('"vin"');
+  });
+
+  it('shows the real transformation error when a dry-run fails', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture);
+
+    fixture.nativeElement.querySelector('[data-testid="run-dry-run"]').click();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1/mapping/dry-run')
+      .flush({ output: null, error: "Required field 'vin' missing from source path: $.vin" });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain("Required field 'vin' missing from source path: $.vin");
   });
 
   it('computes a real retry sequence from the retry policy JSON typed by the user', () => {

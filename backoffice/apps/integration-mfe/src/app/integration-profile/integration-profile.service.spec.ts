@@ -99,4 +99,12 @@ describe('IntegrationProfileService', () => {
     expect(request.request.method).toBe('POST');
     request.flush({ profileId: 'p-1', status: 'TRIGGERED', triggeredAt: '2026-08-26T00:00:00Z' });
   });
+
+  it('runs a mapping dry-run', () => {
+    service.mappingDryRun('p-1', '{"a":1}', '{"engine":"PASSTHROUGH"}').subscribe((result) => expect(result.output).toBe('{"a":1}'));
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1/mapping/dry-run');
+    expect(request.request.method).toBe('POST');
+    expect(request.request.body).toEqual({ payload: '{"a":1}', transformationJson: '{"engine":"PASSTHROUGH"}' });
+    request.flush({ output: '{"a":1}', error: null });
+  });
 });

@@ -42,6 +42,7 @@ describe('Gateway profile proxy', () => {
         { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.PUT },
         { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.DELETE },
         { path: 'bff/api/v1/integration-profiles/:profileId/sync', method: RequestMethod.POST },
+        { path: 'bff/api/v1/integration-profiles/:profileId/mapping/dry-run', method: RequestMethod.POST },
         { path: 'bff/api/v1/inbox/dlq/replay', method: RequestMethod.POST },
         { path: 'bff/api/v1/messages', method: RequestMethod.GET },
         { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },
@@ -191,6 +192,23 @@ describe('Gateway profile proxy', () => {
       .post('/bff/api/v1/messages/OUTBOUND/msg-1/dlq')
       .set('Cookie', 'session=authenticated')
       .expect(HttpStatus.OK, { id: 'msg-1', status: 'DLQ' });
+  });
+
+  it('runs a mapping dry-run, forwarding the payload and transformation to the Gateway', async () => {
+    const post = jest.spyOn(axios, 'post').mockResolvedValue({ data: { output: '{"a":1}', error: null } });
+
+    const response = await request(app.getHttpServer())
+      .post('/bff/api/v1/integration-profiles/profile-1/mapping/dry-run')
+      .set('Cookie', 'session=authenticated')
+      .send({ payload: '{"a":1}', transformationJson: '{"engine":"PASSTHROUGH"}' })
+      .expect(HttpStatus.OK);
+
+    expect(response.body).toEqual({ output: '{"a":1}', error: null });
+    expect(post).toHaveBeenCalledWith(
+      'http://gateway.internal/api/v1/integration-profiles/profile-1/mapping/dry-run',
+      { payload: '{"a":1}', transformationJson: '{"engine":"PASSTHROUGH"}' },
+      { headers: { Authorization: 'Bearer session-access-token' } },
+    );
   });
 
   it('lists credentials', async () => {

@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   CreateIntegrationProfilePayload,
   IntegrationProfile,
+  MappingDryRunResult,
   TriggerSyncResult,
   UpdateIntegrationProfilePayload,
 } from './integration-profile.model';
@@ -37,5 +38,9 @@ export class IntegrationProfileService {
 
   triggerSync(id: string): Observable<TriggerSyncResult> {
     return this.http.post<TriggerSyncResult>(`${BASE_URL}/${id}/sync`, {});
+  }
+
+  mappingDryRun(id: string, payload: string, transformationJson: string): Observable<MappingDryRunResult> {
+    return this.http.post<MappingDryRunResult>(`${BASE_URL}/${id}/mapping/dry-run`, { payload, transformationJson });
   }
 }

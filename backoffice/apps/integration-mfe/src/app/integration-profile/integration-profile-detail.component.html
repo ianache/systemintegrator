@@ -140,34 +140,112 @@
             </div>
           }
           @case ('map') {
-            <div data-testid="tab-map" class="tab-grid">
-              <div class="card">
-                <div class="card-header">
-                  <span>Mapping</span>
-                  <span class="mono json-status" [class.err]="!isJsonValid(edit.mappingJson)">
-                    {{ isJsonValid(edit.mappingJson) ? 'JSON válido' : 'JSON inválido' }}
-                  </span>
+            <div data-testid="tab-map" class="mapping-tab">
+              <div class="mapping-toolbar">
+                <div class="chip-group">
+                  <button type="button" class="chip mono" [class.active]="mappingConfig().engine === 'FIELD_MAPPING'" (click)="setEngine('FIELD_MAPPING')">FIELD_MAPPING</button>
+                  <button type="button" class="chip mono" [class.active]="mappingConfig().engine === 'JSLT'" (click)="setEngine('JSLT')">JSLT</button>
+                  <button type="button" class="chip mono" [class.active]="mappingConfig().engine === 'PASSTHROUGH'" (click)="setEngine('PASSTHROUGH')">PASSTHROUGH</button>
                 </div>
-                <textarea
-                  name="mappingJson"
-                  class="json-editor"
-                  [value]="edit.mappingJson"
-                  (input)="updateField('mappingJson', $any($event.target).value)"
-                ></textarea>
+                <span class="mapping-hint">
+                  @switch (mappingConfig().engine) {
+                    @case ('FIELD_MAPPING') { JSONPath para extraer, SpEL para normalizar cada campo. }
+                    @case ('JSLT') { Transformación estructural JSON→JSON. }
+                    @default { Sin transformación: el payload de origen se entrega tal cual. }
+                  }
+                </span>
+                <button type="button" data-testid="run-dry-run" class="btn btn-dark mapping-run-btn" [disabled]="dryRunPending()" (click)="runDryRun()">
+                  ▶ Ejecutar dry-run
+                </button>
               </div>
-              <div class="card">
-                <div class="card-header">
-                  <span>Transformation</span>
-                  <span class="mono json-status" [class.err]="!isJsonValid(edit.transformationJson)">
-                    {{ isJsonValid(edit.transformationJson) ? 'JSON válido' : 'JSON inválido' }}
-                  </span>
+
+              <div class="mapping-columns">
+                <div class="card mapping-panel">
+                  <div class="card-header"><span>Payload de origen</span></div>
+                  <textarea
+                    data-testid="sample-payload"
+                    class="json-editor mapping-payload-editor"
+                    [value]="samplePayload()"
+                    (input)="updateSamplePayload($any($event.target).value)"
+                  ></textarea>
                 </div>
-                <textarea
-                  name="transformationJson"
-                  class="json-editor"
-                  [value]="edit.transformationJson"
-                  (input)="updateField('transformationJson', $any($event.target).value)"
-                ></textarea>
+
+                <div class="card mapping-panel">
+                  @switch (mappingConfig().engine) {
+                    @case ('FIELD_MAPPING') {
+                      <div class="mapping-rows-header">
+                        <span>TARGET</span><span>SOURCE PATH</span><span>TRANSFORM (SpEL)</span><span>TYPE · DEFAULT</span><span></span>
+                      </div>
+                      @for (row of mappingConfig().fields; track $index) {
+                        <div class="mapping-row">
+                          <div class="mapping-target">
+                            <span class="mono">{{ row.target }}</span>
+                            @if (row.required) { <span class="mapping-required">*</span> }
+                          </div>
+                          <input
+                            class="mono"
+                            [value]="row.sourcePath"
+                            (change)="updateMappingRow($index, { sourcePath: $any($event.target).value })"
+                          />
+                          <input
+                            class="mono"
+                            placeholder="—"
+                            [value]="row.transform"
+                            (change)="updateMappingRow($index, { transform: $any($event.target).value })"
+                          />
+                          <div class="mapping-type-cell">
+                            <span class="mono">{{ row.type }}</span>
+                            <span class="mono mapping-default">{{ row.defaultValue || '—' }}</span>
+                          </div>
+                          <button type="button" class="mapping-remove" (click)="removeMappingRow($index)" aria-label="Quitar regla">×</button>
+                        </div>
+                      }
+                      <div class="mapping-add-row">
+                        <button type="button" class="btn mapping-add-btn" (click)="addMappingRow()">＋ Agregar regla de mapeo</button>
+                      </div>
+                    }
+                    @case ('JSLT') {
+                      <div class="mapping-jslt-header">
+                        <span class="mono">JSLT SCRIPT</span>
+                      </div>
+                      <textarea
+                        data-testid="jslt-script"
+                        class="json-editor mapping-jslt-editor"
+                        spellcheck="false"
+                        [value]="mappingConfig().script"
+                        (input)="updateScript($any($event.target).value)"
+                      ></textarea>
+                    }
+                    @default {
+                      <div class="mapping-passthrough">
+                        <span class="mono">PASSTHROUGH</span>
+                        <p>El payload de origen se entrega sin alteración al modelo canónico. No hay reglas que configurar ni validación de campos requeridos.</p>
+                      </div>
+                    }
+                  }
+                </div>
+
+                <div class="card mapping-panel">
+                  <div class="card-header">
+                    <span>Resultado canónico</span>
+                    @if (dryRunResult(); as r) {
+                      <span class="mono" [class.mapping-result-ok]="!r.error" [class.mapping-result-err]="!!r.error">
+                        {{ r.error ? 'error' : 'ejecutado' }}
+                      </span>
+                    }
+                  </div>
+                  @if (dryRunPending()) {
+                    <p class="mapping-dry-run-status">Ejecutando…</p>
+                  } @else if (dryRunResult(); as r) {
+                    @if (r.error) {
+                      <div class="mapping-dry-run-error" role="alert">{{ r.error }}</div>
+                    } @else {
+                      <pre class="json-editor mapping-result-pre">{{ r.output }}</pre>
+                    }
+                  } @else {
+                    <p class="mapping-dry-run-status">Ejecuta un dry-run para ver el resultado real de este mapping sobre el payload de origen.</p>
+                  }
+                </div>
               </div>
             </div>
           }

@@ -5,6 +5,7 @@ import {
   ApiProblem,
   IntegrationProfile,
   IntegrationProtocol,
+  MappingDryRunResult,
   SourceOfTruth,
   SyncDirection,
   TriggerSyncResult,
@@ -41,6 +42,68 @@ interface EditModel {
   retryPolicyJson: string;
   rateLimitPolicyJson: string;
   extractionConfigJson: string;
+}
+
+export type MappingEngine = 'FIELD_MAPPING' | 'JSLT' | 'PASSTHROUGH';
+
+export interface MappingFieldRow {
+  target: string;
+  sourcePath: string;
+  transform: string;
+  type: string;
+  defaultValue: string;
+  required: boolean;
+}
+
+export interface MappingConfig {
+  engine: MappingEngine;
+  fields: MappingFieldRow[];
+  script: string;
+}
+
+function parseMappingConfig(json: string): MappingConfig {
+  let parsed: Record<string, unknown> = {};
+  const trimmed = json.trim();
+  if (trimmed) {
+    try {
+      parsed = JSON.parse(trimmed);
+    } catch {
+      parsed = {};
+    }
+  }
+  const rawFields = Array.isArray(parsed['fields']) ? (parsed['fields'] as Record<string, unknown>[]) : [];
+  const fields: MappingFieldRow[] = rawFields.map((f) => ({
+    target: typeof f['target'] === 'string' ? f['target'] : '',
+    sourcePath: typeof f['sourcePath'] === 'string' ? f['sourcePath'] : '',
+    transform: typeof f['transform'] === 'string' ? f['transform'] : '',
+    type: typeof f['type'] === 'string' ? f['type'] : 'STRING',
+    defaultValue: typeof f['defaultValue'] === 'string' ? f['defaultValue'] : '',
+    required: f['required'] === true,
+  }));
+  const script = typeof parsed['script'] === 'string' ? (parsed['script'] as string) : '';
+
+  let engine: MappingEngine;
+  if (parsed['engine'] === 'FIELD_MAPPING' || parsed['engine'] === 'JSLT' || parsed['engine'] === 'PASSTHROUGH') {
+    engine = parsed['engine'];
+  } else if (fields.length > 0) {
+    engine = 'FIELD_MAPPING';
+  } else if (script) {
+    engine = 'JSLT';
+  } else {
+    engine = 'PASSTHROUGH';
+  }
+
+  return { engine, fields, script };
+}
+
+function serializeMappingConfig(config: MappingConfig): string {
+  if (config.engine === 'FIELD_MAPPING') {
+    return JSON.stringify({ engine: 'FIELD_MAPPING', fields: config.fields }, null, 2);
+  }
+  if (config.engine === 'JSLT') {
+    return JSON.stringify({ engine: 'JSLT', script: config.script }, null, 2);
+  }
+  return JSON.stringify({ engine: 'PASSTHROUGH' }, null, 2);
 }
 
 const TABS: { id: DetailTab; label: string }[] = [
@@ -105,6 +168,12 @@ export class IntegrationProfileDetailComponent implements OnInit {
   readonly saveError = signal<string | null>(null);
   readonly syncing = signal(false);
   readonly syncLog = signal<TriggerSyncResult[]>([]);
+
+  readonly samplePayload = signal('{\n  \n}');
+  readonly dryRunResult = signal<MappingDryRunResult | null>(null);
+  readonly dryRunPending = signal(false);
+
+  readonly mappingConfig = computed<MappingConfig>(() => parseMappingConfig(this.editModel()?.transformationJson ?? ''));
 
   readonly connectivityValid = computed(() => {
     const m = this.editModel();
@@ -200,6 +269,59 @@ export class IntegrationProfileDetailComponent implements OnInit {
 
   updateField<K extends keyof EditModel>(key: K, value: EditModel[K]): void {
     this.editModel.update((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  setEngine(engine: MappingEngine): void {
+    const current = this.mappingConfig();
+    this.updateField('transformationJson', serializeMappingConfig({ ...current, engine }));
+  }
+
+  updateMappingRow(index: number, patch: Partial<MappingFieldRow>): void {
+    const current = this.mappingConfig();
+    const fields = current.fields.map((row, i) => (i === index ? { ...row, ...patch } : row));
+    this.updateField('transformationJson', serializeMappingConfig({ ...current, fields }));
+  }
+
+  addMappingRow(): void {
+    const current = this.mappingConfig();
+    const fields = [
+      ...current.fields,
+      { target: 'nuevoCampo', sourcePath: '', transform: '', type: 'STRING', defaultValue: '', required: false },
+    ];
+    this.updateField('transformationJson', serializeMappingConfig({ ...current, fields }));
+  }
+
+  removeMappingRow(index: number): void {
+    const current = this.mappingConfig();
+    const fields = current.fields.filter((_, i) => i !== index);
+    this.updateField('transformationJson', serializeMappingConfig({ ...current, fields }));
+  }
+
+  updateScript(script: string): void {
+    const current = this.mappingConfig();
+    this.updateField('transformationJson', serializeMappingConfig({ ...current, script }));
+  }
+
+  updateSamplePayload(value: string): void {
+    this.samplePayload.set(value);
+  }
+
+  runDryRun(): void {
+    const current = this.profile();
+    if (!current || !this.editModel()) return;
+    this.dryRunPending.set(true);
+    this.dryRunResult.set(null);
+    const transformationJson = serializeMappingConfig(this.mappingConfig());
+    this.profileService.mappingDryRun(current.id, this.samplePayload(), transformationJson).subscribe({
+      next: (result) => {
+        this.dryRunPending.set(false);
+        this.dryRunResult.set(result);
+      },
+      error: () => {
+        this.dryRunPending.set(false);
+        this.dryRunResult.set({ output: null, error: 'No se pudo ejecutar el dry-run.' });
+      },
+    });
   }
 
   save(): void {

@@ -78,6 +78,12 @@ export class GatewayProxyController {
     return this.gatewayProxy.triggerSync(request.session.tokens!.access_token!, profileId);
   }
 
+  @Post('integration-profiles/:profileId/mapping/dry-run')
+  @HttpCode(HttpStatus.OK)
+  mappingDryRun(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string, @Body() body: unknown) {
+    return this.gatewayProxy.mappingDryRun(request.session.tokens!.access_token!, profileId, body);
+  }
+
   @Post('inbox/dlq/replay')
   @HttpCode(HttpStatus.OK)
   replayDeadLetterQueue(@Req() request: AuthenticatedRequest) {

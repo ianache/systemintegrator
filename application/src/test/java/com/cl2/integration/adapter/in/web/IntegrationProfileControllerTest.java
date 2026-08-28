@@ -49,6 +49,9 @@ class IntegrationProfileControllerTest {
     @MockitoBean
     private com.cl2.integration.integration.sync.IntegrationSyncService syncService;
 
+    @MockitoBean
+    private com.cl2.integration.integration.transformation.MappingDryRunService mappingDryRunService;
+
     @Test
     void triggersSyncForAProfileForTheTenantFromTheHeader() throws Exception {
         mockMvc.perform(post(BASE_PATH + "/{profileId}/sync", PROFILE_ID)
@@ -291,6 +294,38 @@ class IntegrationProfileControllerTest {
                 .andExpect(jsonPath("$.errorCode").value("INTEGRATION_PROFILE_NOT_FOUND"));
 
         then(service).should().get(OTHER_TENANT_ID, PROFILE_ID);
+    }
+
+    @Test
+    void runsAMappingDryRunAndReturnsTheRealTransformationResult() throws Exception {
+        given(mappingDryRunService.run(TENANT_ID, PROFILE_ID, "{\"a\":1}", "{\"engine\":\"PASSTHROUGH\"}"))
+                .willReturn(com.cl2.integration.integration.transformation.MappingDryRunResult.success("{\"a\":1}"));
+
+        mockMvc.perform(post(BASE_PATH + "/{profileId}/mapping/dry-run", PROFILE_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"payload":"{\\"a\\":1}","transformationJson":"{\\"engine\\":\\"PASSTHROUGH\\"}"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.output").value("{\"a\":1}"))
+                .andExpect(jsonPath("$.error").doesNotExist());
+    }
+
+    @Test
+    void returnsTheRealTransformationErrorFromADryRun() throws Exception {
+        given(mappingDryRunService.run(eq(TENANT_ID), eq(PROFILE_ID), any(), any()))
+                .willReturn(com.cl2.integration.integration.transformation.MappingDryRunResult.failure("Required field 'vin' missing from source path: $.vin"));
+
+        mockMvc.perform(post(BASE_PATH + "/{profileId}/mapping/dry-run", PROFILE_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"payload":"{}","transformationJson":"{\\"engine\\":\\"FIELD_MAPPING\\",\\"fields\\":[]}"}
+                                """))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.output").doesNotExist())
+                .andExpect(jsonPath("$.error").value("Required field 'vin' missing from source path: $.vin"));
     }
 
     private IntegrationProfileView profileView(UUID tenantId) {
