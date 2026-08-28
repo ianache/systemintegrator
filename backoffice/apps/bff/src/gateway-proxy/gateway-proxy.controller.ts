@@ -117,4 +117,9 @@ export class GatewayProxyController {
   ) {
     return this.gatewayProxy.moveMessageToDlq(request.session.tokens!.access_token!, direction, id);
   }
+
+  @Get('credentials')
+  getCredentials(@Req() request: AuthenticatedRequest) {
+    return this.gatewayProxy.getCredentials(request.session.tokens!.access_token!);
+  }
 }

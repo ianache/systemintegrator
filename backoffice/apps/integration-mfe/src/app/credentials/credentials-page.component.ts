@@ -1,26 +1,40 @@
-import { ChangeDetectionStrategy, Component } from '@angular/core';
-import { ConsoleEmptyStateComponent } from '../shared/console-empty-state.component';
+import { DatePipe } from '@angular/common';
+import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { CredentialService } from '../credential/credential.service';
+import { CredentialSummary } from '../credential/credential.model';
+
+type CredentialsState = 'loading' | 'ready' | 'empty' | 'unavailable';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-credentials-page',
   standalone: true,
-  imports: [ConsoleEmptyStateComponent],
-  template: `
-    <section class="page">
-      <div class="page-header">
-        <div>
-          <h1>Credenciales</h1>
-          <p>Las credenciales se resuelven en runtime desde Vault; la consola nunca las almacena ni las muestra.</p>
-        </div>
-      </div>
-      <div class="card">
-        <app-console-empty-state
-          title="Listado de credential refs no disponible todavía"
-          description="El backend no expone hoy un endpoint que liste las referencias de credenciales por tenant. Cada perfil sigue mostrando su propio credentialRef en la pestaña Conectividad."
-        />
-      </div>
-    </section>
-  `,
+  imports: [DatePipe],
+  templateUrl: './credentials-page.component.html',
+  styleUrl: './credentials-page.component.css',
 })
-export class CredentialsPageComponent {}
+export class CredentialsPageComponent implements OnInit {
+  private readonly credentialService = inject(CredentialService);
+
+  readonly state = signal<CredentialsState>('loading');
+  readonly credentials = signal<CredentialSummary[]>([]);
+
+  ngOnInit(): void {
+    this.load();
+  }
+
+  load(): void {
+    this.state.set('loading');
+    this.credentialService.list().subscribe({
+      next: (credentials) => {
+        this.credentials.set(credentials);
+        this.state.set(credentials.length === 0 ? 'empty' : 'ready');
+      },
+      error: () => this.state.set('unavailable'),
+    });
+  }
+
+  usedByLabel(credential: CredentialSummary): string {
+    return credential.usedBy.length > 0 ? credential.usedBy.join(', ') : '—';
+  }
+}

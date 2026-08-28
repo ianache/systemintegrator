@@ -47,6 +47,7 @@ describe('Gateway profile proxy', () => {
         { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },
         { path: 'bff/api/v1/messages/:direction/:id/retry', method: RequestMethod.POST },
         { path: 'bff/api/v1/messages/:direction/:id/dlq', method: RequestMethod.POST },
+        { path: 'bff/api/v1/credentials', method: RequestMethod.GET },
       ],
     });
     await app.init();
@@ -190,6 +191,15 @@ describe('Gateway profile proxy', () => {
       .post('/bff/api/v1/messages/OUTBOUND/msg-1/dlq')
       .set('Cookie', 'session=authenticated')
       .expect(HttpStatus.OK, { id: 'msg-1', status: 'DLQ' });
+  });
+
+  it('lists credentials', async () => {
+    jest.spyOn(axios, 'get').mockResolvedValue({ data: [{ ref: 'secret/cl2/cred', state: 'VIGENTE' }] });
+
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/credentials')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK, [{ ref: 'secret/cl2/cred', state: 'VIGENTE' }]);
   });
 
   it.each([

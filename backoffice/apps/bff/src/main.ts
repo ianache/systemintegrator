@@ -32,6 +32,7 @@ async function bootstrap() {
       { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },
       { path: 'bff/api/v1/messages/:direction/:id/retry', method: RequestMethod.POST },
       { path: 'bff/api/v1/messages/:direction/:id/dlq', method: RequestMethod.POST },
+      { path: 'bff/api/v1/credentials', method: RequestMethod.GET },
     ],
   });
   configureSession(app, readBackofficeConfig(app.get(ConfigService)));

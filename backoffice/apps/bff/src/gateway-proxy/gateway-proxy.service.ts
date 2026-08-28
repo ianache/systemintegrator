@@ -59,6 +59,10 @@ export class GatewayProxyService {
     return this.forward('post', `/api/v1/messages/${direction}/${id}/dlq`, accessToken, {});
   }
 
+  getCredentials(accessToken: string): Promise<unknown> {
+    return this.forward('get', '/api/v1/credentials', accessToken);
+  }
+
   private async forward(method: HttpMethod, path: string, accessToken: string, body?: unknown): Promise<unknown> {
     const url = `${this.config.getOrThrow<string>('GATEWAY_URI')}${path}`;
     const options = { headers: { Authorization: `Bearer ${accessToken}` } };
