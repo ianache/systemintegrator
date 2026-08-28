@@ -1,1 +1,136 @@
-/* You can add global styles to this file, and also import other style files */
+:root {
+  --accent: #8E1B22;
+  --accent-dark: #6C1218;
+  --accent-fg: #8E1B22;
+  --accent-tint: #FBF4F4;
+  --accent-tint-border: #F0DEDF;
+  --accent-tint-fg: #7A3437;
+  --bg: #F5F5F6;
+  --surface: #FFFFFF;
+  --surface-2: #FAFAFB;
+  --border: #E4E4E8;
+  --border-soft: #F0F0F2;
+  --border-strong: #C9C9D0;
+  --text: #16161A;
+  --text-muted: #6B6B74;
+  --text-dim: #8A8A93;
+  --invert-bg: #16161A;
+  --invert-bg-hover: #000000;
+  --on-invert: #FFFFFF;
+  --ok: #157347;
+  --warn: #B26A00;
+  --err: #B3261E;
+  --dir-in: #2B4C86;
+  --dir-out: #5B3E93;
+}
+
+:root.theme-dark {
+  --accent-fg: #E9959A;
+  --accent-tint: color-mix(in oklab, var(--accent) 26%, #1E1E22);
+  --accent-tint-border: color-mix(in oklab, var(--accent) 46%, #1E1E22);
+  --accent-tint-fg: #F0AFB2;
+  --bg: #131316;
+  --surface: #1B1B1F;
+  --surface-2: #212127;
+  --border: #303038;
+  --border-soft: #26262C;
+  --border-strong: #45454F;
+  --text: #ECECF0;
+  --text-muted: #A6A6B0;
+  --text-dim: #83838D;
+  --invert-bg: #34343D;
+  --invert-bg-hover: #43434E;
+  --on-invert: #FFFFFF;
+  --ok: #4FBF8B;
+  --warn: #E2A64C;
+  --err: #F4796F;
+  --dir-in: #7FA8F0;
+  --dir-out: #B195EA;
+}
+
+* { box-sizing: border-box; }
+
+html, body { height: 100%; margin: 0; }
+
+body {
+  font-family: 'IBM Plex Sans', system-ui, sans-serif;
+  font-size: 13px;
+  color: var(--text);
+  background: var(--bg);
+  -webkit-font-smoothing: antialiased;
+}
+
+a { color: var(--accent); text-decoration: none; }
+a:hover { color: var(--accent-dark); text-decoration: underline; }
+
+input, select, textarea { font-family: inherit; font-size: inherit; color: var(--text); background: var(--surface); }
+input::placeholder, textarea::placeholder { color: var(--text-dim); }
+button { font-family: inherit; font-size: inherit; color: inherit; }
+
+::-webkit-scrollbar { width: 10px; height: 10px; }
+::-webkit-scrollbar-thumb { background: var(--border-strong); border: 3px solid var(--bg); border-radius: 6px; }
+
+.mono { font-family: 'IBM Plex Mono', monospace; }
+
+.page { padding: 24px 28px 40px; display: flex; flex-direction: column; gap: 16px; max-width: 1560px; }
+.page-header { display: flex; align-items: flex-end; gap: 16px; }
+.page-header h1 { margin: 0 0 4px; font-size: 20px; font-weight: 600; letter-spacing: -0.015em; }
+.page-header p { margin: 0; color: var(--text-muted); font-size: 12.5px; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.card-header { padding: 13px 16px; border-bottom: 1px solid var(--border); font-weight: 600; display: flex; align-items: center; gap: 8px; }
+
+.btn {
+  font-family: inherit; font-size: 13px; border-radius: 5px; padding: 7px 14px;
+  cursor: pointer; font-weight: 500; border: 1px solid var(--border);
+  background: var(--surface); color: var(--text);
+}
+.btn:hover { border-color: var(--border-strong); }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: #FFFFFF; font-weight: 600; }
+.btn-primary:hover { background: var(--accent-dark); border-color: var(--accent-dark); }
+.btn-dark { background: var(--invert-bg); border-color: var(--invert-bg); color: var(--on-invert); font-weight: 600; }
+.btn-dark:hover { background: var(--invert-bg-hover); border-color: var(--invert-bg-hover); }
+.btn-ghost { background: none; border: 0; color: var(--text-dim); }
+.btn-ghost:hover { color: var(--text); }
+
+.badge { display: inline-flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 600; padding: 3px 8px; border-radius: 3px; white-space: nowrap; }
+
+.chip-group { display: inline-flex; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.chip { border: 0; border-left: 1px solid var(--border); padding: 7px 12px; cursor: pointer; font-weight: 500; background: var(--surface); color: var(--text-muted); }
+.chip:first-child { border-left: 0; }
+.chip.active { background: var(--invert-bg); color: var(--on-invert); }
+
+.field { display: flex; flex-direction: column; gap: 5px; }
+.field .label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.07em; color: var(--text-dim); text-transform: uppercase; }
+.field .hint { font-size: 11px; color: var(--text-dim); }
+.field input, .field select, .field textarea {
+  border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; outline: none;
+}
+.field input:focus, .field select:focus, .field textarea:focus { border-color: var(--accent); }
+
+.tabs { display: flex; gap: 2px; margin-top: 16px; }
+.tab { background: none; border: 0; border-bottom: 2px solid transparent; color: var(--text-muted); padding: 9px 13px; cursor: pointer; font-weight: 500; }
+.tab.active { border-bottom-color: var(--accent); color: var(--text); }
+
+.modal-overlay { position: fixed; inset: 0; background: rgba(14, 14, 16, 0.5); display: flex; align-items: center; justify-content: center; z-index: 40; }
+.modal { width: 960px; max-width: 94vw; max-height: 88vh; background: var(--surface); border-radius: 8px; box-shadow: 0 24px 60px rgba(0, 0, 0, 0.28); display: flex; flex-direction: column; overflow: hidden; }
+
+.drawer-overlay { position: fixed; inset: 0; z-index: 40; display: flex; justify-content: flex-end; }
+.drawer-backdrop { position: absolute; inset: 0; background: rgba(14, 14, 16, 0.34); }
+.drawer { position: relative; width: 560px; max-width: 92vw; background: var(--surface); height: 100%; box-shadow: -20px 0 50px rgba(0, 0, 0, 0.2); display: flex; flex-direction: column; overflow: hidden; }
+
+.toast {
+  position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%);
+  background: var(--invert-bg); color: var(--on-invert); padding: 11px 18px; border-radius: 6px;
+  font-size: 12.5px; box-shadow: 0 12px 30px rgba(0, 0, 0, 0.25); z-index: 60;
+  display: flex; align-items: center; gap: 10px;
+}
+
+.empty-state { display: flex; flex-direction: column; align-items: center; gap: 8px; text-align: center; padding: 48px 24px; color: var(--text-muted); }
+.empty-state strong { color: var(--text); font-size: 13.5px; }
+
+.badge.active { color: var(--ok); background: color-mix(in oklab, var(--ok) 15%, var(--surface)); }
+.badge.inactive { color: var(--text-muted); background: var(--surface-2); }
+.badge.dir-inbound { color: var(--dir-in); background: color-mix(in oklab, var(--dir-in) 15%, var(--surface)); }
+.badge.dir-outbound { color: var(--dir-out); background: color-mix(in oklab, var(--dir-out) 15%, var(--surface)); }
+.badge.dir-bidirectional { color: var(--accent-fg); background: var(--accent-tint); }

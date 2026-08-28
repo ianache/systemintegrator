@@ -1,0 +1,90 @@
+<section class="page">
+  <div class="page-header">
+    <div>
+      <h1>Salud de integraciones</h1>
+      <p>Perfiles configurados para el tenant autenticado.</p>
+    </div>
+  </div>
+
+  @if (state() === 'unavailable') {
+    <div class="card">
+      <div class="empty-state">
+        <strong>No se pudieron cargar los perfiles</strong>
+        <span>Intenta recargar la página.</span>
+      </div>
+    </div>
+  } @else {
+    <div class="kpi-grid">
+      <div class="card kpi">
+        <span class="mono kpi-label">PERFILES ACTIVOS</span>
+        <span class="kpi-value">{{ activeCount() }}</span>
+        <span class="kpi-note">de {{ profiles().length }} configurados</span>
+      </div>
+      <div class="card kpi">
+        <span class="mono kpi-label">PERFILES INACTIVOS</span>
+        <span class="kpi-value">{{ inactiveCount() }}</span>
+        <span class="kpi-note">requieren revisión</span>
+      </div>
+      <div class="card kpi">
+        <span class="mono kpi-label">SOURCE OF TRUTH COMPARTIDO</span>
+        <span class="kpi-value">{{ sharedSotCount() }}</span>
+        <span class="kpi-note">conflictos posibles</span>
+      </div>
+      <div class="card kpi">
+        <span class="mono kpi-label">EN DLQ</span>
+        <span class="kpi-value muted">—</span>
+        <span class="kpi-note">No disponible: requiere API de mensajería</span>
+      </div>
+    </div>
+
+    <div class="dashboard-columns">
+      <div class="card">
+        <div class="card-header">
+          <span>Perfiles que requieren atención</span>
+          <a routerLink="/integration/profiles" class="btn-ghost see-all">Ver todos →</a>
+        </div>
+        @if (attention().length === 0) {
+          <div class="empty-state">
+            <strong>Todos los perfiles están activos</strong>
+          </div>
+        } @else {
+          @for (p of attention(); track p.id) {
+            <a class="attention-row" [routerLink]="['/integration/profiles', p.id]">
+              <div class="attention-name">
+                <span>{{ p.businessDomain }} · {{ p.externalSource }}</span>
+                <span class="mono attention-code">{{ p.businessDomain }}&#64;{{ p.externalSource | lowercase }}</span>
+              </div>
+              <span class="attention-issue">Perfil inactivo</span>
+              <span class="badge inactive">Inactivo</span>
+            </a>
+          }
+        }
+      </div>
+
+      <div class="card flow-card">
+        <span class="flow-title">Flujo por dirección</span>
+        @for (f of directionBreakdown(); track f.direction) {
+          <div class="flow-row">
+            <div class="flow-row-head">
+              <span class="mono">{{ f.direction }}</span>
+              <span class="mono">{{ f.count }}</span>
+            </div>
+            <div class="flow-bar"><div class="flow-bar-fill" [style.width.%]="f.pct"></div></div>
+            <span class="flow-note">{{ f.pct }}% de los perfiles configurados</span>
+          </div>
+        }
+        <div class="sot-row">
+          <span class="mono sot-title">SOURCE OF TRUTH</span>
+          <div class="sot-chips">
+            @for (s of sotBreakdown(); track s.sot) {
+              <div class="sot-chip">
+                <span class="sot-count">{{ s.count }}</span>
+                <span class="mono sot-label">{{ s.sot }}</span>
+              </div>
+            }
+          </div>
+        </div>
+      </div>
+    </div>
+  }
+</section>

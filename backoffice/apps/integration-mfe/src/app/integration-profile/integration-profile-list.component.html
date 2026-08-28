@@ -1,40 +1,78 @@
-<section aria-labelledby="integration-profiles-heading">
-  <h1 id="integration-profiles-heading">Integration Profiles</h1>
+<section class="page" aria-labelledby="integration-profiles-heading">
+  <div class="page-header">
+    <div>
+      <h1 id="integration-profiles-heading">Integration Profiles</h1>
+      <p>Un perfil define cómo un dominio de negocio se acopla a una fuente externa.</p>
+    </div>
+    <button type="button" class="btn btn-primary new-profile-btn" (click)="openWizard()">＋ Nuevo profile</button>
+  </div>
 
   @if (state() === 'loading') {
-    <p aria-live="polite">Loading integration profiles…</p>
-  } @else if (state() === 'ready') {
-    <table>
-      <caption>Configured integration profiles</caption>
-      <thead>
-        <tr>
-          <th scope="col">ID</th>
-          <th scope="col">Business domain</th>
-          <th scope="col">External source</th>
-          <th scope="col">Sync direction</th>
-          <th scope="col">Status</th>
-          <th scope="col">Version</th>
-        </tr>
-      </thead>
-      <tbody>
-        @for (profile of profiles(); track profile.id) {
-          <tr>
-            <td>{{ profile.id }}</td>
-            <td>{{ profile.businessDomain }}</td>
-            <td>{{ profile.externalSource }}</td>
-            <td>{{ profile.syncDirection }}</td>
-            <td>{{ profile.active ? 'Active' : 'Inactive' }}</td>
-            <td>{{ profile.version }}</td>
-          </tr>
-        }
-      </tbody>
-    </table>
-  } @else if (state() === 'empty') {
-    <p>No integration profiles are available.</p>
+    <p aria-live="polite">Cargando integration profiles…</p>
   } @else if (state() === 'session-expired') {
-    <p role="alert">Your session is no longer active. Redirecting to sign in.</p>
+    <p role="alert">Tu sesión ya no está activa. Redirigiendo a inicio de sesión.</p>
+  } @else if (state() === 'unavailable') {
+    <p role="alert">Los integration profiles no están disponibles temporalmente. Intenta de nuevo.</p>
+    <button type="button" class="btn" (click)="retry()">Reintentar</button>
+  } @else if (state() === 'empty') {
+    <p>No hay integration profiles configurados todavía.</p>
   } @else {
-    <p role="alert">Integration profiles are temporarily unavailable. Please try again later.</p>
-    <button type="button" (click)="retry()">Retry</button>
+    <div class="toolbar">
+      <input
+        class="search"
+        [value]="search()"
+        (input)="onSearch($any($event.target).value)"
+        placeholder="Buscar por dominio, fuente, connector…"
+      />
+      <div class="chip-group">
+        @for (direction of directions; track direction) {
+          <button type="button" class="chip" [class.active]="directionFilter() === direction" (click)="setDirection(direction)">
+            {{ direction === 'ALL' ? 'Todas' : direction }}
+          </button>
+        }
+      </div>
+      <span class="mono count">{{ filteredProfiles().length }} de {{ profiles().length }} perfiles</span>
+    </div>
+
+    <div class="card">
+      <table>
+        <caption class="visually-hidden">Configured integration profiles</caption>
+        <thead>
+          <tr>
+            <th scope="col">Dominio / Fuente</th>
+            <th scope="col">Connector · Adapter</th>
+            <th scope="col">Dirección</th>
+            <th scope="col">Protocol</th>
+            <th scope="col">Source of truth</th>
+            <th scope="col">Endpoint</th>
+            <th scope="col">Actualizado</th>
+            <th scope="col">Estado</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (profile of filteredProfiles(); track profile.id) {
+            <tr (click)="open(profile)" class="row">
+              <td class="cell-primary">{{ profile.businessDomain }} · {{ profile.externalSource }}</td>
+              <td>
+                <div>{{ profile.configuration?.connector || '—' }}</div>
+                <div class="mono cell-sub">{{ profile.configuration?.adapter || '—' }}</div>
+              </td>
+              <td><span [class]="directionBadgeClass(profile.syncDirection)">{{ profile.syncDirection }}</span></td>
+              <td><span class="mono protocol-chip">{{ profile.configuration?.protocol || '—' }}</span></td>
+              <td class="mono">{{ profile.sourceOfTruth }}</td>
+              <td class="mono cell-sub">{{ profile.configuration?.endpoint || '—' }}</td>
+              <td>{{ profile.updatedAt.slice(0, 10) }}</td>
+              <td><span [class]="statusBadgeClass(profile.active)">{{ profile.active ? 'Activo' : 'Inactivo' }}</span></td>
+            </tr>
+          } @empty {
+            <tr><td colspan="8">Ningún perfil coincide con la búsqueda o el filtro.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+
+  @if (wizardOpen()) {
+    <app-integration-profile-wizard (closed)="wizardOpen.set(false)" (created)="onCreated($event)" />
   }
 </section>

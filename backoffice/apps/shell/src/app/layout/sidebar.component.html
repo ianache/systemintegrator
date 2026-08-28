@@ -1,6 +1,46 @@
-<nav aria-label="Primary navigation">
-  <a routerLink="/" routerLinkActive="active" ariaCurrentWhenActive="page" [routerLinkActiveOptions]="{ exact: true }">
-    Home
-  </a>
-  <a routerLink="/integration" routerLinkActive="active" ariaCurrentWhenActive="page">Integration Profiles</a>
-</nav>
+<aside
+  class="rail"
+  [class.expanded]="pinned() || hovering()"
+  (mouseenter)="onEnter()"
+  (mouseleave)="onLeave()"
+>
+  <div class="brand-row">
+    <span class="brand-mark"></span>
+    <div class="brand-text">
+      <span class="brand-name">CLocator 2</span>
+      <span class="brand-sub mono">Integration Console</span>
+    </div>
+    <button type="button" data-testid="sidebar-toggle" class="pin-btn" (click)="toggle()" title="Fijar o contraer el menú">
+      {{ pinned() ? '«' : '»' }}
+    </button>
+  </div>
+
+  <nav aria-label="Primary navigation">
+    <div class="section-label mono">OPERACIÓN</div>
+    @for (item of operationItems; track item.path) {
+      <a
+        [routerLink]="item.path"
+        routerLinkActive="active"
+        [routerLinkActiveOptions]="{ exact: !!item.exact }"
+        ariaCurrentWhenActive="page"
+        class="nav-item"
+      >
+        <span class="nav-icon mono">{{ item.code }}</span>
+        <span class="nav-label">{{ item.label }}</span>
+      </a>
+    }
+
+    <div class="section-label mono">CONFIGURACIÓN</div>
+    @for (item of configItems; track item.path) {
+      <a
+        [routerLink]="item.path"
+        routerLinkActive="active"
+        ariaCurrentWhenActive="page"
+        class="nav-item"
+      >
+        <span class="nav-icon mono">{{ item.code }}</span>
+        <span class="nav-label">{{ item.label }}</span>
+      </a>
+    }
+  </nav>
+</aside>

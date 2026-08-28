@@ -1,0 +1,35 @@
+<section class="page">
+  <div class="page-header">
+    <div>
+      <h1>Monitor de mensajes</h1>
+      <p>Outbox e Inbox del tenant autenticado.</p>
+    </div>
+  </div>
+
+  <div class="card">
+    <div class="card-header">Reproceso de Dead Letter Queue</div>
+    <div class="dlq-body">
+      <p>Ejecuta un reintento masivo de los mensajes en DLQ del tenant autenticado.</p>
+      <button type="button" data-testid="dlq-replay" class="btn btn-dark" [disabled]="replaying()" (click)="replay()">
+        Ejecutar reproceso de DLQ
+      </button>
+      @if (errorMessage(); as err) {
+        <div class="wizard-error">{{ err }}</div>
+      }
+      @if (summary(); as s) {
+        <div class="mono dlq-summary">
+          <span>total {{ s.total }}</span>
+          <span>éxito {{ s.success }}</span>
+          <span>fallidos {{ s.failed }}</span>
+        </div>
+      }
+    </div>
+  </div>
+
+  <div class="card">
+    <app-console-empty-state
+      title="Vista de mensajes individuales no disponible todavía"
+      description="El backend de Outbox/Inbox aún no expone una API de lectura por mensaje. Esta vista se completará cuando exista ese endpoint."
+    />
+  </div>
+</section>

@@ -21,10 +21,13 @@ async function bootstrap() {
       { path: 'auth/callback', method: RequestMethod.GET },
       { path: 'auth/session', method: RequestMethod.GET },
       { path: 'auth/logout', method: RequestMethod.GET },
-      {
-        path: 'bff/api/v1/integration-profiles',
-        method: RequestMethod.GET,
-      },
+      { path: 'bff/api/v1/integration-profiles', method: RequestMethod.GET },
+      { path: 'bff/api/v1/integration-profiles', method: RequestMethod.POST },
+      { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.GET },
+      { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.PUT },
+      { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.DELETE },
+      { path: 'bff/api/v1/integration-profiles/:profileId/sync', method: RequestMethod.POST },
+      { path: 'bff/api/v1/inbox/dlq/replay', method: RequestMethod.POST },
     ],
   });
   configureSession(app, readBackofficeConfig(app.get(ConfigService)));

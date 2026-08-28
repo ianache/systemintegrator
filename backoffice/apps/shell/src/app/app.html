@@ -1,9 +1,10 @@
 <div class="shell">
-  <app-header />
-  <div class="shell-body">
-    <app-sidebar />
-    <main id="main-content" tabindex="-1">
+  <app-sidebar />
+  <div class="rail-spacer"></div>
+  <main id="main-content" tabindex="-1">
+    <app-header />
+    <div class="content-scroll">
       <router-outlet />
-    </main>
-  </div>
+    </div>
+  </main>
 </div>

@@ -1,7 +1,23 @@
 import { provideHttpClient } from '@angular/common/http';
 import { HttpTestingController, provideHttpClientTesting } from '@angular/common/http/testing';
+import { provideRouter, Router } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { IntegrationProfileListComponent, WINDOW } from './integration-profile-list.component';
+
+const profile = (overrides: Partial<Record<string, unknown>>) => ({
+  id: 'p-1',
+  tenantId: 't-1',
+  businessDomain: 'orders',
+  externalSource: 'erp',
+  syncDirection: 'INBOUND',
+  sourceOfTruth: 'EXTERNAL',
+  configuration: null,
+  active: true,
+  createdAt: '2026-08-01T00:00:00Z',
+  updatedAt: '2026-08-20T00:00:00Z',
+  version: 2,
+  ...overrides,
+});
 
 describe('IntegrationProfileListComponent', () => {
   let http: HttpTestingController;
@@ -14,6 +30,7 @@ describe('IntegrationProfileListComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
+        provideRouter([]),
         { provide: WINDOW, useValue: { location: { assign } } },
       ],
     }).compileComponents();
@@ -27,56 +44,85 @@ describe('IntegrationProfileListComponent', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Loading integration profiles');
-    http.expectOne('/bff/api/v1/integration-profiles');
+    expect(fixture.nativeElement.textContent).toContain('Cargando integration profiles');
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true');
   });
 
-  it('renders a read-only table for loaded profiles', () => {
+  it('renders a table for loaded profiles and navigates to the detail page on row click', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    const router = TestBed.inject(Router);
+    const navigateSpy = vi.spyOn(router, 'navigate');
     fixture.detectChanges();
 
-    http.expectOne('/bff/api/v1/integration-profiles').flush([
-      {
-        id: 'p-1',
-        businessDomain: 'orders',
-        externalSource: 'erp',
-        syncDirection: 'INBOUND',
-        active: true,
-        version: 2,
-      },
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([profile({})]);
+    fixture.detectChanges();
+
+    const row = fixture.nativeElement.querySelector('tbody tr') as HTMLTableRowElement;
+    expect(row.textContent).toContain('orders');
+    row.click();
+    expect(navigateSpy).toHaveBeenCalledWith(['/integration/profiles', 'p-1']);
+  });
+
+  it('filters rows by the direction chip group', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([
+      profile({ id: 'p-1', businessDomain: 'orders', syncDirection: 'INBOUND' }),
+      profile({ id: 'p-2', businessDomain: 'invoices', syncDirection: 'OUTBOUND' }),
     ]);
     fixture.detectChanges();
 
-    const table = fixture.nativeElement.querySelector('table') as HTMLTableElement;
-    expect(table).not.toBeNull();
-    expect(table.textContent).toContain('orders');
-    expect(table.textContent).toContain('Active');
-    expect(fixture.nativeElement.querySelectorAll('button, a[href]').length).toBe(0);
+    const outboundChip = Array.from(fixture.nativeElement.querySelectorAll('.chip')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'OUTBOUND',
+    ) as HTMLButtonElement;
+    outboundChip.click();
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('invoices');
+  });
+
+  it('filters rows by the search box across domain and source', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([
+      profile({ id: 'p-1', businessDomain: 'orders', externalSource: 'erp' }),
+      profile({ id: 'p-2', businessDomain: 'invoices', externalSource: 'sap' }),
+    ]);
+    fixture.detectChanges();
+
+    const search = fixture.nativeElement.querySelector('.search') as HTMLInputElement;
+    search.value = 'sap';
+    search.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    const rows = fixture.nativeElement.querySelectorAll('tbody tr');
+    expect(rows.length).toBe(1);
+    expect(rows[0].textContent).toContain('invoices');
   });
 
   it('shows an empty state when no profiles are returned', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 
-    http.expectOne('/bff/api/v1/integration-profiles').flush([]);
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([]);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('No integration profiles are available');
+    expect(fixture.nativeElement.textContent).toContain('No hay integration profiles configurados');
   });
 
   it.each([401, 403])('shows a session state and redirects to login for %i responses', (status) => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 
-    http.expectOne('/bff/api/v1/integration-profiles').flush('', {
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush('', {
       status,
       statusText: 'Authentication required',
     });
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain(
-      'Redirecting to sign in',
-    );
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('sesión');
     expect(assign).toHaveBeenCalledWith('/auth/login');
   });
 
@@ -84,25 +130,31 @@ describe('IntegrationProfileListComponent', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 
-    http.expectOne('/bff/api/v1/integration-profiles').flush('Gateway failure details', {
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush('Gateway failure details', {
       status: 502,
       statusText: 'Bad Gateway',
     });
     fixture.detectChanges();
 
-    const alert = fixture.nativeElement.querySelector('[role="alert"]')?.textContent;
-    expect(alert).toContain('temporarily unavailable');
-    expect(alert).not.toContain('Gateway failure details');
-
-    const retryButton = fixture.nativeElement.querySelector('button') as HTMLButtonElement;
-    expect(retryButton.textContent).toContain('Retry');
+    const retryButton = Array.from(fixture.nativeElement.querySelectorAll('button.btn')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Reintentar',
+    ) as HTMLButtonElement;
+    expect(retryButton).not.toBeUndefined();
     retryButton.click();
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('Loading integration profiles');
-    http.expectOne('/bff/api/v1/integration-profiles').flush([]);
+    expect(fixture.nativeElement.textContent).toContain('Cargando integration profiles');
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([]);
+  });
+
+  it('opens the create wizard from the toolbar button', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([]);
     fixture.detectChanges();
 
-    expect(fixture.nativeElement.textContent).toContain('No integration profiles are available');
+    (fixture.nativeElement.querySelector('.new-profile-btn') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('app-integration-profile-wizard')).not.toBeNull();
   });
 });

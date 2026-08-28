@@ -1,4 +1,4 @@
 import { Routes } from '@angular/router';
-import { IntegrationRootComponent } from './integration-root.component';
+import { CONSOLE_ROUTES } from '../console.routes';
 
-export const routes: Routes = [{ path: '', component: IntegrationRootComponent }];
+export const routes: Routes = CONSOLE_ROUTES;

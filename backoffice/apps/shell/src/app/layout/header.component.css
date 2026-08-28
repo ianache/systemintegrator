@@ -1,47 +1,21 @@
-:host {
-  display: block;
+:host { display: contents; }
+
+.console-header {
+  height: 52px; flex: 0 0 52px;
+  background: var(--surface); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; gap: 14px; padding: 0 20px;
 }
 
-.header {
-  align-items: center;
-  background: #102a43;
-  color: #f0f4f8;
-  display: flex;
-  gap: 1rem;
-  justify-content: space-between;
-  min-height: 4rem;
-  padding: 0 1.5rem;
-}
+.tenant-label { display: flex; align-items: center; gap: 9px; }
+.tenant-label .label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.06em; }
+.tenant-name { font-weight: 600; }
 
-.brand {
-  color: inherit;
-  font-size: 1.25rem;
-  font-weight: 700;
-  text-decoration: none;
-}
+.right-group { margin-left: auto; display: flex; align-items: center; gap: 10px; }
+.jwt-status { font-size: 11px; color: var(--text-dim); }
 
-.session {
-  align-items: center;
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.75rem;
+.theme-btn {
+  display: flex; align-items: center; gap: 7px; background: var(--surface-2);
+  border: 1px solid var(--border); border-radius: 5px; padding: 5px 9px; cursor: pointer;
+  font-size: 10px; letter-spacing: 0.06em; color: var(--text-muted);
 }
-
-.tenant {
-  color: #d9e2ec;
-}
-
-button {
-  background: #f0f4f8;
-  border: 0;
-  border-radius: 0.25rem;
-  color: #102a43;
-  cursor: pointer;
-  font: inherit;
-  padding: 0.5rem 0.75rem;
-}
-
-button:hover,
-button:focus-visible {
-  background: #bcccdc;
-}
+.theme-btn:hover { border-color: var(--border-strong); color: var(--text); }

@@ -1,0 +1,10 @@
+.modal-header { padding: 18px 24px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 14px; }
+.modal-title { display: block; font-size: 16px; font-weight: 600; }
+.modal-sub { display: block; font-size: 12px; color: var(--text-dim); }
+.close-btn { margin-left: auto; font-size: 18px; }
+.wizard-error { margin: 0 24px; padding: 10px 13px; background: color-mix(in oklab, var(--err) 12%, var(--surface)); border: 1px solid var(--err); border-radius: 5px; color: var(--err); font-size: 12.5px; }
+.modal-body { flex: 1; overflow: auto; padding: 20px 24px; display: grid; grid-template-columns: 1fr 1fr; gap: 14px; align-content: start; }
+.expert-json { grid-column: 1 / -1; min-height: 380px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; border: 1px solid var(--border); border-radius: 6px; padding: 14px; background: var(--surface-2); }
+.review-json { grid-column: 1 / -1; margin: 0; padding: 16px; background: #0F0F11; color: #E7E7EA; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; overflow: auto; }
+.modal-footer { padding: 14px 24px; border-top: 1px solid var(--border); display: flex; align-items: center; gap: 10px; background: var(--surface-2); }
+.footer-actions { margin-left: auto; display: flex; gap: 8px; }

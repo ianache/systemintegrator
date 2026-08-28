@@ -1,0 +1,261 @@
+@if (state() === 'loading') {
+  <section class="page"><p aria-live="polite">Cargando perfil…</p></section>
+} @else if (state() === 'not-found') {
+  <section class="page">
+    <p role="alert">No se encontró el perfil solicitado.</p>
+    <a routerLink="/integration/profiles" class="btn">← Integration Profiles</a>
+  </section>
+} @else if (state() === 'unavailable') {
+  <section class="page">
+    <p role="alert">El perfil no está disponible temporalmente.</p>
+    <button type="button" class="btn" (click)="reload()">Reintentar</button>
+  </section>
+} @else if (profile(); as p) {
+  <div class="detail-shell">
+    <div class="detail-head">
+      <a routerLink="/integration/profiles" class="btn-ghost back-link">← Integration Profiles</a>
+      <div class="detail-title-row">
+        <div class="detail-title">
+          <div class="detail-title-line">
+            <h1>{{ p.businessDomain }} · {{ p.externalSource }}</h1>
+            <span [class]="'badge dir-' + p.syncDirection.toLowerCase()">{{ p.syncDirection }}</span>
+            <span [class]="'badge ' + (p.active ? 'active' : 'inactive')">{{ p.active ? 'Activo' : 'Inactivo' }}</span>
+          </div>
+          <div class="mono detail-meta-line">
+            <span>{{ p.businessDomain }}&#64;{{ p.externalSource }}</span>
+            <span>v{{ p.version }}</span>
+            <span>actualizado {{ p.updatedAt.slice(0, 10) }}</span>
+          </div>
+        </div>
+        <div class="detail-actions">
+          @if (p.active) {
+            <button type="button" data-testid="deactivate-profile" class="btn" (click)="deactivateProfile()">Desactivar perfil</button>
+          } @else {
+            <span class="inactive-note">Perfil inactivo — no hay acción de reactivación disponible en la consola.</span>
+          }
+          <button type="button" data-testid="save-profile" class="btn btn-primary" [disabled]="saving()" (click)="save()">Guardar cambios</button>
+        </div>
+      </div>
+      @if (saveError(); as err) {
+        <div class="wizard-error">{{ err }}</div>
+      }
+      <div class="tabs">
+        @for (t of tabs; track t.id) {
+          <button type="button" class="tab" [class.active]="tab() === t.id" (click)="setTab(t.id)">{{ t.label }}</button>
+        }
+      </div>
+    </div>
+
+    <div class="detail-body">
+      @if (editModel(); as edit) {
+        @switch (tab()) {
+          @case ('general') {
+            <div data-testid="tab-general" class="tab-grid">
+              <div class="card">
+                <div class="card-header">Identidad del perfil</div>
+                <div class="card-grid">
+                  <label class="field">
+                    <span class="label">BUSINESS DOMAIN</span>
+                    <input name="businessDomain" [value]="edit.businessDomain" (input)="updateField('businessDomain', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">EXTERNAL SOURCE</span>
+                    <input name="externalSource" [value]="edit.externalSource" (input)="updateField('externalSource', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">SYNC DIRECTION</span>
+                    <select [value]="edit.syncDirection" (change)="updateField('syncDirection', $any($event.target).value)">
+                      <option value="INBOUND">INBOUND</option>
+                      <option value="OUTBOUND">OUTBOUND</option>
+                      <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="label">SOURCE OF TRUTH</span>
+                    <select [value]="edit.sourceOfTruth" (change)="updateField('sourceOfTruth', $any($event.target).value)">
+                      <option value="PLATFORM">PLATFORM</option>
+                      <option value="EXTERNAL">EXTERNAL</option>
+                      <option value="SHARED">SHARED</option>
+                    </select>
+                  </label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">Metadatos</div>
+                <div class="meta-list">
+                  <div class="meta-row"><span class="mono meta-label">PROFILE ID</span><span class="mono">{{ p.id }}</span></div>
+                  <div class="meta-row"><span class="mono meta-label">TENANT ID</span><span class="mono">{{ p.tenantId }}</span></div>
+                  <div class="meta-row"><span class="mono meta-label">VERSION</span><span class="mono">v{{ p.version }} · control optimista</span></div>
+                  <div class="meta-row"><span class="mono meta-label">CREADO</span><span class="mono">{{ p.createdAt.slice(0, 10) }}</span></div>
+                  <div class="meta-row"><span class="mono meta-label">ACTUALIZADO</span><span class="mono">{{ p.updatedAt.slice(0, 10) }}</span></div>
+                </div>
+              </div>
+            </div>
+          }
+          @case ('conn') {
+            <div data-testid="tab-conn" class="tab-grid">
+              <div class="card">
+                <div class="card-header">Conector</div>
+                <div class="card-grid">
+                  <label class="field">
+                    <span class="label">PROTOCOL</span>
+                    <select [value]="edit.protocol" (change)="updateField('protocol', $any($event.target).value)">
+                      <option value="">—</option>
+                      <option value="REST">REST</option>
+                      <option value="SOAP">SOAP</option>
+                      <option value="JSON_RPC">JSON_RPC</option>
+                      <option value="KAFKA">KAFKA</option>
+                      <option value="JDBC">JDBC</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="label">CONNECTOR</span>
+                    <input [value]="edit.connector" (input)="updateField('connector', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">ADAPTER</span>
+                    <input [value]="edit.adapter" (input)="updateField('adapter', $any($event.target).value)" />
+                  </label>
+                  <label class="field full">
+                    <span class="label">ENDPOINT</span>
+                    <input [value]="edit.endpoint" (input)="updateField('endpoint', $any($event.target).value)" />
+                  </label>
+                  <label class="field full">
+                    <span class="label">CREDENTIAL REF</span>
+                    <input [value]="edit.credentialRef" (input)="updateField('credentialRef', $any($event.target).value)" />
+                  </label>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">Validación (local)</div>
+                <div class="validation-panel">
+                  @if (connectivityValid()) {
+                    <div class="validation-row ok">✓ Protocol, connector y adapter son consistentes.</div>
+                  } @else {
+                    <div class="validation-row err">✗ Si defines protocol, connector y adapter son obligatorios.</div>
+                  }
+                  <p class="validation-note">Esta validación es local al formulario; no ejecuta un handshake real contra la fuente externa.</p>
+                </div>
+              </div>
+            </div>
+          }
+          @case ('map') {
+            <div data-testid="tab-map" class="tab-grid">
+              <div class="card">
+                <div class="card-header">
+                  <span>Mapping</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.mappingJson)">
+                    {{ isJsonValid(edit.mappingJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="mappingJson"
+                  class="json-editor"
+                  [value]="edit.mappingJson"
+                  (input)="updateField('mappingJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <span>Transformation</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.transformationJson)">
+                    {{ isJsonValid(edit.transformationJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="transformationJson"
+                  class="json-editor"
+                  [value]="edit.transformationJson"
+                  (input)="updateField('transformationJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+            </div>
+          }
+          @case ('pol') {
+            <div data-testid="tab-pol" class="tab-grid-3">
+              <div class="card">
+                <div class="card-header">
+                  <span>Sync policy</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.syncPolicyJson)">
+                    {{ isJsonValid(edit.syncPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="syncPolicyJson"
+                  class="json-editor"
+                  [value]="edit.syncPolicyJson"
+                  (input)="updateField('syncPolicyJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <span>Retry & backoff</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.retryPolicyJson)">
+                    {{ isJsonValid(edit.retryPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="retryPolicyJson"
+                  class="json-editor small"
+                  [value]="edit.retryPolicyJson"
+                  (input)="updateField('retryPolicyJson', $any($event.target).value)"
+                ></textarea>
+                @if (retrySequence().length > 0) {
+                  <div class="retry-sequence">
+                    <span class="mono seq-label">SECUENCIA CALCULADA</span>
+                    <div class="seq-chips">
+                      @for (step of retrySequence(); track $index) {
+                        <span class="mono seq-chip">{{ step }}</span>
+                      }
+                      <span class="mono seq-chip dlq">→ DLQ</span>
+                    </div>
+                  </div>
+                }
+              </div>
+              <div class="card">
+                <div class="card-header">
+                  <span>Rate limit</span>
+                  <span class="mono json-status" [class.err]="!isJsonValid(edit.rateLimitPolicyJson)">
+                    {{ isJsonValid(edit.rateLimitPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
+                  </span>
+                </div>
+                <textarea
+                  name="rateLimitPolicyJson"
+                  class="json-editor small"
+                  [value]="edit.rateLimitPolicyJson"
+                  (input)="updateField('rateLimitPolicyJson', $any($event.target).value)"
+                ></textarea>
+              </div>
+            </div>
+          }
+          @case ('sync') {
+            <div data-testid="tab-sync" class="tab-grid">
+              <div class="card">
+                <div class="card-header">
+                  <span>Sincronización</span>
+                  <button type="button" data-testid="trigger-sync" class="btn btn-dark" [disabled]="syncing()" (click)="triggerSync()">Sincronizar ahora</button>
+                </div>
+                <p class="sync-hint">
+                  Dispara <span class="mono">POST /integration-profiles/{{ p.id }}/sync</span> contra el Gateway real. Confirma que el
+                  trigger fue aceptado; no ejecuta una prueba de conectividad de bajo nivel.
+                </p>
+                @if (syncLog().length === 0) {
+                  <div class="empty-state"><strong>Sin sincronizaciones en esta sesión</strong></div>
+                } @else {
+                  <div class="sync-log">
+                    @for (entry of syncLog(); track entry.triggeredAt) {
+                      <div class="sync-log-row">
+                        <span class="badge active">{{ entry.status }}</span>
+                        <span class="mono">{{ entry.triggeredAt }}</span>
+                      </div>
+                    }
+                  </div>
+                }
+              </div>
+            </div>
+          }
+        }
+      }
+    </div>
+  </div>
+}

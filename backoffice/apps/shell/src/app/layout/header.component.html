@@ -1,16 +1,27 @@
-<header class="header">
-  <a class="brand" routerLink="/" aria-label="Backoffice home">Backoffice</a>
-
-  <div class="session" aria-live="polite">
+<header class="console-header">
+  <div class="tenant-label" aria-live="polite">
     @if (sessionService.session().authenticated) {
-      <span class="status">Signed in</span>
-      @if (sessionService.session().tenantId; as tenantId) {
-        <span class="tenant">Tenant: {{ tenantId }}</span>
-      }
-      <button type="button" (click)="sessionService.logout()">Log out</button>
+      <span class="mono label">TENANT</span>
+      <span class="tenant-name">{{ sessionService.session().tenantId }}</span>
     } @else {
-      <span class="status">You are not signed in</span>
-      <button type="button" (click)="sessionService.login()">Log in</button>
+      <span class="status">No autenticado</span>
+    }
+  </div>
+
+  <div class="right-group">
+    @if (sessionService.session().authenticated) {
+      @if (expiryLabel(sessionService.session().expiresAt); as expiry) {
+        <span class="jwt-status">Sesión válida · <span class="mono">{{ expiry }}</span></span>
+      }
+    }
+    <button type="button" data-testid="theme-toggle" class="theme-btn" (click)="theme.toggle()" title="Cambiar tema">
+      <span>{{ theme.dark() ? '☀' : '☾' }}</span>
+      {{ theme.dark() ? 'CLARO' : 'OSCURO' }}
+    </button>
+    @if (sessionService.session().authenticated) {
+      <button type="button" class="btn" (click)="sessionService.logout()">Cerrar sesión</button>
+    } @else {
+      <button type="button" class="btn btn-primary" (click)="sessionService.login()">Iniciar sesión</button>
     }
   </div>
 </header>
