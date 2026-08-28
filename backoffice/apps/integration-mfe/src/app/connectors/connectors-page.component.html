@@ -1,0 +1,48 @@
+<section class="page">
+  <div class="page-header">
+    <div>
+      <h1>Conectores y adapters</h1>
+      <p>Catálogo derivado de los perfiles de integración. Incorporar una fuente nueva es registrar un connector en un profile, no modificar los microservicios de dominio.</p>
+    </div>
+  </div>
+
+  @if (state() === 'loading') {
+    <p class="state-message" aria-live="polite">Cargando conectores…</p>
+  } @else if (state() === 'unavailable') {
+    <p class="state-message" role="alert">El catálogo de conectores no está disponible temporalmente.</p>
+    <button type="button" class="btn" (click)="load()">Reintentar</button>
+  } @else if (state() === 'empty') {
+    <p class="state-message">No hay conectores registrados todavía. Se derivan automáticamente al crear un integration profile.</p>
+  } @else {
+    <div class="connectors-grid">
+      @for (c of connectors(); track c.name) {
+        <div class="connector-card">
+          <div class="connector-header">
+            @if (c.protocol) {
+              <span class="mono protocol-badge">{{ c.protocol }}</span>
+            }
+            <span class="connector-name">{{ c.name }}</span>
+            <span class="connector-state" [class.state-active]="c.inUse" [class.state-idle]="!c.inUse">
+              {{ c.inUse ? 'EN USO' : 'SIN USO ACTIVO' }}
+            </span>
+          </div>
+          <p class="connector-desc">
+            {{ c.totalProfiles }} profile{{ c.totalProfiles === 1 ? '' : 's' }} de integración
+            ({{ c.activeProfiles }} activo{{ c.activeProfiles === 1 ? '' : 's' }}).
+          </p>
+          @if (c.adapters.length > 0) {
+            <div class="adapters-list">
+              @for (a of c.adapters; track a) {
+                <span class="mono adapter-item">{{ a }}</span>
+              }
+            </div>
+          } @else {
+            <div class="adapters-list">
+              <span class="mono adapter-item adapter-empty">sin adapter declarado</span>
+            </div>
+          }
+        </div>
+      }
+    </div>
+  }
+</section>
