@@ -43,6 +43,22 @@ export class GatewayProxyService {
     return this.forward('post', '/api/v1/inbox/dlq/replay', accessToken, {});
   }
 
+  getMessages(accessToken: string, status: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/messages?status=${encodeURIComponent(status)}`, accessToken);
+  }
+
+  getMessage(accessToken: string, direction: string, id: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/messages/${direction}/${id}`, accessToken);
+  }
+
+  retryMessage(accessToken: string, direction: string, id: string): Promise<unknown> {
+    return this.forward('post', `/api/v1/messages/${direction}/${id}/retry`, accessToken, {});
+  }
+
+  moveMessageToDlq(accessToken: string, direction: string, id: string): Promise<unknown> {
+    return this.forward('post', `/api/v1/messages/${direction}/${id}/dlq`, accessToken, {});
+  }
+
   private async forward(method: HttpMethod, path: string, accessToken: string, body?: unknown): Promise<unknown> {
     const url = `${this.config.getOrThrow<string>('GATEWAY_URI')}${path}`;
     const options = { headers: { Authorization: `Bearer ${accessToken}` } };

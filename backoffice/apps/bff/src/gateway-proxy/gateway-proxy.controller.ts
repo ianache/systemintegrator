@@ -83,4 +83,38 @@ export class GatewayProxyController {
   replayDeadLetterQueue(@Req() request: AuthenticatedRequest) {
     return this.gatewayProxy.replayDeadLetterQueue(request.session.tokens!.access_token!);
   }
+
+  @Get('messages')
+  getMessages(@Req() request: AuthenticatedRequest, @Query('status') status = 'ALL') {
+    return this.gatewayProxy.getMessages(request.session.tokens!.access_token!, status);
+  }
+
+  @Get('messages/:direction/:id')
+  getMessage(
+    @Req() request: AuthenticatedRequest,
+    @Param('direction') direction: string,
+    @Param('id') id: string,
+  ) {
+    return this.gatewayProxy.getMessage(request.session.tokens!.access_token!, direction, id);
+  }
+
+  @Post('messages/:direction/:id/retry')
+  @HttpCode(HttpStatus.OK)
+  retryMessage(
+    @Req() request: AuthenticatedRequest,
+    @Param('direction') direction: string,
+    @Param('id') id: string,
+  ) {
+    return this.gatewayProxy.retryMessage(request.session.tokens!.access_token!, direction, id);
+  }
+
+  @Post('messages/:direction/:id/dlq')
+  @HttpCode(HttpStatus.OK)
+  moveMessageToDlq(
+    @Req() request: AuthenticatedRequest,
+    @Param('direction') direction: string,
+    @Param('id') id: string,
+  ) {
+    return this.gatewayProxy.moveMessageToDlq(request.session.tokens!.access_token!, direction, id);
+  }
 }

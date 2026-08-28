@@ -1,3 +1,150 @@
 .dlq-body { padding: 16px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start; }
 .dlq-summary { display: flex; gap: 14px; color: var(--text-muted); }
 .wizard-error { padding: 10px 13px; background: color-mix(in oklab, var(--err) 12%, var(--surface)); border: 1px solid var(--err); border-radius: 5px; color: var(--err); font-size: 12.5px; }
+
+.toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.message-count { margin-left: auto; font-size: 11.5px; color: var(--text-dim); }
+
+.messages-card { overflow: hidden; }
+
+.messages-header,
+.messages-row {
+  display: grid;
+  grid-template-columns: 108px 200px 1fr 1fr 78px 150px 100px;
+  gap: 10px;
+  align-items: center;
+  padding: 10px 16px;
+}
+
+.messages-header {
+  background: var(--surface-2);
+  border-bottom: 1px solid var(--border);
+  font-family: 'IBM Plex Mono', monospace;
+  font-size: 10px;
+  letter-spacing: 0.07em;
+  color: var(--text-dim);
+}
+
+.messages-row {
+  border-bottom: 1px solid var(--border-soft);
+  cursor: pointer;
+}
+
+.messages-row:last-child { border-bottom: 0; }
+.messages-row:hover { background: var(--surface-2); }
+
+.id-cell,
+.timestamp-cell {
+  font-size: 11px;
+  color: var(--text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.domain-cell { font-size: 12px; color: var(--text-muted); }
+
+.attempts-warn { color: var(--warn); }
+.attempts-error { color: var(--err); }
+
+.align-right { display: flex; justify-content: flex-end; }
+
+.state-message { padding: 24px 16px; color: var(--text-muted); }
+.messages-card .state-message + .btn { margin: 0 16px 16px; }
+
+.badge.status-pending { color: var(--text-dim); background: var(--surface-2); }
+.badge.status-error { color: var(--warn); background: color-mix(in oklab, var(--warn) 15%, var(--surface)); }
+.badge.status-dlq { color: var(--err); background: color-mix(in oklab, var(--err) 15%, var(--surface)); }
+.badge.status-processed { color: var(--ok); background: color-mix(in oklab, var(--ok) 15%, var(--surface)); }
+
+/* Message detail drawer */
+.drawer-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+  display: flex;
+  justify-content: flex-end;
+  background: rgba(14, 14, 16, 0.34);
+}
+
+.drawer {
+  width: 560px;
+  max-width: 100%;
+  height: 100%;
+  background: var(--surface);
+  box-shadow: -20px 0 50px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.drawer-header {
+  padding: 18px 22px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.drawer-title { display: flex; align-items: center; gap: 9px; }
+.drawer-event { font-size: 15px; font-weight: 600; }
+.drawer-id { color: var(--text-dim); font-size: 11px; margin-left: 4px; }
+
+.drawer-close {
+  margin-left: auto;
+  background: none;
+  border: 0;
+  font-size: 18px;
+  color: var(--text-dim);
+  cursor: pointer;
+  line-height: 1;
+}
+.drawer-close:hover { color: var(--text); }
+
+.drawer-body {
+  flex: 1;
+  overflow: auto;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.facts-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fact { display: flex; flex-direction: column; gap: 3px; }
+.fact-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.07em; color: var(--text-dim); }
+
+.last-error-block { display: flex; flex-direction: column; gap: 6px; }
+.last-error-text {
+  margin: 0;
+  padding: 10px 12px;
+  background: color-mix(in oklab, var(--err) 10%, var(--surface));
+  border: 1px solid var(--err);
+  border-radius: 5px;
+  color: var(--err);
+  font-size: 11.5px;
+  white-space: pre-wrap;
+}
+
+.payload-block { display: flex; flex-direction: column; gap: 8px; }
+.payload-pre {
+  margin: 0;
+  padding: 13px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  font-size: 11px;
+  line-height: 1.65;
+  overflow: auto;
+  white-space: pre-wrap;
+}
+
+.drawer-actions {
+  padding: 14px 22px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 8px;
+  background: var(--surface-2);
+}
+
+.drawer-close-action { margin-left: auto; }

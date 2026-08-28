@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.inbox;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.repository.Repository;
 import java.util.Optional;
 import java.util.UUID;
@@ -16,4 +17,7 @@ public interface SpringDataInboxRepository extends Repository<InboxJpaEntity, UU
 
     @org.springframework.data.jpa.repository.Query("SELECT e FROM InboxJpaEntity e WHERE e.status = :status ORDER BY e.receivedAt ASC")
     java.util.List<InboxJpaEntity> findByStatus(@org.springframework.data.repository.query.Param("status") String status);
+
+    @org.springframework.data.jpa.repository.Query("SELECT e FROM InboxJpaEntity e WHERE e.tenantId = :tenantId ORDER BY e.receivedAt DESC")
+    java.util.List<InboxJpaEntity> findByTenantId(@org.springframework.data.repository.query.Param("tenantId") UUID tenantId, Pageable pageable);
 }

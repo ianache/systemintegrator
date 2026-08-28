@@ -43,6 +43,10 @@ describe('Gateway profile proxy', () => {
         { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.DELETE },
         { path: 'bff/api/v1/integration-profiles/:profileId/sync', method: RequestMethod.POST },
         { path: 'bff/api/v1/inbox/dlq/replay', method: RequestMethod.POST },
+        { path: 'bff/api/v1/messages', method: RequestMethod.GET },
+        { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },
+        { path: 'bff/api/v1/messages/:direction/:id/retry', method: RequestMethod.POST },
+        { path: 'bff/api/v1/messages/:direction/:id/dlq', method: RequestMethod.POST },
       ],
     });
     await app.init();
@@ -139,6 +143,53 @@ describe('Gateway profile proxy', () => {
       .post('/bff/api/v1/inbox/dlq/replay')
       .set('Cookie', 'session=authenticated')
       .expect(HttpStatus.OK, { total: 1, success: 1, failed: 0 });
+  });
+
+  it('lists messages filtered by status', async () => {
+    const get = jest.spyOn(axios, 'get').mockResolvedValue({ data: [{ id: 'msg-1', status: 'DLQ' }] });
+
+    const response = await request(app.getHttpServer())
+      .get('/bff/api/v1/messages?status=DLQ')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK);
+
+    expect(response.body).toEqual([{ id: 'msg-1', status: 'DLQ' }]);
+    expect(get).toHaveBeenCalledWith('http://gateway.internal/api/v1/messages?status=DLQ', {
+      headers: { Authorization: 'Bearer session-access-token' },
+    });
+  });
+
+  it('gets a single message by direction and id', async () => {
+    jest.spyOn(axios, 'get').mockResolvedValue({ data: { id: 'msg-1', payload: '{}' } });
+
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/messages/INBOUND/msg-1')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK, { id: 'msg-1', payload: '{}' });
+  });
+
+  it('retries a message', async () => {
+    const post = jest.spyOn(axios, 'post').mockResolvedValue({ data: { id: 'msg-1', status: 'PENDING' } });
+
+    await request(app.getHttpServer())
+      .post('/bff/api/v1/messages/OUTBOUND/msg-1/retry')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK, { id: 'msg-1', status: 'PENDING' });
+
+    expect(post).toHaveBeenCalledWith(
+      'http://gateway.internal/api/v1/messages/OUTBOUND/msg-1/retry',
+      {},
+      { headers: { Authorization: 'Bearer session-access-token' } },
+    );
+  });
+
+  it('moves a message to the DLQ', async () => {
+    jest.spyOn(axios, 'post').mockResolvedValue({ data: { id: 'msg-1', status: 'DLQ' } });
+
+    await request(app.getHttpServer())
+      .post('/bff/api/v1/messages/OUTBOUND/msg-1/dlq')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK, { id: 'msg-1', status: 'DLQ' });
   });
 
   it.each([

@@ -2,14 +2,17 @@
   <div class="page-header">
     <div>
       <h1>Monitor de mensajes</h1>
-      <p>Outbox e Inbox del tenant autenticado.</p>
+      <p>
+        Outbox e Inbox del tenant. Cada mensaje conserva su
+        <span class="mono">messageId</span> para idempotencia, deduplicación y reprocesamiento.
+      </p>
     </div>
   </div>
 
   <div class="card">
-    <div class="card-header">Reproceso de Dead Letter Queue</div>
+    <div class="card-header">Reproceso masivo de Dead Letter Queue</div>
     <div class="dlq-body">
-      <p>Ejecuta un reintento masivo de los mensajes en DLQ del tenant autenticado.</p>
+      <p>Ejecuta un reintento masivo de todos los mensajes en DLQ del tenant autenticado.</p>
       <button type="button" data-testid="dlq-replay" class="btn btn-dark" [disabled]="replaying()" (click)="replay()">
         Ejecutar reproceso de DLQ
       </button>
@@ -26,10 +29,114 @@
     </div>
   </div>
 
-  <div class="card">
-    <app-console-empty-state
-      title="Vista de mensajes individuales no disponible todavía"
-      description="El backend de Outbox/Inbox aún no expone una API de lectura por mensaje. Esta vista se completará cuando exista ese endpoint."
-    />
+  <div class="toolbar">
+    <div class="chip-group">
+      @for (f of filters; track f.value) {
+        <button
+          type="button"
+          class="chip"
+          [class.active]="filter() === f.value"
+          (click)="setFilter(f.value)"
+        >
+          {{ f.label }}
+        </button>
+      }
+    </div>
+    <span class="mono message-count">{{ messageCount() }}</span>
+  </div>
+
+  <div class="card messages-card">
+    @if (state() === 'loading') {
+      <p class="state-message" aria-live="polite">Cargando mensajes…</p>
+    } @else if (state() === 'unavailable') {
+      <p class="state-message" role="alert">Los mensajes no están disponibles temporalmente.</p>
+      <button type="button" class="btn" (click)="load()">Reintentar</button>
+    } @else if (state() === 'empty') {
+      <p class="state-message">No hay mensajes para este filtro.</p>
+    } @else {
+      <div class="messages-header">
+        <span>DIRECCIÓN</span><span>MESSAGE ID</span><span>EVENTO CANÓNICO</span><span>DOMINIO</span>
+        <span>INTENTOS</span><span>TIMESTAMP</span><span class="align-right">ESTADO</span>
+      </div>
+      @for (m of messages(); track m.id) {
+        <div class="messages-row" role="button" tabindex="0" (click)="open(m)" (keydown.enter)="open(m)">
+          <span class="badge" [class.dir-inbound]="m.direction === 'INBOUND'" [class.dir-outbound]="m.direction === 'OUTBOUND'">
+            {{ m.direction }}
+          </span>
+          <span class="mono id-cell">{{ m.id }}</span>
+          <span class="mono">{{ m.eventType }}</span>
+          <span class="domain-cell">{{ m.domain }}</span>
+          <span class="mono" [class.attempts-warn]="m.attempts > 0 && m.attempts <= 2" [class.attempts-error]="m.attempts > 2">
+            {{ m.attempts }}
+          </span>
+          <span class="mono timestamp-cell">{{ m.timestamp | date: 'short' }}</span>
+          <div class="align-right">
+            <span
+              class="badge"
+              [class.status-pending]="m.status === 'PENDING'"
+              [class.status-error]="m.status === 'ERROR'"
+              [class.status-dlq]="m.status === 'DLQ'"
+              [class.status-processed]="m.status === 'PROCESSED'"
+            >
+              {{ m.status }}
+            </span>
+          </div>
+        </div>
+      }
+    }
   </div>
 </section>
+
+@if (selected(); as msg) {
+  <div class="drawer-overlay">
+    <div class="drawer">
+      <div class="drawer-header">
+        <div class="drawer-title">
+          <span class="badge" [class.dir-inbound]="msg.direction === 'INBOUND'" [class.dir-outbound]="msg.direction === 'OUTBOUND'">
+            {{ msg.direction }}
+          </span>
+          <span class="mono drawer-event">{{ msg.eventType }}</span>
+        </div>
+        <span class="mono drawer-id">{{ msg.id }}</span>
+        <button type="button" class="drawer-close" (click)="close()" aria-label="Cerrar">×</button>
+      </div>
+
+      <div class="drawer-body">
+        <div class="facts-grid">
+          <div class="fact"><span class="fact-label">DOMINIO</span><span>{{ msg.domain }}</span></div>
+          <div class="fact">
+            <span class="fact-label">ESTADO</span>
+            <span
+              class="badge"
+              [class.status-pending]="msg.status === 'PENDING'"
+              [class.status-error]="msg.status === 'ERROR'"
+              [class.status-dlq]="msg.status === 'DLQ'"
+              [class.status-processed]="msg.status === 'PROCESSED'"
+            >{{ msg.status }}</span>
+          </div>
+          <div class="fact"><span class="fact-label">INTENTOS</span><span>{{ msg.attempts }}</span></div>
+          <div class="fact"><span class="fact-label">IDEMPOTENCY KEY</span><span class="mono">{{ msg.id.slice(0, 13) }}</span></div>
+          <div class="fact"><span class="fact-label">RECIBIDO</span><span class="mono">{{ msg.timestamp | date: 'medium' }}</span></div>
+        </div>
+
+        @if (msg.lastError) {
+          <div class="last-error-block">
+            <span class="fact-label">ÚLTIMO ERROR</span>
+            <p class="mono last-error-text">{{ msg.lastError }}</p>
+          </div>
+        }
+
+        <div class="payload-block">
+          <span class="fact-label">PAYLOAD</span>
+          <pre class="mono payload-pre">{{ msg.payload }}</pre>
+        </div>
+      </div>
+
+      <div class="drawer-actions">
+        <button type="button" class="btn btn-dark" [disabled]="actionPending()" (click)="retry()">Reprocesar</button>
+        <button type="button" class="btn" [disabled]="actionPending()" (click)="moveToDlq()">Mover a DLQ</button>
+        <button type="button" class="btn btn-ghost drawer-close-action" (click)="close()">Cerrar</button>
+      </div>
+    </div>
+  </div>
+}

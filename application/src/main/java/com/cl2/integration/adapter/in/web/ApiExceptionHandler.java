@@ -3,6 +3,7 @@ package com.cl2.integration.adapter.in.web;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.application.exception.TenantRequiredException;
+import com.cl2.integration.integration.monitor.MessageNotFoundException;
 import jakarta.servlet.http.HttpServletRequest;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ProblemDetail;
@@ -33,6 +34,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(IntegrationProfileNotFoundException.class)
     ProblemDetail handleNotFound(IntegrationProfileNotFoundException exception, HttpServletRequest request) {
         return problem(HttpStatus.NOT_FOUND, "INTEGRATION_PROFILE_NOT_FOUND", "Integration profile was not found", request);
+    }
+
+    @ExceptionHandler(MessageNotFoundException.class)
+    ProblemDetail handleMessageNotFound(MessageNotFoundException exception, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "MESSAGE_NOT_FOUND", "Message was not found", request);
     }
 
     @ExceptionHandler(IntegrationProfileConflictException.class)

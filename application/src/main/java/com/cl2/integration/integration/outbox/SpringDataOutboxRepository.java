@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.outbox;
 
+import org.springframework.data.domain.Pageable;
 import org.springframework.data.jpa.repository.Modifying;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -14,6 +15,11 @@ import java.util.UUID;
 public interface SpringDataOutboxRepository extends Repository<OutboxJpaEntity, UUID> {
     OutboxJpaEntity save(OutboxJpaEntity entity);
     Optional<OutboxJpaEntity> findById(UUID id);
+
+    @Query("SELECT e FROM OutboxJpaEntity e WHERE e.tenantId = :tenantId ORDER BY e.createdAt DESC")
+    List<OutboxJpaEntity> findByTenantId(@Param("tenantId") UUID tenantId, Pageable pageable);
+
+    Optional<OutboxJpaEntity> findByIdAndTenantId(UUID id, UUID tenantId);
 
     @Query("SELECT e FROM OutboxJpaEntity e WHERE e.tenantId = :tenantId AND e.aggregateId = :aggregateId ORDER BY e.createdAt DESC")
     List<OutboxJpaEntity> findByTenantIdAndAggregateIdOrderByCreatedAtDesc(@Param("tenantId") UUID tenantId, @Param("aggregateId") UUID aggregateId);

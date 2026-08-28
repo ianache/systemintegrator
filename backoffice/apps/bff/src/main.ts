@@ -28,6 +28,10 @@ async function bootstrap() {
       { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.DELETE },
       { path: 'bff/api/v1/integration-profiles/:profileId/sync', method: RequestMethod.POST },
       { path: 'bff/api/v1/inbox/dlq/replay', method: RequestMethod.POST },
+      { path: 'bff/api/v1/messages', method: RequestMethod.GET },
+      { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },
+      { path: 'bff/api/v1/messages/:direction/:id/retry', method: RequestMethod.POST },
+      { path: 'bff/api/v1/messages/:direction/:id/dlq', method: RequestMethod.POST },
     ],
   });
   configureSession(app, readBackofficeConfig(app.get(ConfigService)));

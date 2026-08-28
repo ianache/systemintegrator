@@ -102,6 +102,13 @@ public class OutboxJpaEntity {
         this.lastError = null;
     }
 
+    public void retryNow(Instant availableAt) {
+        this.status = "PENDING";
+        this.attempts = 0;
+        this.lastError = null;
+        this.availableAt = availableAt != null ? availableAt.truncatedTo(ChronoUnit.MICROS) : null;
+    }
+
     public void markFailed(String error, Instant nextAvailableAt, boolean terminal) {
         this.attempts++;
         this.lastError = error != null && error.length() > 1000 ? error.substring(0, 997) + "..." : error;
