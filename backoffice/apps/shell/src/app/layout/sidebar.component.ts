@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, signal } from '@angular/core';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 interface NavItem {
@@ -29,6 +29,17 @@ export class SidebarComponent {
     { path: '/integration/connectors', label: 'Conectores y adapters', code: 'CX' },
     { path: '/integration/credentials', label: 'Credenciales', code: 'CR' },
   ];
+
+  constructor() {
+    // Drives .rail-spacer's width in app.css (`var(--console-rail-width)`),
+    // reserving grid space that matches the rail's *resting* width. Deliberately
+    // reacts only to `pinned`, not `hovering`: hovering while unpinned should
+    // expand the rail as a flyout overlay (see sidebar.component.css), not
+    // reflow `main`.
+    effect(() => {
+      document.documentElement.style.setProperty('--console-rail-width', this.pinned() ? '232px' : '58px');
+    });
+  }
 
   toggle(): void {
     this.pinned.update((value) => !value);

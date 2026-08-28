@@ -38,4 +38,21 @@ describe('SidebarComponent', () => {
 
     expect(component.pinned()).toBe(false);
   });
+
+  it('sets --console-rail-width on the document root to match the pinned (resting) state, not the hover state', () => {
+    const fixture = TestBed.createComponent(SidebarComponent);
+    fixture.detectChanges();
+    expect(document.documentElement.style.getPropertyValue('--console-rail-width')).toBe('232px');
+
+    const toggle = fixture.nativeElement.querySelector('[data-testid="sidebar-toggle"]') as HTMLButtonElement;
+    toggle.click();
+    fixture.detectChanges();
+    expect(document.documentElement.style.getPropertyValue('--console-rail-width')).toBe('58px');
+
+    // Hovering while unpinned expands the visible rail (flyout), but must NOT
+    // reflow `main` — the reserved grid column only tracks `pinned`.
+    fixture.componentInstance.onEnter();
+    fixture.detectChanges();
+    expect(document.documentElement.style.getPropertyValue('--console-rail-width')).toBe('58px');
+  });
 });

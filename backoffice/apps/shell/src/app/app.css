@@ -16,13 +16,27 @@
   accent-color: var(--accent);
 }
 
-.shell-body {
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
+/*
+ * Empty in-flow grid item that reserves the rail's resting width (58px
+ * collapsed / 232px pinned) as the grid's first column. app-sidebar itself is
+ * `position: absolute` (see sidebar.component.css) and is NOT counted for
+ * grid placement, so without this spacer the grid would only have one
+ * in-flow child (main) and main would start at column 1 — right under the
+ * sidebar. The sidebar overlays this spacer exactly, and can grow past it on
+ * hover (flyout effect) without reflowing `main`, because only `pinned`
+ * (not `hovering`) drives --console-rail-width.
+ */
+.rail-spacer {
 }
 
 main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  background: var(--bg);
+}
+
+.content-scroll {
   flex: 1;
   overflow: auto;
 }
