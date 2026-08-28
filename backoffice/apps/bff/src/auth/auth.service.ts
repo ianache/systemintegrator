@@ -19,12 +19,26 @@ export class AuthService {
 
   private getConfiguration(): Promise<client.Configuration> {
     if (!this.configuration) {
-      this.configuration = client
-        .discovery(
-          new URL(this.config.getOrThrow('KEYCLOAK_APPS_ISSUER_URI')),
-          this.config.getOrThrow('BFF_OIDC_CLIENT_ID'),
-          this.config.getOrThrow('BFF_OIDC_CLIENT_SECRET'),
-        )
+      const issuer = new URL(
+        this.config.getOrThrow('KEYCLOAK_APPS_ISSUER_URI'),
+      );
+      const discoveryOptions =
+        issuer.protocol === 'http:'
+          ? { execute: [client.allowInsecureRequests] }
+          : undefined;
+      this.configuration = discoveryOptions
+        ? client.discovery(
+            issuer,
+            this.config.getOrThrow('BFF_OIDC_CLIENT_ID'),
+            this.config.getOrThrow('BFF_OIDC_CLIENT_SECRET'),
+            undefined,
+            discoveryOptions,
+          )
+        : client.discovery(
+            issuer,
+            this.config.getOrThrow('BFF_OIDC_CLIENT_ID'),
+            this.config.getOrThrow('BFF_OIDC_CLIENT_SECRET'),
+          )
         .catch((error) => {
           // Do not cache a failed discovery: drop it so the next login retries.
           this.configuration = undefined;
@@ -56,12 +70,16 @@ export class AuthService {
     code: string,
     state: string,
     codeVerifier: string,
+    issuer?: string,
   ): Promise<SessionTokens> {
     const callbackUrl = new URL(
       `${this.config.getOrThrow('BFF_PUBLIC_URL')}/auth/callback`,
     );
     callbackUrl.searchParams.set('code', code);
     callbackUrl.searchParams.set('state', state);
+    if (issuer) {
+      callbackUrl.searchParams.set('iss', issuer);
+    }
 
     const tokenSet = await client.authorizationCodeGrant(
       await this.getConfiguration(),

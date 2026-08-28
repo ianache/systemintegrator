@@ -112,18 +112,32 @@ describe('IntegrationProfileListComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('No hay integration profiles configurados');
   });
 
-  it.each([401, 403])('shows a session state and redirects to login for %i responses', (status) => {
+  it('shows a session-expired state and redirects to login for a 401 response', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);
     fixture.detectChanges();
 
     http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush('', {
-      status,
+      status: 401,
       statusText: 'Authentication required',
     });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('sesión');
     expect(assign).toHaveBeenCalledWith('/auth/login');
+  });
+
+  it('shows a forbidden state without redirecting to login for a 403 response', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    fixture.detectChanges();
+
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush('', {
+      status: 403,
+      statusText: 'Forbidden',
+    });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[role="alert"]')?.textContent).toContain('Gateway');
+    expect(assign).not.toHaveBeenCalled();
   });
 
   it('retries a 502 profile request from the unavailable state', () => {

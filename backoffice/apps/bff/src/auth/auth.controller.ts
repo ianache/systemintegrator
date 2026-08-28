@@ -20,6 +20,7 @@ export class AuthController {
   async callback(@Req() req: Request, @Res() res: Response) {
     const code = typeof req.query.code === 'string' ? req.query.code : undefined;
     const state = typeof req.query.state === 'string' ? req.query.state : undefined;
+    const issuer = typeof req.query.iss === 'string' ? req.query.iss : undefined;
     const authorization = req.session.oidc;
 
     if (!code || !state || !authorization || state !== authorization.state) {
@@ -30,6 +31,7 @@ export class AuthController {
       code,
       state,
       authorization.codeVerifier,
+      issuer,
     );
     delete req.session.oidc;
     res.redirect('/');

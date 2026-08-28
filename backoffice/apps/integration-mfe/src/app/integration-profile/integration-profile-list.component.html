@@ -11,6 +11,8 @@
     <p aria-live="polite">Cargando integration profiles…</p>
   } @else if (state() === 'session-expired') {
     <p role="alert">Tu sesión ya no está activa. Redirigiendo a inicio de sesión.</p>
+  } @else if (state() === 'forbidden') {
+    <p role="alert">Tu sesión es válida, pero el Gateway rechazó la solicitud por falta de autorización de tenant. Contacta al administrador de Keycloak.</p>
   } @else if (state() === 'unavailable') {
     <p role="alert">Los integration profiles no están disponibles temporalmente. Intenta de nuevo.</p>
     <button type="button" class="btn" (click)="retry()">Reintentar</button>

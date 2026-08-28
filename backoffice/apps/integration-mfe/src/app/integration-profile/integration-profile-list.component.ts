@@ -5,7 +5,7 @@ import { IntegrationProfile, SyncDirection } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
 import { IntegrationProfileWizardComponent } from './integration-profile-wizard.component';
 
-type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'unavailable';
+type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'forbidden' | 'unavailable';
 type DirectionFilter = 'ALL' | SyncDirection;
 
 export interface BrowserWindow {
@@ -66,9 +66,16 @@ export class IntegrationProfileListComponent implements OnInit {
         this.state.set(profiles.length === 0 ? 'empty' : 'ready');
       },
       error: (error: HttpErrorResponse) => {
-        if (error.status === 401 || error.status === 403) {
+        if (error.status === 401) {
           this.state.set('session-expired');
           this.browserWindow.location.assign('/auth/login');
+          return;
+        }
+        if (error.status === 403) {
+          // A valid, authenticated session was rejected by the Gateway (e.g. the
+          // JWT carries no tenant_id claim) — not the same as a logged-out user,
+          // so this must not force a re-login redirect.
+          this.state.set('forbidden');
           return;
         }
         this.state.set('unavailable');

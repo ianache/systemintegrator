@@ -104,7 +104,8 @@
       "executor": "@angular/build:dev-server",
       "defaultConfiguration": "development",
       "options": {
-        "port": 4201
+        "port": 4201,
+        "proxyConfig": "apps/shell/proxy.conf.json"
       },
       "configurations": {
         "production": {

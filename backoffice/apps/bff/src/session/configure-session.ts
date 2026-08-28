@@ -34,7 +34,7 @@ export function configureSession(
       saveUninitialized: false,
       cookie: {
         httpOnly: true,
-        secure: process.env.NODE_ENV === 'production',
+        secure: config.BFF_PUBLIC_URL.startsWith('https://'),
         sameSite: 'lax',
         maxAge: 8 * 60 * 60 * 1000,
       },

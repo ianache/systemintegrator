@@ -8,7 +8,7 @@ import { AppModule } from './app.module';
 import { configureStaticShell } from './static-shell';
 
 describe('BFF static Shell fallback', () => {
-  const shellStaticPath = join(__dirname, '..', 'shell-static');
+  const shellStaticPath = join(__dirname, 'shell-static');
   let app: NestExpressApplication;
 
   beforeAll(async () => {

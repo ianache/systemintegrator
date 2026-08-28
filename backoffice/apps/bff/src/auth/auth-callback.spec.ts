@@ -57,10 +57,43 @@ describe('AuthController.callback', () => {
       'code-1',
       'expected-state',
       'verifier-1',
+      undefined,
     );
     expect(req.session.tokens).toEqual(tokens);
     expect(req.session.oidc).toBeUndefined();
     expect(res.redirect).toHaveBeenCalledWith('/');
+  });
+
+  it('forwards the issuer parameter received from Keycloak to the code exchange', async () => {
+    const tokens = {
+      access_token: 'private-access-token',
+      id_token: 'private-id-token',
+      tenantId: 'tenant-a',
+      expiresAt: 1893456000,
+    };
+    const authService = {
+      completeAuthorizationCallback: jest.fn().mockResolvedValue(tokens),
+    };
+    const controller = new AuthController(authService as unknown as AuthService);
+    const req: any = {
+      originalUrl:
+        '/auth/callback?code=code-1&state=expected-state&iss=https%3A%2F%2Foauth2.qa.comsatel.com.pe%2Frealms%2FApps',
+      query: {
+        code: 'code-1',
+        state: 'expected-state',
+        iss: 'https://oauth2.qa.comsatel.com.pe/realms/Apps',
+      },
+      session: { oidc: { codeVerifier: 'verifier-1', state: 'expected-state' } },
+    };
+
+    await controller.callback(req, { redirect: jest.fn() } as any);
+
+    expect(authService.completeAuthorizationCallback).toHaveBeenCalledWith(
+      'code-1',
+      'expected-state',
+      'verifier-1',
+      'https://oauth2.qa.comsatel.com.pe/realms/Apps',
+    );
   });
 
   it('destroys the server session before redirecting to the Shell on logout', async () => {

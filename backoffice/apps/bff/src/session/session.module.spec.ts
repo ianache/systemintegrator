@@ -48,5 +48,6 @@ describe('configureSession', () => {
 
     expect(first.body.hits).toBe(1);
     expect(second.body.hits).toBe(2);
+    expect(first.headers['set-cookie'][0]).not.toContain('Secure');
   });
 });

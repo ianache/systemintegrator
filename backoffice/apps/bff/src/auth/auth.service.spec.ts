@@ -93,6 +93,27 @@ describe('AuthService.buildAuthorizationUrl', () => {
     );
   });
 
+  it('allows HTTP discovery only for a local HTTP issuer', async () => {
+    const localIssuer = 'http://host.docker.internal:8180/realms/backoffice';
+    const config = {
+      getOrThrow: (key: string) =>
+        key === 'KEYCLOAK_APPS_ISSUER_URI'
+          ? localIssuer
+          : ENV[key],
+    } as unknown as ConfigService;
+    service = new AuthService(config);
+
+    await service.buildAuthorizationUrl();
+
+    expect(discovery).toHaveBeenCalledWith(
+      new URL(localIssuer),
+      'backoffice-bff',
+      'shhh',
+      undefined,
+      { execute: [client.allowInsecureRequests] },
+    );
+  });
+
   it('does not cache a failed discovery', async () => {
     discovery.mockRejectedValueOnce(new Error('issuer unreachable'));
 
