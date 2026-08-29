@@ -81,6 +81,33 @@ Para cada fila extraída:
 5. **Actualización de Watermark**:
    - Se calcula el nuevo watermark (`maxRowTimestamp` menos `overlapBufferSeconds`) y se registra en `integration_sync_state` con estado `SUCCESS`.
 
+#### Procesamiento por lotes
+
+El flujo anterior se conserva cuando `batchMode=false` (valor por defecto). Con `batchMode=true`, el orquestador divide las filas extraídas en arreglos contiguos de hasta `batchSize` elementos, transforma cada arreglo una sola vez y guarda un evento outbox por lote. `batchSize` tiene valor por defecto `500`; un valor nulo, cero o negativo se normaliza a `500`.
+
+Ejemplo conciso de extracción JDBC batch y transformación JSLT orientada a arreglos:
+
+```json
+{
+  "query": "SELECT numero_motor, numero_placa, fecha_modificacion FROM vehiculos WHERE fecha_modificacion > :lastSyncWithBuffer ORDER BY fecha_modificacion ASC",
+  "watermarkParam": "lastSyncWithBuffer",
+  "watermarkColumn": "fecha_modificacion",
+  "keyColumn": "numero_motor",
+  "fetchSize": 1000,
+  "batchMode": true,
+  "batchSize": 500
+}
+```
+
+```jslt
+[ for (.) {
+  "engineNumber": .numero_motor,
+  "licensePlate": .numero_placa
+} ]
+```
+
+Cada lote genera `<domain>.batch.upserted` en `integration.<domain>.batch.events`; el payload es el resultado de transformar el arreglo completo. Los eventos unitarios mantienen su tipo `<domain>.upserted` y su tópico `integration.<domain>.events`.
+
 ---
 
 ### Fase 4: Despacho a Kafka (Transactional Outbox Relay)
@@ -93,6 +120,7 @@ Para cada fila extraída:
      - `X-Aggregate-ID`: Identificador del agregado.
      - `X-Business-Domain`: Dominio de negocio (ej. `vehicles`).
      - `X-External-Source`: Sistema origen (ej. `sigo`).
+     - Para eventos batch: `X-Batch-Mode: true` y `X-Batch-Size`: número de elementos del lote.
 3. **Confirmación**:
    - Tras recibir el ACK de Kafka, el evento se actualiza a **`PUBLISHED`** con su fecha `published_at`.
 
@@ -109,3 +137,6 @@ Para cada fila extraída:
    - Si el perfil destino requiere autenticación OAuth2 (`AuthType.OAUTH2_CLIENT_CREDENTIALS`), `OAuth2TokenCacheManager` obtiene o reutiliza el token JWT Bearer.
    - `HttpOutboundClient` efectúa el POST con `Authorization: Bearer <JWT>` hacia los microservicios core de CL2.
    - El evento en `integration_inbox` se actualiza a `PROCESSED`.
+5. **Eventos batch**:
+   - Para `<domain>.batch.upserted`, el dispatcher envía el arreglo ya transformado en una sola llamada HTTP al `endpoint` existente del perfil `OUTBOUND`; ese `endpoint` es el endpoint bulk y no se configura un `bulkEndpoint` adicional.
+   - No hay micro-batching ni buffering adicional en el consumidor Kafka, y los ACK parciales por elemento están fuera de alcance: el lote se procesa como una sola unidad.
