@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.monitor;
 
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.inbox.InboxJpaEntity;
 import com.cl2.integration.integration.inbox.SpringDataInboxRepository;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
@@ -73,9 +74,41 @@ class MessageMonitorServiceTest {
 
         MessageDetail result = service.retry(tenantId, "INBOUND", eventId);
 
-        verify(dispatcher).dispatch(eq(eventId), eq(tenantId), eq("units.upserted"), eq("{\"a\":1}"), any());
+        verify(dispatcher).dispatch(
+                eventId,
+                tenantId,
+                "units.upserted",
+                "{\"a\":1}",
+                null,
+                BatchContext.unitary());
         verify(inboxRepository).save(entity);
         assertThat(result.status()).isEqualTo("PROCESSED");
+    }
+
+    @Test
+    void retryingABatchInboundMessageRecoversItsBatchContext() {
+        UUID eventId = UUID.randomUUID();
+        String payload = "[{\"id\":1},{\"id\":2}]";
+        InboxJpaEntity entity = new InboxJpaEntity(
+                eventId,
+                tenantId,
+                "units.batch.upserted",
+                payload,
+                "DEAD_LETTER",
+                1,
+                Instant.now());
+        when(inboxRepository.findByEventIdAndTenantId(eventId, tenantId)).thenReturn(Optional.of(entity));
+
+        service.retry(tenantId, "INBOUND", eventId);
+
+        verify(dispatcher).dispatch(
+                eventId,
+                tenantId,
+                "units.batch.upserted",
+                payload,
+                null,
+                BatchContext.batch(2));
+        assertThat(entity.getStatus()).isEqualTo("PROCESSED");
     }
 
     @Test
@@ -83,7 +116,13 @@ class MessageMonitorServiceTest {
         UUID eventId = UUID.randomUUID();
         InboxJpaEntity entity = new InboxJpaEntity(eventId, tenantId, "units.upserted", "{}", "DEAD_LETTER", 1, Instant.now());
         when(inboxRepository.findByEventIdAndTenantId(eventId, tenantId)).thenReturn(Optional.of(entity));
-        doThrow(new RuntimeException("still down")).when(dispatcher).dispatch(eq(eventId), eq(tenantId), any(), any(), any());
+        doThrow(new RuntimeException("still down")).when(dispatcher).dispatch(
+                eq(eventId),
+                eq(tenantId),
+                any(),
+                any(),
+                isNull(),
+                eq(BatchContext.unitary()));
 
         MessageDetail result = service.retry(tenantId, "INBOUND", eventId);
 

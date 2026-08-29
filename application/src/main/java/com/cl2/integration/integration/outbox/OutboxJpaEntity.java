@@ -38,6 +38,9 @@ public class OutboxJpaEntity {
     @Column(nullable = false, columnDefinition = "JSON")
     private String payload;
 
+    @Column(name = "external_source", length = 100)
+    private String externalSource;
+
     @Column(nullable = false, length = 20)
     private String status;
 
@@ -66,6 +69,7 @@ public class OutboxJpaEntity {
         this.eventType = event.eventType();
         this.topic = event.topic();
         this.payload = event.payload();
+        this.externalSource = event.externalSource();
         this.status = event.status();
         this.attempts = event.attempts();
         this.availableAt = event.availableAt() != null ? event.availableAt().truncatedTo(ChronoUnit.MICROS) : null;
@@ -79,7 +83,21 @@ public class OutboxJpaEntity {
     }
 
     public OutboxEvent toDomain() {
-        return new OutboxEvent(id, tenantId, aggregateId, aggregateType, eventType, topic, payload, status, attempts, availableAt, publishedAt, lastError, createdAt);
+        return new OutboxEvent(
+                id,
+                tenantId,
+                aggregateId,
+                aggregateType,
+                eventType,
+                topic,
+                payload,
+                externalSource,
+                status,
+                attempts,
+                availableAt,
+                publishedAt,
+                lastError,
+                createdAt);
     }
 
     public UUID getId() { return id; }
@@ -89,6 +107,7 @@ public class OutboxJpaEntity {
     public String getEventType() { return eventType; }
     public String getTopic() { return topic; }
     public String getPayload() { return payload; }
+    public String getExternalSource() { return externalSource; }
     public String getStatus() { return status; }
     public int getAttempts() { return attempts; }
     public Instant getAvailableAt() { return availableAt; }

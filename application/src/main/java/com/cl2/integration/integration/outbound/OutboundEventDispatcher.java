@@ -8,8 +8,10 @@ import com.cl2.integration.domain.model.SyncDirection;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import com.cl2.integration.integration.resilience.ResilienceExecutor;
 import com.cl2.integration.integration.batch.BatchContext;
+import com.cl2.integration.integration.batch.BatchContextResolver;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.cl2.integration.integration.security.SecretResolver;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import com.cl2.integration.integration.transformation.TransformationService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -28,6 +30,7 @@ public class OutboundEventDispatcher {
     private final TransformationService transformationService;
     private final ResilienceExecutor resilienceExecutor;
     private final HttpOutboundClient httpOutboundClient;
+    private final BatchContextResolver batchContextResolver;
 
     public OutboundEventDispatcher(
             IntegrationProfileRepository profileRepository,
@@ -35,11 +38,24 @@ public class OutboundEventDispatcher {
             TransformationService transformationService,
             ResilienceExecutor resilienceExecutor,
             HttpOutboundClient httpOutboundClient) {
+        this(profileRepository, secretResolver, transformationService, resilienceExecutor,
+                httpOutboundClient, new BatchContextResolver(new ObjectMapper()));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public OutboundEventDispatcher(
+            IntegrationProfileRepository profileRepository,
+            SecretResolver secretResolver,
+            TransformationService transformationService,
+            ResilienceExecutor resilienceExecutor,
+            HttpOutboundClient httpOutboundClient,
+            BatchContextResolver batchContextResolver) {
         this.profileRepository = profileRepository;
         this.secretResolver = secretResolver;
         this.transformationService = transformationService;
         this.resilienceExecutor = resilienceExecutor;
         this.httpOutboundClient = httpOutboundClient;
+        this.batchContextResolver = batchContextResolver;
     }
 
     public void dispatch(UUID eventId, UUID tenantId, String eventType, String payload) {
@@ -63,6 +79,8 @@ public class OutboundEventDispatcher {
         }
 
         BatchContext effectiveBatchContext = batchContext != null ? batchContext : BatchContext.unitary();
+        boolean bypassTransformation = batchContextResolver.shouldBypassTransformation(
+                eventType, payload, effectiveBatchContext);
 
         String derivedDomain = deriveBusinessDomain(eventType);
         log.debug("Dispatching outbound event: eventId={}, tenantId={}, eventType={}, derivedDomain={}, originSource={}",
@@ -89,7 +107,7 @@ public class OutboundEventDispatcher {
         log.debug("Found {} matching outbound REST profile(s) for eventId={}", matchingProfiles.size(), eventId);
 
         for (IntegrationProfile profile : matchingProfiles) {
-            dispatchToProfile(eventId, tenantId, payload, profile, effectiveBatchContext.batchMode());
+            dispatchToProfile(eventId, tenantId, payload, profile, bypassTransformation);
         }
     }
 

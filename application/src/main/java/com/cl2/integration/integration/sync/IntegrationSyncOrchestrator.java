@@ -28,8 +28,11 @@ import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
 import java.util.ArrayList;
+import java.util.Collection;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
+import java.util.Set;
 import java.util.UUID;
 
 @Component
@@ -131,13 +134,29 @@ public class IntegrationSyncOrchestrator {
                 maxRowTimestamp = findMaxRowTimestamp(rows, extractionConfig.watermarkColumn(), watermark);
                 String batchEventType = deriveBatchEventType(profile.businessDomain());
                 String batchTopic = deriveBatchTopic(profile.businessDomain());
-                for (List<Map<String, Object>> batch : partitionRows(rows, batchContext.batchSize())) {
+                List<Map<String, Object>> undeliveredRows = filterUndeliveredRows(
+                        profile, rows, keyField, protocol);
+                for (List<Map<String, Object>> batch : partitionRows(undeliveredRows, batchContext.batchSize())) {
                     throwIfInterrupted(profile);
                     String batchJson = objectMapper.writeValueAsString(batch);
-                    String canonicalJson = transformationService.transform(batchJson, profile);
+                    String canonicalJson = requirePublishableBatchPayload(
+                            transformationService.transform(batchJson, profile));
                     UUID aggregateId = deriveBatchAggregateId(
                             profile.tenantId(), profile.businessDomain(), batch, keyField, protocol);
-                    saveIfNotDuplicate(profile, aggregateId, aggregateType, batchEventType, batchTopic, canonicalJson);
+                    List<UUID> deliveryIds = batch.stream()
+                            .map(row -> deriveDeliveryId(
+                                    profile.tenantId(),
+                                    profile.businessDomain(),
+                                    readBusinessKey(row, keyField, protocol)))
+                            .toList();
+                    saveIfNotDuplicate(
+                            profile,
+                            aggregateId,
+                            aggregateType,
+                            batchEventType,
+                            batchTopic,
+                            canonicalJson,
+                            deliveryIds);
                 }
             } else {
                 for (Map<String, Object> row : rows) {
@@ -314,6 +333,55 @@ public class IntegrationSyncOrchestrator {
         return UUID.nameUUIDFromBytes(identity.toString().getBytes(StandardCharsets.UTF_8));
     }
 
+    private List<Map<String, Object>> filterUndeliveredRows(
+            IntegrationProfile profile,
+            List<Map<String, Object>> rows,
+            String keyField,
+            IntegrationProtocol protocol
+    ) {
+        List<UUID> deliveryIds = rows.stream()
+                .map(row -> deriveDeliveryId(
+                        profile.tenantId(),
+                        profile.businessDomain(),
+                        readBusinessKey(row, keyField, protocol)))
+                .toList();
+        Set<UUID> existingDeliveryIds = new HashSet<>(safeExistingDeliveryIds(
+                outboxRepository.findExistingDeliveryIds(profile.tenantId(), deliveryIds)));
+        List<Map<String, Object>> undeliveredRows = new ArrayList<>();
+        for (int index = 0; index < rows.size(); index++) {
+            if (existingDeliveryIds.add(deliveryIds.get(index))) {
+                undeliveredRows.add(rows.get(index));
+            }
+        }
+        return undeliveredRows;
+    }
+
+    private Collection<UUID> safeExistingDeliveryIds(Collection<UUID> deliveryIds) {
+        return deliveryIds != null ? deliveryIds : List.of();
+    }
+
+    private UUID deriveDeliveryId(UUID tenantId, String businessDomain, String businessKey) {
+        StringBuilder identity = new StringBuilder();
+        appendLengthPrefixed(identity, String.valueOf(tenantId));
+        appendLengthPrefixed(identity, businessDomain == null ? "" : businessDomain);
+        appendLengthPrefixed(identity, businessKey);
+        return UUID.nameUUIDFromBytes(identity.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private String requirePublishableBatchPayload(String payload) {
+        try {
+            com.fasterxml.jackson.databind.JsonNode node = objectMapper.readTree(payload);
+            if (node == null || !node.isArray() || node.isEmpty()) {
+                throw new IllegalStateException("Batch transformation output must be a non-empty JSON array");
+            }
+            return payload;
+        } catch (com.fasterxml.jackson.core.JsonProcessingException exception) {
+            throw new IllegalStateException(
+                    "Batch transformation output must be a non-empty JSON array",
+                    exception);
+        }
+    }
+
     private void appendLengthPrefixed(StringBuilder target, String value) {
         target.append(value.length()).append(':').append(value);
     }
@@ -333,12 +401,36 @@ public class IntegrationSyncOrchestrator {
             String topic,
             String payload
     ) {
+        saveIfNotDuplicate(profile, aggregateId, aggregateType, eventType, topic, payload, List.of());
+    }
+
+    private void saveIfNotDuplicate(
+            IntegrationProfile profile,
+            UUID aggregateId,
+            String aggregateType,
+            String eventType,
+            String topic,
+            String payload,
+            List<UUID> deliveryIds
+    ) {
         boolean isDuplicate = outboxRepository.findLatestByAggregateId(profile.tenantId(), aggregateId)
                 .map(latestEvent -> payload.equals(latestEvent.payload()))
                 .orElse(false);
 
         if (!isDuplicate) {
-            outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, payload));
+            OutboxEvent event = OutboxEvent.pending(
+                    profile.tenantId(),
+                    aggregateId,
+                    aggregateType,
+                    eventType,
+                    topic,
+                    payload,
+                    profile.externalSource());
+            if (deliveryIds.isEmpty()) {
+                outboxRepository.save(event);
+            } else {
+                outboxRepository.save(event, deliveryIds);
+            }
             if (metrics != null) {
                 metrics.recordOutboxEventSaved(
                         profile.tenantId() != null ? profile.tenantId().toString() : "unknown",

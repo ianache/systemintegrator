@@ -170,6 +170,69 @@ class OutboundEventDispatcherTest {
     }
 
     @Test
+    @DisplayName("Should transform a unitary event even when batch headers claim batch mode")
+    void shouldNotBypassTransformationWhenEventTypeIsNotBatch() {
+        stubResilienceExecutorToExecuteDirectly();
+
+        String payload = "[{\"id\":1},{\"id\":2}]";
+        String transformedPayload = "{\"wrapped\":true}";
+        IntegrationProfile profile = outboundRestProfile(
+                "customers",
+                "https://api.external-crm.com/v1/customers");
+        when(profileRepository.findAll(tenantId, true)).thenReturn(List.of(profile));
+        when(transformationService.transform(payload, profile)).thenReturn(transformedPayload);
+
+        dispatcher.dispatch(
+                eventId,
+                tenantId,
+                "customer.upserted",
+                payload,
+                null,
+                BatchContext.batch(2));
+
+        verify(transformationService).transform(payload, profile);
+        verify(httpOutboundClient).send(
+                "https://api.external-crm.com/v1/customers",
+                null,
+                transformedPayload,
+                tenantId);
+    }
+
+    @Test
+    @DisplayName("Should reject a batch payload whose array size differs from its batch context")
+    void shouldRejectBatchPayloadWhenArraySizeDoesNotMatchContext() {
+        String payload = "[{\"id\":1}]";
+
+        assertThatThrownBy(() -> dispatcher.dispatch(
+                eventId,
+                tenantId,
+                "customer.batch.upserted",
+                payload,
+                null,
+                BatchContext.batch(2)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("expected 2 elements but found 1");
+
+        verifyNoInteractions(profileRepository, transformationService, httpOutboundClient);
+    }
+
+    @Test
+    @DisplayName("Should reject an object payload when a batch event requests transformation bypass")
+    void shouldRejectNonArrayBatchPayload() {
+        assertThatThrownBy(() -> dispatcher.dispatch(
+                eventId,
+                tenantId,
+                "customer.batch.upserted",
+                "{\"id\":1}",
+                null,
+                BatchContext.batch(1)))
+                .isInstanceOf(IllegalArgumentException.class)
+                .hasMessageContaining("must be a non-empty JSON array");
+
+        verifyNoInteractions(profileRepository, transformationService, httpOutboundClient);
+    }
+
+    @Test
     @DisplayName("Should successfully dispatch event to matching BIDIRECTIONAL profile")
     void shouldSuccessfullyDispatchEventToBidirectionalProfile() {
         stubResilienceExecutorToExecuteDirectly();
@@ -495,5 +558,28 @@ class OutboundEventDispatcherTest {
         dispatcher.dispatch(eventId, tenantId, "brands.created", rawPayload);
 
         verify(httpOutboundClient).send(endpoint, secret, transformedPayload, tenantId);
+    }
+
+    private IntegrationProfile outboundRestProfile(String businessDomain, String endpoint) {
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST,
+                "crm-connector",
+                "generic-http",
+                endpoint,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null,
+                null);
+        return IntegrationProfile.create(
+                UUID.randomUUID(),
+                tenantId,
+                businessDomain,
+                "salesforce",
+                SyncDirection.OUTBOUND,
+                SourceOfTruth.PLATFORM,
+                config);
     }
 }

@@ -5,6 +5,8 @@ import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 
+import java.util.List;
+import java.util.Set;
 import java.util.UUID;
 
 import static org.assertj.core.api.Assertions.assertThat;
@@ -13,6 +15,9 @@ class SpringDataOutboxRepositoryTest extends IntegrationApplicationTest {
 
     @Autowired
     private SpringDataOutboxRepository repository;
+
+    @Autowired
+    private OutboxRepository outboxRepository;
 
     @org.springframework.boot.test.mock.mockito.MockBean
     private OutboxRelayScheduler outboxRelayScheduler;
@@ -49,5 +54,29 @@ class SpringDataOutboxRepositoryTest extends IntegrationApplicationTest {
 
         OutboxJpaEntity otherTopicEntity = repository.findById(otherTopic.id()).orElseThrow();
         assertThat(otherTopicEntity.toDomain().status()).isEqualTo(OutboxStatus.PENDING.name());
+    }
+
+    @Test
+    void persistsExternalSourceAndStableDeliveryIdentities() {
+        UUID tenantId = UUID.randomUUID();
+        UUID firstDeliveryId = UUID.randomUUID();
+        UUID secondDeliveryId = UUID.randomUUID();
+        OutboxEvent event = OutboxEvent.pending(
+                tenantId,
+                UUID.randomUUID(),
+                "Customer",
+                "customers.batch.upserted",
+                "integration.customers.batch.events",
+                "[{\"id\":1},{\"id\":2}]",
+                "sap-hana");
+
+        outboxRepository.save(event, List.of(firstDeliveryId, secondDeliveryId));
+
+        OutboxEvent reloaded = repository.findById(event.id()).orElseThrow().toDomain();
+        assertThat(reloaded.externalSource()).isEqualTo("sap-hana");
+        assertThat(outboxRepository.findExistingDeliveryIds(
+                tenantId,
+                Set.of(firstDeliveryId, secondDeliveryId, UUID.randomUUID())))
+                .containsExactlyInAnyOrder(firstDeliveryId, secondDeliveryId);
     }
 }

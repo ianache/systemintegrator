@@ -63,6 +63,7 @@ class KafkaOutboxPublisherTest {
         assertThat(getHeader(record, "X-Event-Type")).isEqualTo("customer.created");
         assertThat(getHeader(record, "X-Aggregate-ID")).isEqualTo(aggregateId.toString());
         assertThat(getHeader(record, "X-Business-Domain")).isEqualTo("Customer");
+        assertThat(getHeader(record, "X-External-Source")).isNull();
         assertThat(getHeader(record, "X-Batch-Mode")).isNull();
         assertThat(getHeader(record, "X-Batch-Size")).isNull();
     }
@@ -101,6 +102,30 @@ class KafkaOutboxPublisherTest {
         assertThat(getHeader(record, "X-Batch-Size")).isEqualTo("2");
         assertThat(getHeader(record, "X-Tenant-ID")).isEqualTo(event.tenantId().toString());
         assertThat(getHeader(record, "X-Event-Type")).isEqualTo("customer.batch.upserted");
+    }
+
+    @SuppressWarnings("unchecked")
+    @Test
+    void publishPropagatesPersistedExternalSourceWithoutChangingThePayload() {
+        KafkaTemplate<String, String> kafkaTemplate = mock(KafkaTemplate.class);
+        when(kafkaTemplate.send(any(ProducerRecord.class))).thenReturn(CompletableFuture.completedFuture(null));
+        KafkaOutboxPublisher publisher = new KafkaOutboxPublisher(kafkaTemplate);
+        String payload = "[{\"id\":\"customer-1\"}]";
+        OutboxEvent event = OutboxEvent.pending(
+                UUID.randomUUID(),
+                UUID.randomUUID(),
+                "Customer",
+                "customer.batch.upserted",
+                "integration.customers.batch.events",
+                payload,
+                "sap-hana");
+
+        publisher.publish(OutboxJpaEntity.from(event));
+
+        ArgumentCaptor<ProducerRecord<String, String>> captor = ArgumentCaptor.forClass(ProducerRecord.class);
+        verify(kafkaTemplate).send(captor.capture());
+        assertThat(getHeader(captor.getValue(), "X-External-Source")).isEqualTo("sap-hana");
+        assertThat(captor.getValue().value()).isEqualTo(payload);
     }
 
     @Test

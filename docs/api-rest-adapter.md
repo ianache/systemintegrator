@@ -178,6 +178,10 @@ La paginación no está soportada en este slice de inbound REST. El adaptador pr
 
 ## 6. Notas operativas
 
+- Los headers configurados en el secreto se propagan a la petición HTTP.
+- El adaptador registra errores sanitizados para no exponer credenciales o tokens en mensajes de fallo.
+- El resultado transformado se persiste en `integration_outbox`; la publicación posterior a Kafka pertenece al flujo de relay, no al adaptador REST inbound.
+
 ## 7. Extracción REST por lotes
 
 El modo batch se activa en `extractionConfig` con `batchMode: true`. Sus valores por defecto son `batchMode=false` y `batchSize=500`; si `batchSize` es nulo, cero o negativo, se normaliza a `500`. El `responseJsonPath` debe seguir resolviendo un arreglo de objetos y `keyProperty` continúa siendo obligatorio para cada elemento.
@@ -206,10 +210,6 @@ Ejemplo conciso de perfil inbound REST con transformación JSLT orientada a arre
 }
 ```
 
-Cada lote se transforma como un arreglo y genera un evento `<domain>.batch.upserted` en el tópico `integration.<domain>.batch.events`. Kafka propaga `X-Batch-Mode: true` y `X-Batch-Size` con el número de elementos del lote. Para esos eventos, el `endpoint` ya configurado en el perfil `OUTBOUND` es el destino bulk; no existe un campo `bulkEndpoint` separado.
+Cada lote se transforma como un arreglo y genera un evento `<domain>.batch.upserted` en el tópico `integration.<domain>.batch.events`. El resultado debe ser un JSON array no vacío; una transformación que produzca un objeto u otra forma aborta el sync antes de guardar el outbox. Kafka propaga `X-Batch-Mode: true` y `X-Batch-Size` con el número de elementos del lote. Para esos eventos, el `endpoint` ya configurado en el perfil `OUTBOUND` es el destino bulk; no existe un campo `bulkEndpoint` separado.
 
 El modo batch no habilita micro-batching ni buffering en el consumidor Kafka, y los ACK parciales por elemento quedan fuera de alcance. El mensaje batch se procesa y confirma como una sola unidad.
-
-- Los headers configurados en el secreto se propagan a la petición HTTP.
-- El adaptador registra errores sanitizados para no exponer credenciales o tokens en mensajes de fallo.
-- El resultado transformado se persiste en `integration_outbox`; la publicación posterior a Kafka pertenece al flujo de relay, no al adaptador REST inbound.

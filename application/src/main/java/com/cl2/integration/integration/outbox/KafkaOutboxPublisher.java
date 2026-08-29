@@ -40,6 +40,11 @@ public class KafkaOutboxPublisher {
         if (domainEvent.aggregateType() != null) {
             record.headers().add(new RecordHeader("X-Business-Domain", domainEvent.aggregateType().getBytes(StandardCharsets.UTF_8)));
         }
+        if (domainEvent.externalSource() != null && !domainEvent.externalSource().isBlank()) {
+            record.headers().add(new RecordHeader(
+                    "X-External-Source",
+                    domainEvent.externalSource().getBytes(StandardCharsets.UTF_8)));
+        }
         if (domainEvent.eventType().endsWith(".batch.upserted")) {
             int batchSize = extractBatchSize(domainEvent.payload());
             record.headers().add(new RecordHeader("X-Batch-Mode", "true".getBytes(StandardCharsets.UTF_8)));
