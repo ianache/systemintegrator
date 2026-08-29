@@ -89,7 +89,7 @@ Después de extraer `rows`, el orquestador seleccionará una de estas ramas:
 
 No se crearán lotes vacíos. Para una extracción vacía no se transforma ni se publica ningún evento.
 
-El script JSLT de un perfil batch debe recibir un array y puede usar la sintaxis `[ for (.) ... ]`. La plataforma no reescribirá scripts ni validará que el resultado tenga una forma concreta más allá de la validación existente del motor de transformación.
+El script JSLT de un perfil batch debe recibir un array y puede usar la sintaxis `[ for (.) ... ]`. La plataforma no reescribirá scripts. El resultado transformado debe ser un JSON array no vacío; cualquier otra forma aborta el sync antes de persistir el evento outbox.
 
 ## Identidad, deduplicación y eventos
 
@@ -104,6 +104,8 @@ El `aggregateId` batch será determinista a partir de tenant, dominio y las clav
 
 La deduplicación comparará el payload batch contra el último evento del mismo `aggregateId`, manteniendo la protección existente contra publicaciones repetidas. Los eventos unitarios seguirán usando la identidad y el evento actuales.
 
+Además, cada fila batch tendrá una identidad de entrega estable derivada de tenant, dominio y clave de negocio. Estas identidades se persistirán junto al evento outbox y se consultarán antes de formar lotes posteriores, de modo que el overlap del watermark no vuelva a publicar filas ya entregadas aunque cambien los límites del lote.
+
 Si una fila no contiene la clave requerida, el sync fallará con la misma semántica actual: `keyColumn` para JDBC y `keyProperty` para REST.
 
 ## Contrato Kafka
@@ -112,6 +114,8 @@ Si una fila no contiene la clave requerida, el sync fallará con la misma semán
 
 - `X-Batch-Mode: true`
 - `X-Batch-Size: <número de elementos del lote>`
+
+Cuando el outbox conserve un `externalSource`, también publicará `X-External-Source`; los eventos existentes sin origen seguirán siendo válidos y omitirán ese header.
 
 Para compatibilidad con eventos antiguos, la ausencia de estos headers se interpretará como modo unitario.
 

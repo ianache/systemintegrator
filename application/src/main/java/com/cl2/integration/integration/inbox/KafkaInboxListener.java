@@ -1,6 +1,7 @@
 package com.cl2.integration.integration.inbox;
 
 import com.cl2.integration.infrastructure.metrics.IntegrationMetrics;
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.Header;
@@ -46,6 +47,7 @@ public class KafkaInboxListener {
 
         String eventType = extractHeaderAsString(record, "X-Event-Type", "UnknownEvent");
         String externalSource = extractHeaderAsString(record, "X-External-Source", null);
+        BatchContext batchContext = extractBatchContext(record);
         log.info("Received event in KafkaInboxListener: eventId={}, tenantId={}, topic={}, source={}", eventId, tenantId, record.topic(), externalSource);
 
         if (metrics != null) {
@@ -54,8 +56,23 @@ public class KafkaInboxListener {
         }
 
         inboxProcessor.process(eventId, tenantId, eventType, record.value(), record.topic(), payload -> {
-            outboundEventDispatcher.dispatch(finalEventId, tenantId, eventType, payload, externalSource);
+            outboundEventDispatcher.dispatch(finalEventId, tenantId, eventType, payload, externalSource, batchContext);
         });
+    }
+
+    private BatchContext extractBatchContext(ConsumerRecord<String, String> record) {
+        String batchMode = extractHeaderAsString(record, "X-Batch-Mode", null);
+        String batchSize = extractHeaderAsString(record, "X-Batch-Size", null);
+        if (!"true".equalsIgnoreCase(batchMode) || batchSize == null) {
+            return BatchContext.unitary();
+        }
+
+        try {
+            int parsedBatchSize = Integer.parseInt(batchSize);
+            return parsedBatchSize > 0 ? BatchContext.batch(parsedBatchSize) : BatchContext.unitary();
+        } catch (NumberFormatException exception) {
+            return BatchContext.unitary();
+        }
     }
 
     private UUID extractHeaderAsUuid(ConsumerRecord<String, String> record, String headerKey) {

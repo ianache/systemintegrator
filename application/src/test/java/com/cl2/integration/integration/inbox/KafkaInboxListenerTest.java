@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.inbox;
 
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
 import org.apache.kafka.clients.consumer.ConsumerRecord;
 import org.apache.kafka.common.header.internals.RecordHeader;
@@ -44,12 +45,12 @@ class KafkaInboxListenerTest {
     }
 
     @Test
-    @DisplayName("Should extract headers, invoke inboxProcessor and forward to outboundEventDispatcher with external source")
-    void shouldExtractHeadersAndDispatch() {
+    @DisplayName("Should forward valid batch headers to outboundEventDispatcher with external source")
+    void shouldForwardValidBatchHeadersAndDispatch() {
         UUID eventId = UUID.randomUUID();
         UUID tenantId = UUID.randomUUID();
-        String eventType = "CustomerCreatedEvent";
-        String payload = "{\"name\":\"Alice\"}";
+        String eventType = "customer.batch.upserted";
+        String payload = "[{\"name\":\"Alice\"},{\"name\":\"Bob\"}]";
         String topic = "integration.customers.events";
         String externalSource = "sigo";
 
@@ -57,6 +58,8 @@ class KafkaInboxListenerTest {
         headers.add(new RecordHeader("X-Tenant-ID", tenantId.toString().getBytes(StandardCharsets.UTF_8)));
         headers.add(new RecordHeader("X-Event-Type", eventType.getBytes(StandardCharsets.UTF_8)));
         headers.add(new RecordHeader("X-External-Source", externalSource.getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Batch-Mode", "TrUe".getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Batch-Size", "2".getBytes(StandardCharsets.UTF_8)));
 
         ConsumerRecord<String, String> record = new ConsumerRecord<>(
                 topic, 0, 0L, 0L, null, 0, 0,
@@ -79,7 +82,7 @@ class KafkaInboxListenerTest {
         Consumer<String> capturedHandler = consumerCaptor.getValue();
         capturedHandler.accept(payload);
 
-        verify(outboundEventDispatcher).dispatch(eventId, tenantId, eventType, payload, externalSource);
+        verify(outboundEventDispatcher).dispatch(eventId, tenantId, eventType, payload, externalSource, BatchContext.batch(2));
         verify(metrics).recordInboxMessageConsumed(eq(tenantId.toString()), eq("customers"), eq(topic));
     }
 
@@ -123,7 +126,51 @@ class KafkaInboxListenerTest {
                 tenantIdCaptor.getValue(),
                 eventTypeCaptor.getValue(),
                 payload,
-                null
+                null,
+                BatchContext.unitary()
+        );
+    }
+
+    @Test
+    @DisplayName("Should use unitary batch context when batch headers are invalid")
+    void shouldUseUnitaryBatchContextForInvalidBatchHeaders() {
+        UUID eventId = UUID.randomUUID();
+        UUID tenantId = UUID.randomUUID();
+        String eventType = "customer.batch.upserted";
+        String payload = "[{\"name\":\"Alice\"}]";
+        String topic = "integration.customers.events";
+
+        RecordHeaders headers = new RecordHeaders();
+        headers.add(new RecordHeader("X-Tenant-ID", tenantId.toString().getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Event-Type", eventType.getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Batch-Mode", "true".getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Batch-Size", "not-a-number".getBytes(StandardCharsets.UTF_8)));
+
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                topic, 0, 0L, 0L, null, 0, 0,
+                eventId.toString(), payload, headers, null
+        );
+
+        listener.onMessage(record);
+
+        verify(inboxProcessor).process(
+                eq(eventId),
+                eq(tenantId),
+                eq(eventType),
+                eq(payload),
+                eq(topic),
+                consumerCaptor.capture()
+        );
+
+        consumerCaptor.getValue().accept(payload);
+
+        verify(outboundEventDispatcher).dispatch(
+                eventId,
+                tenantId,
+                eventType,
+                payload,
+                null,
+                BatchContext.unitary()
         );
     }
 }

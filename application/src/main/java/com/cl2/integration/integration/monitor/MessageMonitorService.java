@@ -1,10 +1,13 @@
 package com.cl2.integration.integration.monitor;
 
+import com.cl2.integration.integration.batch.BatchContext;
+import com.cl2.integration.integration.batch.BatchContextResolver;
 import com.cl2.integration.integration.inbox.InboxJpaEntity;
 import com.cl2.integration.integration.inbox.SpringDataInboxRepository;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
 import com.cl2.integration.integration.outbox.OutboxJpaEntity;
 import com.cl2.integration.integration.outbox.SpringDataOutboxRepository;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.stereotype.Service;
@@ -33,14 +36,26 @@ public class MessageMonitorService {
     private final SpringDataInboxRepository inboxRepository;
     private final SpringDataOutboxRepository outboxRepository;
     private final OutboundEventDispatcher outboundEventDispatcher;
+    private final BatchContextResolver batchContextResolver;
 
     public MessageMonitorService(
             SpringDataInboxRepository inboxRepository,
             SpringDataOutboxRepository outboxRepository,
             OutboundEventDispatcher outboundEventDispatcher) {
+        this(inboxRepository, outboxRepository, outboundEventDispatcher,
+                new BatchContextResolver(new ObjectMapper()));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public MessageMonitorService(
+            SpringDataInboxRepository inboxRepository,
+            SpringDataOutboxRepository outboxRepository,
+            OutboundEventDispatcher outboundEventDispatcher,
+            BatchContextResolver batchContextResolver) {
         this.inboxRepository = inboxRepository;
         this.outboxRepository = outboxRepository;
         this.outboundEventDispatcher = outboundEventDispatcher;
+        this.batchContextResolver = batchContextResolver;
     }
 
     public List<MessageSummary> list(UUID tenantId, String statusFilter) {
@@ -78,7 +93,15 @@ public class MessageMonitorService {
             InboxJpaEntity entity = inboxRepository.findByEventIdAndTenantId(id, tenantId)
                     .orElseThrow(() -> new MessageNotFoundException("Message " + id + " not found"));
             try {
-                outboundEventDispatcher.dispatch(entity.getEventId(), entity.getTenantId(), entity.getEventType(), entity.getPayload(), null);
+                BatchContext batchContext = batchContextResolver.recoverFromEvent(
+                        entity.getEventType(), entity.getPayload());
+                outboundEventDispatcher.dispatch(
+                        entity.getEventId(),
+                        entity.getTenantId(),
+                        entity.getEventType(),
+                        entity.getPayload(),
+                        null,
+                        batchContext);
                 entity.markProcessed(Instant.now());
             } catch (Exception ex) {
                 entity.markDeadLetter(ex.getMessage());

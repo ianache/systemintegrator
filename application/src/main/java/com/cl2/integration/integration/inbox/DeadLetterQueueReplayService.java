@@ -1,6 +1,9 @@
 package com.cl2.integration.integration.inbox;
 
+import com.cl2.integration.integration.batch.BatchContext;
+import com.cl2.integration.integration.batch.BatchContextResolver;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
+import com.fasterxml.jackson.databind.ObjectMapper;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Service;
@@ -17,12 +20,22 @@ public class DeadLetterQueueReplayService {
 
     private final SpringDataInboxRepository repository;
     private final OutboundEventDispatcher outboundEventDispatcher;
+    private final BatchContextResolver batchContextResolver;
 
     public DeadLetterQueueReplayService(
             SpringDataInboxRepository repository,
             OutboundEventDispatcher outboundEventDispatcher) {
+        this(repository, outboundEventDispatcher, new BatchContextResolver(new ObjectMapper()));
+    }
+
+    @org.springframework.beans.factory.annotation.Autowired
+    public DeadLetterQueueReplayService(
+            SpringDataInboxRepository repository,
+            OutboundEventDispatcher outboundEventDispatcher,
+            BatchContextResolver batchContextResolver) {
         this.repository = repository;
         this.outboundEventDispatcher = outboundEventDispatcher;
+        this.batchContextResolver = batchContextResolver;
     }
 
     @Transactional
@@ -39,7 +52,15 @@ public class DeadLetterQueueReplayService {
         for (InboxJpaEntity entity : deadLetters) {
             try {
                 // Dispatch event through outbound dispatcher
-                outboundEventDispatcher.dispatch(entity.getEventId(), entity.getTenantId(), entity.getEventType(), entity.getPayload(), null);
+                BatchContext batchContext = batchContextResolver.recoverFromEvent(
+                        entity.getEventType(), entity.getPayload());
+                outboundEventDispatcher.dispatch(
+                        entity.getEventId(),
+                        entity.getTenantId(),
+                        entity.getEventType(),
+                        entity.getPayload(),
+                        null,
+                        batchContext);
                 entity.markProcessed(Instant.now());
                 repository.save(entity);
                 successCount++;

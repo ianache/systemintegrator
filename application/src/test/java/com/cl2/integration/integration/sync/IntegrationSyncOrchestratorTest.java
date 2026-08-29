@@ -14,6 +14,8 @@ import com.cl2.integration.integration.resilience.ResilienceExecutor;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.cl2.integration.integration.security.SecretResolver;
 import com.cl2.integration.integration.transformation.TransformationService;
+import com.cl2.integration.integration.transformation.PassthroughPayloadTransformer;
+import com.cl2.integration.integration.transformation.jslt.JsltPayloadTransformer;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.zaxxer.hikari.HikariDataSource;
 import org.junit.jupiter.api.BeforeEach;
@@ -23,6 +25,8 @@ import org.springframework.jdbc.core.namedparam.NamedParameterJdbcTemplate;
 
 import java.lang.reflect.Constructor;
 import java.time.Instant;
+import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Optional;
@@ -31,10 +35,12 @@ import java.util.UUID;
 import static org.assertj.core.api.Assertions.assertThat;
 import static org.assertj.core.api.Assertions.assertThatThrownBy;
 import static org.mockito.ArgumentMatchers.any;
+import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -178,6 +184,325 @@ class IntegrationSyncOrchestratorTest {
         verify(syncStateRecorder, never()).recordFailure(any(), any(), anyString());
         verify(metrics).recordOutboxEventSaved(eq(tenantId.toString()), eq("customers"), eq("customers.upserted"));
         verify(metrics).recordSyncRun(eq(tenantId.toString()), eq("customers"), eq("sap-hana"), eq("SUCCESS"), any(Double.class), eq(1));
+    }
+
+    @Test
+    void batchesFiveJdbcRowsIntoContiguousJsonArraysAndPublishesOneEventPerBatch() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers\","
+                + "\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"overlapBufferSeconds\":60}");
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        Instant firstTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(
+                Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(firstTimestamp)),
+                Map.of("CardCode", "CLI-002", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(1))),
+                Map.of("CardCode", "CLI-003", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(2))),
+                Map.of("CardCode", "CLI-004", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(3))),
+                Map.of("CardCode", "CLI-005", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(4)))
+        );
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH))).thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile)))
+                .thenReturn("[{\"batch\":1}]", "[{\"batch\":2}]", "[{\"batch\":3}]");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<String> transformationCaptor = ArgumentCaptor.forClass(String.class);
+        verify(transformationService, times(3)).transform(transformationCaptor.capture(), eq(profile));
+        ObjectMapper mapper = new ObjectMapper();
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(0))).hasSize(2);
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(1))).hasSize(2);
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(2))).hasSize(1);
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(0)).get(0).get("CardCode").asText()).isEqualTo("CLI-001");
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(1)).get(0).get("CardCode").asText()).isEqualTo("CLI-003");
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(2)).get(0).get("CardCode").asText()).isEqualTo("CLI-005");
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository, times(3)).save(outboxCaptor.capture(), anyList());
+        assertThat(outboxCaptor.getAllValues()).allSatisfy(event -> {
+            assertThat(event.aggregateType()).isEqualTo("customers");
+            assertThat(event.eventType()).isEqualTo("customers.batch.upserted");
+            assertThat(event.topic()).isEqualTo("integration.customers.batch.events");
+        });
+        assertThat(outboxCaptor.getAllValues()).extracting(OutboxEvent::payload)
+                .containsExactly("[{\"batch\":1}]", "[{\"batch\":2}]", "[{\"batch\":3}]");
+
+        ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
+        verify(syncStateRepository).upsert(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(firstTimestamp.plusSeconds(4).minusSeconds(60));
+    }
+
+    @Test
+    void batchesFiveRestRowsUsingTheRestBusinessKey() throws Exception {
+        String extractionConfigJson = "{\"method\":\"GET\",\"path\":\"/customers\",\"responseJsonPath\":\"$.items[*]\","
+                + "\"keyProperty\":\"externalId\",\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(IntegrationProtocol.REST, "https://api.example.com", extractionConfigJson, "{}");
+        ResolvedSecret secret = ResolvedSecret.bearer("secret/sap/hana", "token-123");
+        Instant firstTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(
+                Map.of("externalId", "REST-001", "updated_at", firstTimestamp.toString()),
+                Map.of("externalId", "REST-002", "updated_at", firstTimestamp.plusSeconds(1).toString()),
+                Map.of("externalId", "REST-003", "updated_at", firstTimestamp.plusSeconds(2).toString()),
+                Map.of("externalId", "REST-004", "updated_at", firstTimestamp.plusSeconds(3).toString()),
+                Map.of("externalId", "REST-005", "updated_at", firstTimestamp.plusSeconds(4).toString())
+        );
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(genericRestAdapter.extract(any(IntegrationProfile.class), any(ExtractionConfig.class), eq(secret), eq(Instant.EPOCH))).thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile)))
+                .thenReturn("[{\"batch\":1}]", "[{\"batch\":2}]", "[{\"batch\":3}]");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<String> transformationCaptor = ArgumentCaptor.forClass(String.class);
+        verify(transformationService, times(3)).transform(transformationCaptor.capture(), eq(profile));
+        ObjectMapper mapper = new ObjectMapper();
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(0))).hasSize(2);
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(1))).hasSize(2);
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(2))).hasSize(1);
+        assertThat(mapper.readTree(transformationCaptor.getAllValues().get(0)).get(0).get("externalId").asText()).isEqualTo("REST-001");
+
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository, times(3)).save(outboxCaptor.capture(), anyList());
+        assertThat(outboxCaptor.getAllValues()).allSatisfy(event -> {
+            assertThat(event.eventType()).isEqualTo("customers.batch.upserted");
+            assertThat(event.topic()).isEqualTo("integration.customers.batch.events");
+        });
+    }
+
+    @Test
+    void doesNotTransformOrPublishWhenBatchExtractionIsEmpty() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode FROM customers\",\"keyColumn\":\"CardCode\","
+                + "\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{}");
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH))).thenReturn(List.of());
+
+        orchestrator.run(profile);
+
+        verify(transformationService, never()).transform(anyString(), any());
+        verify(outboxRepository, never()).save(any());
+        ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
+        verify(syncStateRepository).upsert(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(Instant.EPOCH);
+    }
+
+    @Test
+    void publishesOneBatchWhenTheExtractedRowsAreSmallerThanBatchSize() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode FROM customers\",\"keyColumn\":\"CardCode\","
+                + "\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{}");
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(rowTimestamp))));
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("[{\"batch\":true}]");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<String> transformationCaptor = ArgumentCaptor.forClass(String.class);
+        verify(transformationService).transform(transformationCaptor.capture(), eq(profile));
+        assertThat(new ObjectMapper().readTree(transformationCaptor.getValue())).hasSize(1);
+        ArgumentCaptor<OutboxEvent> outboxCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(outboxCaptor.capture(), anyList());
+        assertThat(outboxCaptor.getValue().eventType()).isEqualTo("customers.batch.upserted");
+    }
+
+    @Test
+    void skipsEveryBatchOnAnIdenticalDeterministicRerun() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode FROM customers\",\"keyColumn\":\"CardCode\","
+                + "\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{}");
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        Instant firstTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> rows = List.of(
+                Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(firstTimestamp)),
+                Map.of("CardCode", "CLI-002", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(1))),
+                Map.of("CardCode", "CLI-003", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(2))),
+                Map.of("CardCode", "CLI-004", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(3))),
+                Map.of("CardCode", "CLI-005", "updated_at", java.sql.Timestamp.from(firstTimestamp.plusSeconds(4)))
+        );
+        Map<UUID, OutboxEvent> savedEvents = new HashMap<>();
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret))).thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH))).thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("[{\"batch\":true}]");
+        when(outboxRepository.findLatestByAggregateId(eq(tenantId), any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(savedEvents.get(invocation.getArgument(1))));
+        when(outboxRepository.save(any(OutboxEvent.class), anyList())).thenAnswer(invocation -> {
+            OutboxEvent event = invocation.getArgument(0);
+            savedEvents.put(event.aggregateId(), event);
+            return event;
+        });
+
+        orchestrator.run(profile);
+        orchestrator.run(profile);
+
+        verify(outboxRepository, times(3)).save(any(OutboxEvent.class), anyList());
+        ArgumentCaptor<UUID> aggregateIdCaptor = ArgumentCaptor.forClass(UUID.class);
+        verify(outboxRepository, times(6)).findLatestByAggregateId(eq(tenantId), aggregateIdCaptor.capture());
+        List<UUID> aggregateIds = aggregateIdCaptor.getAllValues();
+        assertThat(aggregateIds.subList(0, 3)).containsExactlyElementsOf(aggregateIds.subList(3, 6));
+        assertThat(new ArrayList<>(savedEvents.keySet())).hasSize(3);
+    }
+
+    @Test
+    void rejectsObjectTransformationOutputBeforeSavingABatchEvent() {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode FROM customers\",\"keyColumn\":\"CardCode\","
+                + "\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{}");
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret)))
+                .thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of(
+                        "CardCode", "CLI-001",
+                        "updated_at", java.sql.Timestamp.from(rowTimestamp))));
+        when(transformationService.transform(anyString(), eq(profile)))
+                .thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        assertThatThrownBy(() -> orchestrator.run(profile))
+                .isInstanceOf(IntegrationSyncException.class)
+                .hasRootCauseInstanceOf(IllegalStateException.class)
+                .hasRootCauseMessage("Batch transformation output must be a non-empty JSON array");
+
+        verify(outboxRepository, never()).save(any());
+        verify(outboxRepository, never()).save(any(), anyList());
+        verify(syncStateRepository, never()).upsert(any());
+    }
+
+    @Test
+    void preservesAValidJsltArrayTransformationForBatchPersistence() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode FROM customers\",\"keyColumn\":\"CardCode\","
+                + "\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        String transformation = "{\"engine\":\"JSLT\",\"script\":\"[for (.) {\\\"customerId\\\": .CardCode}]\"}";
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.JDBC,
+                "generic-jdbc",
+                "generic-jdbc-adapter",
+                "jdbc:mysql://localhost:3306/integration",
+                "secret/sap/hana",
+                null,
+                transformation,
+                "{}",
+                null,
+                null,
+                extractionConfigJson);
+        IntegrationProfile profile = IntegrationProfile.rehydrate(
+                profileId,
+                tenantId,
+                "customers",
+                "sap-hana",
+                SyncDirection.INBOUND,
+                SourceOfTruth.EXTERNAL,
+                config,
+                true,
+                Instant.now(),
+                Instant.now(),
+                0);
+        ObjectMapper mapper = new ObjectMapper();
+        transformationService = new TransformationService(
+                List.of(new PassthroughPayloadTransformer(), new JsltPayloadTransformer(mapper)),
+                mapper);
+        orchestrator = instantiateOrchestrator();
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        Instant rowTimestamp = Instant.parse("2026-08-01T10:00:00Z");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret)))
+                .thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of(Map.of(
+                        "CardCode", "CLI-001",
+                        "updated_at", java.sql.Timestamp.from(rowTimestamp))));
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<OutboxEvent> eventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository).save(eventCaptor.capture(), anyList());
+        assertThat(mapper.readTree(eventCaptor.getValue().payload()))
+                .isEqualTo(mapper.readTree("[{\"customerId\":\"CLI-001\"}]"));
+    }
+
+    @Test
+    void overlappingBatchExtractionsPublishOnlyPreviouslyUndeliveredBusinessKeys() throws Exception {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode FROM customers\",\"keyColumn\":\"CardCode\","
+                + "\"watermarkColumn\":\"updated_at\",\"batchMode\":true,\"batchSize\":2}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"overlapBufferSeconds\":300}");
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        Instant timestamp = Instant.parse("2026-08-01T10:00:00Z");
+        List<Map<String, Object>> firstRows = List.of(
+                row("A", timestamp),
+                row("B", timestamp.plusSeconds(1)),
+                row("C", timestamp.plusSeconds(2)));
+        List<Map<String, Object>> overlappingRows = List.of(
+                row("B", timestamp.plusSeconds(1)),
+                row("C", timestamp.plusSeconds(2)),
+                row("D", timestamp.plusSeconds(3)));
+        Map<UUID, OutboxEvent> savedEvents = new HashMap<>();
+        java.util.Set<UUID> deliveredIds = new java.util.HashSet<>();
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+        when(jdbcDataSourceFactory.create(anyString(), eq(secret)))
+                .thenReturn(mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient()));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(firstRows, overlappingRows);
+        when(transformationService.transform(anyString(), eq(profile)))
+                .thenAnswer(invocation -> invocation.getArgument(0));
+        when(outboxRepository.findLatestByAggregateId(eq(tenantId), any(UUID.class)))
+                .thenAnswer(invocation -> Optional.ofNullable(savedEvents.get(invocation.getArgument(1))));
+        when(outboxRepository.findExistingDeliveryIds(eq(tenantId), any()))
+                .thenAnswer(invocation -> {
+                    java.util.Collection<UUID> requested = invocation.getArgument(1);
+                    return requested.stream().filter(deliveredIds::contains).collect(java.util.stream.Collectors.toSet());
+                });
+        when(outboxRepository.save(any(OutboxEvent.class), anyList())).thenAnswer(invocation -> {
+            OutboxEvent event = invocation.getArgument(0);
+            List<UUID> deliveryIds = invocation.getArgument(1);
+            savedEvents.put(event.aggregateId(), event);
+            deliveredIds.addAll(deliveryIds);
+            return event;
+        });
+
+        orchestrator.run(profile);
+        orchestrator.run(profile);
+
+        ArgumentCaptor<OutboxEvent> eventCaptor = ArgumentCaptor.forClass(OutboxEvent.class);
+        verify(outboxRepository, times(3)).save(eventCaptor.capture(), anyList());
+        assertThat(eventCaptor.getAllValues().stream()
+                .map(OutboxEvent::payload)
+                .map(this::batchBusinessKeys)
+                .toList())
+                .containsExactly(List.of("A", "B"), List.of("C"), List.of("D"));
+    }
+
+    private Map<String, Object> row(String businessKey, Instant timestamp) {
+        return Map.of(
+                "CardCode", businessKey,
+                "updated_at", java.sql.Timestamp.from(timestamp));
+    }
+
+    private List<String> batchBusinessKeys(String payload) {
+        try {
+            List<String> keys = new ArrayList<>();
+            new ObjectMapper().readTree(payload).forEach(node -> keys.add(node.get("CardCode").asText()));
+            return keys;
+        } catch (Exception exception) {
+            throw new IllegalArgumentException("Invalid captured batch payload", exception);
+        }
     }
 
     @Test

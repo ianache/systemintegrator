@@ -1,5 +1,6 @@
 package com.cl2.integration.integration.inbox;
 
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.outbound.OutboundEventDispatcher;
 import org.junit.jupiter.api.DisplayName;
 import org.junit.jupiter.api.Test;
@@ -14,6 +15,38 @@ import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.*;
 
 class DeadLetterQueueReplayServiceTest {
+
+    @Test
+    @DisplayName("Should recover batch context when replaying a batch dead letter")
+    void shouldRecoverBatchContextWhenReplayingBatchDeadLetter() {
+        SpringDataInboxRepository repository = mock(SpringDataInboxRepository.class);
+        OutboundEventDispatcher dispatcher = mock(OutboundEventDispatcher.class);
+        DeadLetterQueueReplayService service = new DeadLetterQueueReplayService(repository, dispatcher);
+
+        UUID tenantId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String payload = "[{\"id\":1},{\"id\":2}]";
+        InboxJpaEntity entity = new InboxJpaEntity(
+                eventId,
+                tenantId,
+                "units.batch.upserted",
+                payload,
+                "DEAD_LETTER",
+                1,
+                Instant.now());
+        when(repository.findByTenantIdAndStatus(tenantId, "DEAD_LETTER")).thenReturn(List.of(entity));
+
+        service.replay(tenantId);
+
+        verify(dispatcher).dispatch(
+                eventId,
+                tenantId,
+                "units.batch.upserted",
+                payload,
+                null,
+                BatchContext.batch(2));
+        assertThat(entity.getStatus()).isEqualTo("PROCESSED");
+    }
 
     @Test
     @DisplayName("Should replay dead letter messages and mark as PROCESSED on success")
@@ -32,7 +65,13 @@ class DeadLetterQueueReplayServiceTest {
         when(repository.findByTenantIdAndStatus(tenantId, "DEAD_LETTER")).thenReturn(List.of(entity1, entity2));
 
         // When entity2 fails during dispatch
-        doThrow(new RuntimeException("Remote endpoint down")).when(dispatcher).dispatch(eq(eventId2), eq(tenantId), eq("units.upserted"), eq("{\"id\":2}"), any());
+        doThrow(new RuntimeException("Remote endpoint down")).when(dispatcher).dispatch(
+                eq(eventId2),
+                eq(tenantId),
+                eq("units.upserted"),
+                eq("{\"id\":2}"),
+                isNull(),
+                eq(BatchContext.unitary()));
 
         DeadLetterQueueReplayService.ReplaySummary summary = service.replay(tenantId);
 
