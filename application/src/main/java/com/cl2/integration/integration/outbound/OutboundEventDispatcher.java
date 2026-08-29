@@ -7,6 +7,7 @@ import com.cl2.integration.domain.model.IntegrationProtocol;
 import com.cl2.integration.domain.model.SyncDirection;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import com.cl2.integration.integration.resilience.ResilienceExecutor;
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.cl2.integration.integration.security.SecretResolver;
 import com.cl2.integration.integration.transformation.TransformationService;
@@ -78,6 +79,16 @@ public class OutboundEventDispatcher {
         for (IntegrationProfile profile : matchingProfiles) {
             dispatchToProfile(eventId, tenantId, payload, profile);
         }
+    }
+
+    public void dispatch(
+            UUID eventId,
+            UUID tenantId,
+            String eventType,
+            String payload,
+            String originExternalSource,
+            BatchContext batchContext) {
+        dispatch(eventId, tenantId, eventType, payload, originExternalSource);
     }
 
     private void dispatchToProfile(UUID eventId, UUID tenantId, String payload, IntegrationProfile profile) {
