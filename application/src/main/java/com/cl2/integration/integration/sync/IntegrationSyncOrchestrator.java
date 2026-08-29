@@ -5,6 +5,7 @@ import com.cl2.integration.adapter.out.generic.GenericRestAdapter;
 import com.cl2.integration.adapter.out.generic.model.ExtractionConfig;
 import com.cl2.integration.domain.model.IntegrationProfile;
 import com.cl2.integration.domain.model.IntegrationProtocol;
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.outbox.OutboxEvent;
 import com.cl2.integration.integration.outbox.OutboxRepository;
 import com.cl2.integration.integration.resilience.ResilienceExecutor;
@@ -26,6 +27,7 @@ import java.time.Instant;
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
 import java.time.ZoneOffset;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.Map;
 import java.util.UUID;
@@ -116,42 +118,39 @@ public class IntegrationSyncOrchestrator {
             IntegrationProtocol protocol = profile.configuration().protocol();
             List<Map<String, Object>> rows = extractRows(profile, extractionConfig, secret, watermark, protocol);
             String keyField = readKeyField(extractionConfig, protocol);
+            BatchContext batchContext = extractionConfig.batchMode()
+                    ? BatchContext.batch(extractionConfig.batchSize())
+                    : BatchContext.unitary();
 
             String aggregateType = deriveAggregateType(profile.businessDomain());
             String eventType = deriveEventType(profile.businessDomain());
             String topic = deriveTopic(profile.businessDomain());
 
             Instant maxRowTimestamp = watermark;
-            for (Map<String, Object> row : rows) {
-                if (Thread.currentThread().isInterrupted()) {
-                    log.info("Sync execution interrupted for profileId={} (tenantId={})", profile.id(), profile.tenantId());
-                    throw new SyncExecutionCancelledException("Execution was cancelled for profile " + profile.id());
+            if (batchContext.batchMode()) {
+                maxRowTimestamp = findMaxRowTimestamp(rows, extractionConfig.watermarkColumn(), watermark);
+                String batchEventType = deriveBatchEventType(profile.businessDomain());
+                String batchTopic = deriveBatchTopic(profile.businessDomain());
+                for (List<Map<String, Object>> batch : partitionRows(rows, batchContext.batchSize())) {
+                    throwIfInterrupted(profile);
+                    String batchJson = objectMapper.writeValueAsString(batch);
+                    String canonicalJson = transformationService.transform(batchJson, profile);
+                    UUID aggregateId = deriveBatchAggregateId(
+                            profile.tenantId(), profile.businessDomain(), batch, keyField, protocol);
+                    saveIfNotDuplicate(profile, aggregateId, aggregateType, batchEventType, batchTopic, canonicalJson);
                 }
-                String rowJson = objectMapper.writeValueAsString(row);
-                String canonicalJson = transformationService.transform(rowJson, profile);
-                UUID aggregateId = deriveAggregateId(profile.tenantId(), readBusinessKey(row, keyField, protocol));
+            } else {
+                for (Map<String, Object> row : rows) {
+                    throwIfInterrupted(profile);
+                    String rowJson = objectMapper.writeValueAsString(row);
+                    String canonicalJson = transformationService.transform(rowJson, profile);
+                    UUID aggregateId = deriveAggregateId(profile.tenantId(), readBusinessKey(row, keyField, protocol));
+                    saveIfNotDuplicate(profile, aggregateId, aggregateType, eventType, topic, canonicalJson);
 
-                boolean isDuplicate = outboxRepository.findLatestByAggregateId(profile.tenantId(), aggregateId)
-                        .map(latestEvent -> canonicalJson.equals(latestEvent.payload()))
-                        .orElse(false);
-
-                if (!isDuplicate) {
-                    outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, canonicalJson));
-
-                    if (metrics != null) {
-                        metrics.recordOutboxEventSaved(
-                                profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
-                                profile.businessDomain(),
-                                eventType);
+                    Instant rowTimestamp = readWatermarkTimestamp(row, extractionConfig.watermarkColumn());
+                    if (rowTimestamp.isAfter(maxRowTimestamp)) {
+                        maxRowTimestamp = rowTimestamp;
                     }
-                } else {
-                    log.debug("Skipping duplicate outbox event for tenantId={}, aggregateId={}, businessDomain={}",
-                            profile.tenantId(), aggregateId, profile.businessDomain());
-                }
-
-                Instant rowTimestamp = readWatermarkTimestamp(row, extractionConfig.watermarkColumn());
-                if (rowTimestamp.isAfter(maxRowTimestamp)) {
-                    maxRowTimestamp = rowTimestamp;
                 }
             }
 
@@ -274,6 +273,93 @@ public class IntegrationSyncOrchestrator {
 
     private UUID deriveAggregateId(UUID tenantId, String businessKey) {
         return UUID.nameUUIDFromBytes((tenantId + ":" + businessKey).getBytes(StandardCharsets.UTF_8));
+    }
+
+    private List<List<Map<String, Object>>> partitionRows(List<Map<String, Object>> rows, int batchSize) {
+        List<List<Map<String, Object>>> batches = new ArrayList<>();
+        for (int start = 0; start < rows.size(); start += batchSize) {
+            int end = Math.min(start + batchSize, rows.size());
+            batches.add(new ArrayList<>(rows.subList(start, end)));
+        }
+        return batches;
+    }
+
+    private String deriveBatchEventType(String businessDomain) {
+        if (businessDomain == null || businessDomain.isBlank()) {
+            return "entity.batch.upserted";
+        }
+        return businessDomain.trim().toLowerCase() + ".batch.upserted";
+    }
+
+    private String deriveBatchTopic(String businessDomain) {
+        if (businessDomain == null || businessDomain.isBlank()) {
+            return "integration.batch.events";
+        }
+        return "integration." + businessDomain.trim().toLowerCase() + ".batch.events";
+    }
+
+    private UUID deriveBatchAggregateId(
+            UUID tenantId,
+            String businessDomain,
+            List<Map<String, Object>> batch,
+            String keyField,
+            IntegrationProtocol protocol
+    ) {
+        StringBuilder identity = new StringBuilder();
+        appendLengthPrefixed(identity, String.valueOf(tenantId));
+        appendLengthPrefixed(identity, businessDomain == null ? "" : businessDomain);
+        for (Map<String, Object> row : batch) {
+            appendLengthPrefixed(identity, readBusinessKey(row, keyField, protocol));
+        }
+        return UUID.nameUUIDFromBytes(identity.toString().getBytes(StandardCharsets.UTF_8));
+    }
+
+    private void appendLengthPrefixed(StringBuilder target, String value) {
+        target.append(value.length()).append(':').append(value);
+    }
+
+    private void throwIfInterrupted(IntegrationProfile profile) {
+        if (Thread.currentThread().isInterrupted()) {
+            log.info("Sync execution interrupted for profileId={} (tenantId={})", profile.id(), profile.tenantId());
+            throw new SyncExecutionCancelledException("Execution was cancelled for profile " + profile.id());
+        }
+    }
+
+    private void saveIfNotDuplicate(
+            IntegrationProfile profile,
+            UUID aggregateId,
+            String aggregateType,
+            String eventType,
+            String topic,
+            String payload
+    ) {
+        boolean isDuplicate = outboxRepository.findLatestByAggregateId(profile.tenantId(), aggregateId)
+                .map(latestEvent -> payload.equals(latestEvent.payload()))
+                .orElse(false);
+
+        if (!isDuplicate) {
+            outboxRepository.save(OutboxEvent.pending(profile.tenantId(), aggregateId, aggregateType, eventType, topic, payload));
+            if (metrics != null) {
+                metrics.recordOutboxEventSaved(
+                        profile.tenantId() != null ? profile.tenantId().toString() : "unknown",
+                        profile.businessDomain(),
+                        eventType);
+            }
+        } else {
+            log.debug("Skipping duplicate outbox event for tenantId={}, aggregateId={}, businessDomain={}",
+                    profile.tenantId(), aggregateId, profile.businessDomain());
+        }
+    }
+
+    private Instant findMaxRowTimestamp(List<Map<String, Object>> rows, String watermarkColumn, Instant watermark) {
+        Instant maxRowTimestamp = watermark;
+        for (Map<String, Object> row : rows) {
+            Instant rowTimestamp = readWatermarkTimestamp(row, watermarkColumn);
+            if (rowTimestamp.isAfter(maxRowTimestamp)) {
+                maxRowTimestamp = rowTimestamp;
+            }
+        }
+        return maxRowTimestamp;
     }
 
     private String readBusinessKey(Map<String, Object> row, String keyField, IntegrationProtocol protocol) {
