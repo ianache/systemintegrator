@@ -166,6 +166,58 @@ class OutboundEventDispatchIntegrationTest extends IntegrationApplicationTest {
     }
 
     @Test
+    @DisplayName("Batch Kafka event sends its already transformed array once to the outbound REST endpoint")
+    void shouldDispatchBatchPayloadWithoutOutboundTransformation() {
+        UUID tenantId = UUID.randomUUID();
+        UUID eventId = UUID.randomUUID();
+        String endpoint = baseUrl + "/api/v1/customers/bulk";
+        String batchPayload = "[{\"externalId\":\"cust-100\"},{\"externalId\":\"cust-101\"}]";
+
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST,
+                "crm-connector",
+                "crm-adapter",
+                endpoint,
+                null,
+                "{\"engine\":\"FIELD_MAPPING\",\"fields\":[{\"target\":\"changed\",\"sourcePath\":\"$.id\"}]}",
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        IntegrationProfile profile = IntegrationProfile.create(
+                UUID.randomUUID(),
+                tenantId,
+                "customers",
+                "salesforce",
+                SyncDirection.OUTBOUND,
+                SourceOfTruth.PLATFORM,
+                config
+        );
+        profileRepository.save(tenantId, profile);
+
+        wireMockServer.stubFor(post(urlEqualTo("/api/v1/customers/bulk"))
+                .withRequestBody(equalToJson(batchPayload))
+                .willReturn(aResponse().withStatus(200).withBody("{\"status\":\"accepted\"}")));
+
+        RecordHeaders headers = new RecordHeaders();
+        headers.add(new RecordHeader("X-Tenant-ID", tenantId.toString().getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Event-Type", "customer.batch.upserted".getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Batch-Mode", "true".getBytes(StandardCharsets.UTF_8)));
+        headers.add(new RecordHeader("X-Batch-Size", "2".getBytes(StandardCharsets.UTF_8)));
+        ConsumerRecord<String, String> record = new ConsumerRecord<>(
+                "integration.customers.batch.events", 0, 0L, 0L, null, 0, 0,
+                eventId.toString(), batchPayload, headers, null
+        );
+
+        kafkaInboxListener.onMessage(record);
+
+        wireMockServer.verify(1, postRequestedFor(urlEqualTo("/api/v1/customers/bulk"))
+                .withRequestBody(equalToJson(batchPayload)));
+    }
+
+    @Test
     @DisplayName("Case 2: Matching outbound profile target returns 500 Server Error -> InboxStore marks DEAD_LETTER and DLQ receives event")
     void shouldForwardToDlqAndMarkDeadLetterWhenTargetReturns500() {
         UUID tenantId = UUID.randomUUID();

@@ -43,14 +43,26 @@ public class OutboundEventDispatcher {
     }
 
     public void dispatch(UUID eventId, UUID tenantId, String eventType, String payload) {
-        dispatch(eventId, tenantId, eventType, payload, null);
+        dispatch(eventId, tenantId, eventType, payload, null, BatchContext.unitary());
     }
 
     public void dispatch(UUID eventId, UUID tenantId, String eventType, String payload, String originExternalSource) {
+        dispatch(eventId, tenantId, eventType, payload, originExternalSource, BatchContext.unitary());
+    }
+
+    public void dispatch(
+            UUID eventId,
+            UUID tenantId,
+            String eventType,
+            String payload,
+            String originExternalSource,
+            BatchContext batchContext) {
         if (tenantId == null) {
             log.warn("Cannot dispatch outbound event: tenantId is null (eventId={}, eventType={})", eventId, eventType);
             return;
         }
+
+        BatchContext effectiveBatchContext = batchContext != null ? batchContext : BatchContext.unitary();
 
         String derivedDomain = deriveBusinessDomain(eventType);
         log.debug("Dispatching outbound event: eventId={}, tenantId={}, eventType={}, derivedDomain={}, originSource={}",
@@ -77,21 +89,16 @@ public class OutboundEventDispatcher {
         log.debug("Found {} matching outbound REST profile(s) for eventId={}", matchingProfiles.size(), eventId);
 
         for (IntegrationProfile profile : matchingProfiles) {
-            dispatchToProfile(eventId, tenantId, payload, profile);
+            dispatchToProfile(eventId, tenantId, payload, profile, effectiveBatchContext.batchMode());
         }
     }
 
-    public void dispatch(
+    private void dispatchToProfile(
             UUID eventId,
             UUID tenantId,
-            String eventType,
             String payload,
-            String originExternalSource,
-            BatchContext batchContext) {
-        dispatch(eventId, tenantId, eventType, payload, originExternalSource);
-    }
-
-    private void dispatchToProfile(UUID eventId, UUID tenantId, String payload, IntegrationProfile profile) {
+            IntegrationProfile profile,
+            boolean batchMode) {
         IntegrationProfileConfiguration config = profile.configuration();
         String credentialRef = config != null ? config.credentialRef() : null;
 
@@ -100,7 +107,7 @@ public class OutboundEventDispatcher {
             secret = secretResolver.resolve(credentialRef, tenantId);
         }
 
-        String transformedPayload = transformationService.transform(payload, profile);
+        String outboundPayload = batchMode ? payload : transformationService.transform(payload, profile);
         String endpoint = config != null ? config.endpoint() : null;
         String connector = config != null ? config.connector() : "default";
 
@@ -109,7 +116,7 @@ public class OutboundEventDispatcher {
 
         final ResolvedSecret finalSecret = secret;
         resilienceExecutor.execute(tenantId, connector, () -> {
-            httpOutboundClient.send(endpoint, finalSecret, transformedPayload, tenantId);
+            httpOutboundClient.send(endpoint, finalSecret, outboundPayload, tenantId);
             return null;
         });
     }

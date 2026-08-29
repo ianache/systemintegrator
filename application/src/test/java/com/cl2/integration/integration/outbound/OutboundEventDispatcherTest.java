@@ -10,6 +10,7 @@ import com.cl2.integration.domain.model.SyncDirection;
 import com.cl2.integration.domain.port.IntegrationProfileRepository;
 import com.cl2.integration.integration.resilience.CircuitBreakerOpenException;
 import com.cl2.integration.integration.resilience.ResilienceExecutor;
+import com.cl2.integration.integration.batch.BatchContext;
 import com.cl2.integration.integration.security.AuthType;
 import com.cl2.integration.integration.security.ResolvedSecret;
 import com.cl2.integration.integration.security.SecretResolver;
@@ -122,6 +123,50 @@ class OutboundEventDispatcherTest {
         verify(transformationService).transform(rawPayload, profile);
         verify(resilienceExecutor).execute(eq(tenantId), eq("crm-connector"), any());
         verify(httpOutboundClient).send(endpoint, secret, transformedPayload, tenantId);
+    }
+
+    @Test
+    @DisplayName("Should send an already transformed batch array directly to the matching outbound REST profile")
+    void shouldDispatchBatchPayloadWithoutTransformingItAgain() {
+        stubResilienceExecutorToExecuteDirectly();
+
+        String batchPayload = "[{\"externalId\":\"cust-100\"},{\"externalId\":\"cust-101\"}]";
+        String endpoint = "https://api.external-crm.com/v1/customers/bulk";
+        IntegrationProfileConfiguration config = new IntegrationProfileConfiguration(
+                IntegrationProtocol.REST,
+                "crm-connector",
+                "generic-http",
+                endpoint,
+                null,
+                "{\"engine\":\"FIELD_MAPPING\",\"fields\":[]}",
+                null,
+                null,
+                null,
+                null,
+                null
+        );
+        IntegrationProfile profile = IntegrationProfile.create(
+                UUID.randomUUID(),
+                tenantId,
+                "customers",
+                "salesforce",
+                SyncDirection.OUTBOUND,
+                SourceOfTruth.PLATFORM,
+                config
+        );
+        when(profileRepository.findAll(tenantId, true)).thenReturn(List.of(profile));
+
+        dispatcher.dispatch(
+                eventId,
+                tenantId,
+                "customer.batch.upserted",
+                batchPayload,
+                null,
+                BatchContext.batch(2)
+        );
+
+        verify(httpOutboundClient).send(endpoint, null, batchPayload, tenantId);
+        verifyNoInteractions(transformationService);
     }
 
     @Test
