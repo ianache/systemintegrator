@@ -65,6 +65,32 @@ class ExtractionConfigTest {
     }
 
     @Test
+    void shouldDefaultBatchConfigurationToUnitaryModeAndSize500() throws Exception {
+        ExtractionConfig config = objectMapper.readValue("{}", ExtractionConfig.class);
+
+        assertFalse(config.batchMode());
+        assertEquals(500, config.batchSize());
+    }
+
+    @Test
+    void shouldNormalizeInvalidBatchSizeTo500() throws Exception {
+        ExtractionConfig config = objectMapper.readValue(
+                "{\"batchMode\":true,\"batchSize\":0}", ExtractionConfig.class);
+
+        assertTrue(config.batchMode());
+        assertEquals(500, config.batchSize());
+    }
+
+    @Test
+    void shouldParseExplicitBatchConfiguration() throws Exception {
+        ExtractionConfig config = objectMapper.readValue(
+                "{\"batchMode\":true,\"batchSize\":2}", ExtractionConfig.class);
+
+        assertTrue(config.batchMode());
+        assertEquals(2, config.batchSize());
+    }
+
+    @Test
     void shouldParseOauth2AuthConfig() throws Exception {
         String json = """
             {

@@ -16,8 +16,28 @@ public record ExtractionConfig(
         String responseJsonPath,
         String watermarkFormat,
         String keyProperty,
-        String watermarkColumn
+        String watermarkColumn,
+        Boolean batchMode,
+        Integer batchSize
 ) {
+    public ExtractionConfig(
+            String query,
+            String watermarkParam,
+            String keyColumn,
+            Integer fetchSize,
+            String method,
+            String path,
+            Map<String, String> queryParams,
+            Map<String, String> headers,
+            String responseJsonPath,
+            String watermarkFormat,
+            String keyProperty,
+            String watermarkColumn
+    ) {
+        this(query, watermarkParam, keyColumn, fetchSize, method, path, queryParams, headers,
+                responseJsonPath, watermarkFormat, keyProperty, watermarkColumn, null, null);
+    }
+
     public ExtractionConfig {
         if (watermarkParam == null || watermarkParam.isBlank()) {
             watermarkParam = "lastSyncWithBuffer";
@@ -33,6 +53,12 @@ public record ExtractionConfig(
         }
         if (watermarkFormat == null || watermarkFormat.isBlank()) {
             watermarkFormat = "ISO_8601";
+        }
+        if (batchMode == null) {
+            batchMode = false;
+        }
+        if (batchSize == null || batchSize <= 0) {
+            batchSize = 500;
         }
     }
 }
