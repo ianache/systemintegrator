@@ -67,7 +67,7 @@ Output: exit code `0`; `Tests run: 7, Failures: 0, Errors: 0, Skipped: 0`.
 
 ## Commit
 
-Pending final verification and commit.
+`7813bfc80a8b00a7d0c3e5a40d2b1735dda8eb1a` â€” `feat: propagate batch context through Kafka`
 
 ## Concerns
 
