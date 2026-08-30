@@ -1,10 +1,11 @@
 import { ChangeDetectionStrategy, Component, InjectionToken, OnInit, computed, inject, signal } from '@angular/core';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Router } from '@angular/router';
-import { IntegrationProfile, SyncDirection } from './integration-profile.model';
+import { IntegrationProfile, IntegrationProfileStatus, SyncDirection } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
 import { IntegrationProfileWizardComponent } from './integration-profile-wizard.component';
 import { IntegrationTabsComponent } from '../shared/integration-tabs.component';
+import { TimeAgoPipe } from '../shared/time-ago.pipe';
 
 type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'forbidden' | 'unavailable';
 type DirectionFilter = 'ALL' | SyncDirection;
@@ -21,7 +22,7 @@ export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-integration-profile-list',
   standalone: true,
-  imports: [IntegrationProfileWizardComponent, IntegrationTabsComponent],
+  imports: [IntegrationProfileWizardComponent, IntegrationTabsComponent, TimeAgoPipe],
   templateUrl: './integration-profile-list.component.html',
   styleUrl: './integration-profile-list.component.css',
 })
@@ -100,8 +101,20 @@ export class IntegrationProfileListComponent implements OnInit {
     return 'badge dir-' + direction.toLowerCase();
   }
 
-  statusBadgeClass(active: boolean): string {
-    return 'badge ' + (active ? 'active' : 'inactive');
+  statusBadgeClass(status: IntegrationProfileStatus): string {
+    return 'badge ' + status.toLowerCase();
+  }
+
+  statusLabel(status: IntegrationProfileStatus): string {
+    const labels: Record<IntegrationProfileStatus, string> = {
+      ACTIVE: 'Activo',
+      PAUSED: 'Pausado',
+      DRAFT: 'Borrador',
+      ERROR: 'Con error',
+      DEGRADED: 'Degradado',
+      INACTIVE: 'Inactivo',
+    };
+    return labels[status];
   }
 
   readonly wizardOpen = signal(false);

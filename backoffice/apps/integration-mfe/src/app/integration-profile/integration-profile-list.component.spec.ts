@@ -13,6 +13,9 @@ const profile = (overrides: Partial<Record<string, unknown>>) => ({
   sourceOfTruth: 'EXTERNAL',
   configuration: null,
   active: true,
+  paused: false,
+  status: 'ACTIVE',
+  lastSyncAt: null,
   createdAt: '2026-08-01T00:00:00Z',
   updatedAt: '2026-08-20T00:00:00Z',
   version: 2,
@@ -170,5 +173,21 @@ describe('IntegrationProfileListComponent', () => {
     (fixture.nativeElement.querySelector('.new-profile-btn') as HTMLButtonElement).click();
     fixture.detectChanges();
     expect(fixture.nativeElement.querySelector('app-integration-profile-wizard')).not.toBeNull();
+  });
+
+  it('renders the shared Integraciones header and the Última sync column', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileListComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=true').flush([
+      profile({ status: 'ERROR', lastSyncAt: null }),
+    ]);
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('h1').textContent).toContain('Integraciones');
+    const statusCell = fixture.nativeElement.querySelector('.badge.error');
+    expect(statusCell).toBeTruthy();
+    expect(statusCell.textContent).toContain('Con error');
+    const lastSyncCell = fixture.nativeElement.querySelectorAll('tbody td')[6];
+    expect(lastSyncCell.textContent.trim()).toBe('—');
   });
 });
