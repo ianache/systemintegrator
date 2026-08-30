@@ -72,6 +72,16 @@ export class GatewayProxyController {
     return this.gatewayProxy.deactivateIntegrationProfile(request.session.tokens!.access_token!, profileId);
   }
 
+  @Post('integration-profiles/:profileId/pause')
+  pauseIntegrationProfile(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string) {
+    return this.gatewayProxy.pauseIntegrationProfile(request.session.tokens!.access_token!, profileId);
+  }
+
+  @Post('integration-profiles/:profileId/resume')
+  resumeIntegrationProfile(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string) {
+    return this.gatewayProxy.resumeIntegrationProfile(request.session.tokens!.access_token!, profileId);
+  }
+
   @Post('integration-profiles/:profileId/sync')
   @HttpCode(HttpStatus.OK)
   triggerSync(@Req() request: AuthenticatedRequest, @Param('profileId') profileId: string) {

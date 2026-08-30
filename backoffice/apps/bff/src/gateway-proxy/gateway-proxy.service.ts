@@ -35,6 +35,14 @@ export class GatewayProxyService {
     return this.forward('delete', `/api/v1/integration-profiles/${profileId}`, accessToken);
   }
 
+  pauseIntegrationProfile(accessToken: string, profileId: string): Promise<unknown> {
+    return this.forward('post', `/api/v1/integration-profiles/${profileId}/pause`, accessToken, {});
+  }
+
+  resumeIntegrationProfile(accessToken: string, profileId: string): Promise<unknown> {
+    return this.forward('post', `/api/v1/integration-profiles/${profileId}/resume`, accessToken, {});
+  }
+
   triggerSync(accessToken: string, profileId: string): Promise<unknown> {
     return this.forward('post', `/api/v1/integration-profiles/${profileId}/sync`, accessToken, {});
   }
