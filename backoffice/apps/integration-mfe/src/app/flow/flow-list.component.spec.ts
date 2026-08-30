@@ -47,10 +47,14 @@ describe('FlowListComponent', () => {
     const fixture = TestBed.createComponent(FlowListComponent);
     fixture.detectChanges(); // Trigger ngOnInit
 
-    // Handle the initial list() call from ngOnInit
-    const listRequest = http.expectOne('/bff/api/v1/flows');
-    expect(listRequest.request.method).toBe('GET');
-    listRequest.flush([]);
+    // Handle the initial list() call from ngOnInit (fired both by the component
+    // and by the shared IntegrationTabsComponent's flow-count badge)
+    const listRequests = http.match('/bff/api/v1/flows');
+    expect(listRequests.length).toBe(2);
+    listRequests.forEach((req) => {
+      expect(req.request.method).toBe('GET');
+      req.flush([]);
+    });
     http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
       publishedFlowCount: 0,
       executions24h: 0,
@@ -97,8 +101,7 @@ describe('FlowListComponent', () => {
     const fixture = TestBed.createComponent(FlowListComponent);
     fixture.detectChanges();
 
-    const listRequest = http.expectOne('/bff/api/v1/flows');
-    listRequest.flush([]);
+    http.match('/bff/api/v1/flows').forEach((req) => req.flush([]));
     http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
       publishedFlowCount: 0,
       executions24h: 0,
@@ -123,7 +126,7 @@ describe('FlowListComponent', () => {
     const fixture = TestBed.createComponent(FlowListComponent);
     fixture.detectChanges();
 
-    http.expectOne('/bff/api/v1/flows').flush([]);
+    http.match('/bff/api/v1/flows').forEach((req) => req.flush([]));
     http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
       publishedFlowCount: 3,
       executions24h: 40,
@@ -143,7 +146,7 @@ describe('FlowListComponent', () => {
     const fixture = TestBed.createComponent(FlowListComponent);
     fixture.detectChanges();
 
-    http.expectOne('/bff/api/v1/flows').flush([]);
+    http.match('/bff/api/v1/flows').forEach((req) => req.flush([]));
     http.expectOne('/bff/api/v1/flows/metrics/summary').flush('error', {
       status: 500,
       statusText: 'Server Error',

@@ -41,7 +41,10 @@ describe('IntegrationProfileListComponent', () => {
     http = TestBed.inject(HttpTestingController);
   });
 
-  afterEach(() => http.verify());
+  afterEach(() => {
+    http.match('/bff/api/v1/flows').forEach((req) => req.flush([]));
+    http.verify();
+  });
 
   it('shows a loading status while profiles are being requested', () => {
     const fixture = TestBed.createComponent(IntegrationProfileListComponent);

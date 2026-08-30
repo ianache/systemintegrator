@@ -25,7 +25,7 @@ export class SidebarComponent {
   ];
 
   readonly configItems: NavItem[] = [
-    { path: '/integration/profiles', label: 'Integration Profiles', code: 'IP' },
+    { path: '/integration/profiles', label: 'Integraciones', code: 'IX' },
     { path: '/integration/connectors', label: 'Conectores y adapters', code: 'CX' },
     { path: '/integration/credentials', label: 'Credenciales', code: 'CR' },
   ];
