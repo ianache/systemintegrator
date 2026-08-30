@@ -14,6 +14,9 @@ const FULL_PROFILE = {
   sourceOfTruth: 'EXTERNAL',
   configuration: null,
   active: true,
+  paused: false,
+  status: 'ACTIVE',
+  lastSyncAt: null,
   createdAt: '2026-08-01T00:00:00Z',
   updatedAt: '2026-08-20T00:00:00Z',
   version: 7,
@@ -315,6 +318,23 @@ describe('IntegrationProfileDetailComponent', () => {
 
     expect(fixture.nativeElement.querySelector('[data-testid="deactivate-profile"]')).toBeNull();
     expect(fixture.nativeElement.textContent).toContain('Inactivo');
+  });
+
+  it('pauses an active profile', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
+    fixture.detectChanges();
+
+    const pauseBtn = fixture.nativeElement.querySelector('[data-testid="pause-profile"]');
+    pauseBtn.click();
+
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1/pause');
+    expect(request.request.method).toBe('POST');
+    request.flush({ ...FULL_PROFILE, paused: true, status: 'PAUSED' });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="pause-profile"]').textContent.trim()).toBe('Reanudar');
   });
 
   it('does not deactivate when the confirmation is declined', () => {

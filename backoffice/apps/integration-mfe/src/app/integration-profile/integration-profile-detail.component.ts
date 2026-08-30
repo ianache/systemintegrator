@@ -252,6 +252,19 @@ export class IntegrationProfileDetailComponent implements OnInit {
     });
   }
 
+  togglePause(): void {
+    const current = this.profile();
+    if (!current) return;
+    const action = current.paused ? this.profileService.resume(current.id) : this.profileService.pause(current.id);
+    action.subscribe({
+      next: (updated) => {
+        this.profile.set(updated);
+        this.toast.show(updated.paused ? 'Perfil pausado.' : 'Perfil reanudado.');
+      },
+      error: () => this.toast.show('No se pudo cambiar el estado del perfil.'),
+    });
+  }
+
   isJsonValid(raw: string): boolean {
     if (!raw.trim()) return true;
     try {

@@ -29,6 +29,7 @@
         </div>
         <div class="detail-actions">
           @if (p.active) {
+            <button type="button" data-testid="pause-profile" class="btn" (click)="togglePause()">{{ p.paused ? 'Reanudar' : 'Pausar' }}</button>
             <button type="button" data-testid="deactivate-profile" class="btn" (click)="deactivateProfile()">Desactivar perfil</button>
           } @else {
             <span class="inactive-note">Perfil inactivo — no hay acción de reactivación disponible en la consola.</span>
