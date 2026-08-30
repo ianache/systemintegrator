@@ -170,6 +170,17 @@ export class GatewayProxyController {
     return this.gatewayProxy.rollbackFlow(request.session.tokens!.access_token!, flowId, Number(versionNumber));
   }
 
+  @Get('flows/metrics/summary')
+  getFlowMetricsSummary(@Req() request: AuthenticatedRequest) {
+    return this.gatewayProxy.getFlowMetricsSummary(request.session.tokens!.access_token!);
+  }
+
+  @Post('flows/:flowId/executions')
+  @HttpCode(HttpStatus.CREATED)
+  reportFlowExecution(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string, @Body() body: unknown) {
+    return this.gatewayProxy.reportFlowExecution(request.session.tokens!.access_token!, flowId, body);
+  }
+
   @Delete('flows/:flowId')
   @HttpCode(HttpStatus.NO_CONTENT)
   archiveFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {

@@ -95,6 +95,14 @@ export class GatewayProxyService {
     return this.forward('post', `/api/v1/flows/${flowId}/versions/${versionNumber}/rollback`, accessToken, {});
   }
 
+  getFlowMetricsSummary(accessToken: string): Promise<unknown> {
+    return this.forward('get', '/api/v1/flows/metrics/summary', accessToken);
+  }
+
+  reportFlowExecution(accessToken: string, flowId: string, body: unknown): Promise<unknown> {
+    return this.forward('post', `/api/v1/flows/${flowId}/executions`, accessToken, body);
+  }
+
   archiveFlow(accessToken: string, flowId: string): Promise<unknown> {
     return this.forward('delete', `/api/v1/flows/${flowId}`, accessToken);
   }
