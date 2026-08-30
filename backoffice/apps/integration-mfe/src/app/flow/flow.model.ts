@@ -38,3 +38,20 @@ export interface UpdateFlowDraftPayload {
   draftGraph: unknown | null;
   expectedVersion: number;
 }
+
+export type FlowExecutionStatus = 'SUCCESS' | 'FAILURE';
+
+export interface FlowMetricsSummary {
+  publishedFlowCount: number;
+  executions24h: number;
+  errorRatePct: number;
+  p95DurationMs: number | null;
+}
+
+export interface ReportFlowExecutionPayload {
+  flowVersionNumber: number;
+  status: FlowExecutionStatus;
+  startedAt: string;
+  finishedAt: string;
+  errorMessage?: string | null;
+}

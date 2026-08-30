@@ -1,7 +1,14 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
-import { CreateFlowPayload, Flow, FlowVersion, UpdateFlowDraftPayload } from './flow.model';
+import {
+  CreateFlowPayload,
+  Flow,
+  FlowMetricsSummary,
+  FlowVersion,
+  ReportFlowExecutionPayload,
+  UpdateFlowDraftPayload,
+} from './flow.model';
 
 const BASE_URL = '/bff/api/v1/flows';
 
@@ -39,5 +46,13 @@ export class FlowService {
 
   archive(flowId: string): Observable<void> {
     return this.http.delete<void>(`${BASE_URL}/${flowId}`);
+  }
+
+  getMetricsSummary(): Observable<FlowMetricsSummary> {
+    return this.http.get<FlowMetricsSummary>(`${BASE_URL}/metrics/summary`);
+  }
+
+  reportExecution(flowId: string, payload: ReportFlowExecutionPayload): Observable<unknown> {
+    return this.http.post(`${BASE_URL}/${flowId}/executions`, payload);
   }
 }

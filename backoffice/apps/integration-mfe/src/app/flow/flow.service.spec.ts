@@ -98,4 +98,28 @@ describe('FlowService', () => {
     expect(request.request.method).toBe('DELETE');
     request.flush(null);
   });
+
+  it('gets the flow metrics summary', () => {
+    service.getMetricsSummary().subscribe((summary) => expect(summary.publishedFlowCount).toBe(3));
+    http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
+      publishedFlowCount: 3,
+      executions24h: 40,
+      errorRatePct: 2.5,
+      p95DurationMs: 810,
+    });
+  });
+
+  it('reports a flow execution', () => {
+    service
+      .reportExecution('f-1', {
+        flowVersionNumber: 1,
+        status: 'SUCCESS',
+        startedAt: '2026-08-30T00:00:00Z',
+        finishedAt: '2026-08-30T00:00:01Z',
+      })
+      .subscribe();
+    const request = http.expectOne('/bff/api/v1/flows/f-1/executions');
+    expect(request.request.method).toBe('POST');
+    request.flush({});
+  });
 });
