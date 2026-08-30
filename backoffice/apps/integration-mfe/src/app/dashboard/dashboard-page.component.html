@@ -54,8 +54,8 @@
                 <span>{{ p.businessDomain }} · {{ p.externalSource }}</span>
                 <span class="mono attention-code">{{ p.businessDomain }}&#64;{{ p.externalSource | lowercase }}</span>
               </div>
-              <span class="attention-issue">Perfil inactivo</span>
-              <span class="badge inactive">Inactivo</span>
+              <span class="attention-issue">{{ attentionIssueLabel(p.status) }}</span>
+              <span [class]="attentionBadgeClass(p.status)">{{ attentionStatusLabel(p.status) }}</span>
             </a>
           }
         }

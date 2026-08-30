@@ -1,7 +1,12 @@
 import { LowerCasePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, OnInit, signal } from '@angular/core';
 import { RouterLink } from '@angular/router';
-import { IntegrationProfile, SourceOfTruth, SyncDirection } from '../integration-profile/integration-profile.model';
+import {
+  IntegrationProfile,
+  IntegrationProfileStatus,
+  SourceOfTruth,
+  SyncDirection,
+} from '../integration-profile/integration-profile.model';
 import { IntegrationProfileService } from '../integration-profile/integration-profile.service';
 
 type DashboardState = 'loading' | 'ready' | 'unavailable';
@@ -40,7 +45,33 @@ export class DashboardPageComponent implements OnInit {
     SOTS.map((sot) => ({ sot, count: this.profiles().filter((p) => p.sourceOfTruth === sot).length })),
   );
 
-  readonly attention = computed(() => this.inactiveProfiles().slice(0, 3));
+  private static readonly ATTENTION_STATUSES: IntegrationProfileStatus[] = ['PAUSED', 'ERROR', 'DEGRADED'];
+
+  readonly attention = computed(() =>
+    this.profiles().filter((p) => DashboardPageComponent.ATTENTION_STATUSES.includes(p.status)).slice(0, 3),
+  );
+
+  attentionIssueLabel(status: IntegrationProfileStatus): string {
+    const labels: Partial<Record<IntegrationProfileStatus, string>> = {
+      PAUSED: 'Pausado por el operador',
+      ERROR: 'Última sincronización con error',
+      DEGRADED: 'Última sincronización interrumpida',
+    };
+    return labels[status] ?? '';
+  }
+
+  attentionBadgeClass(status: IntegrationProfileStatus): string {
+    return 'badge ' + status.toLowerCase();
+  }
+
+  attentionStatusLabel(status: IntegrationProfileStatus): string {
+    const labels: Partial<Record<IntegrationProfileStatus, string>> = {
+      PAUSED: 'Pausado',
+      ERROR: 'Con error',
+      DEGRADED: 'Degradado',
+    };
+    return labels[status] ?? status;
+  }
 
   ngOnInit(): void {
     this.profileService.list(false).subscribe({

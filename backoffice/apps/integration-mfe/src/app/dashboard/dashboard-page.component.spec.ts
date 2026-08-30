@@ -13,6 +13,9 @@ const profile = (overrides: Partial<Record<string, unknown>>) => ({
   sourceOfTruth: 'EXTERNAL',
   configuration: null,
   active: true,
+  paused: false,
+  status: 'ACTIVE',
+  lastSyncAt: null,
   createdAt: '2026-08-01T00:00:00Z',
   updatedAt: '2026-08-01T00:00:00Z',
   version: 1,
@@ -46,7 +49,7 @@ describe('DashboardPageComponent', () => {
     http.expectOne('/bff/api/v1/integration-profiles?activeOnly=false').flush([
       profile({ id: 'p1', active: true, syncDirection: 'INBOUND', sourceOfTruth: 'EXTERNAL' }),
       profile({ id: 'p2', active: true, syncDirection: 'OUTBOUND', sourceOfTruth: 'PLATFORM' }),
-      profile({ id: 'p3', active: false, businessDomain: 'customer', externalSource: 'SAP', syncDirection: 'BIDIRECTIONAL', sourceOfTruth: 'SHARED' }),
+      profile({ id: 'p3', active: false, status: 'INACTIVE', businessDomain: 'customer', externalSource: 'SAP', syncDirection: 'BIDIRECTIONAL', sourceOfTruth: 'SHARED' }),
     ]);
     fixture.detectChanges();
 
@@ -54,6 +57,21 @@ describe('DashboardPageComponent', () => {
     expect(text).toContain('2'); // active count
     expect(text).toContain('1'); // inactive count
     expect(text).toContain('No disponible');
-    expect(text).toContain('customer'); // attention list shows the inactive profile
+  });
+
+  it('includes paused and error profiles in the attention list even when active', () => {
+    const fixture = TestBed.createComponent(DashboardPageComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles?activeOnly=false').flush([
+      profile({ id: 'p1', active: true, status: 'PAUSED', businessDomain: 'vehicle-model', externalSource: 'SIGO' }),
+      profile({ id: 'p2', active: true, status: 'ERROR', businessDomain: 'customer', externalSource: 'SAP' }),
+      profile({ id: 'p3', active: true, status: 'DRAFT', businessDomain: 'waybill', externalSource: 'TMS' }),
+    ]);
+    fixture.detectChanges();
+
+    const text = fixture.nativeElement.textContent as string;
+    expect(text).toContain('vehicle-model');
+    expect(text).toContain('customer');
+    expect(text).not.toContain('waybill');
   });
 });
