@@ -64,10 +64,6 @@ export class FlowDesignerComponent implements OnInit {
     this.router.navigate(['/integration/flows']);
   }
 
-  openExecutions(): void {
-    this.router.navigate(['/integration/flows', this.flowId(), 'executions']);
-  }
-
   onNameInput(value: string): void {
     this.nameDraft.set(value);
   }

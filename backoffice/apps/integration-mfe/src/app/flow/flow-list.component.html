@@ -50,7 +50,6 @@
             <th scope="col">Versión activa</th>
             <th scope="col">Nodos</th>
             <th scope="col">Trigger</th>
-            <th scope="col"></th>
           </tr>
         </thead>
         <tbody>
@@ -64,12 +63,9 @@
               <td class="mono">{{ flow.activeVersionNumber !== null ? ('v' + flow.activeVersionNumber) : '—' }}</td>
               <td>{{ flow.nodeCount }} nodos</td>
               <td class="mono cell-sub">{{ flow.triggerSummary ?? '—' }}</td>
-              <td>
-                <button type="button" class="btn" (click)="openExecutions(flow, $event)">Ver traza</button>
-              </td>
             </tr>
           } @empty {
-            <tr><td colspan="6">Ningún flujo coincide.</td></tr>
+            <tr><td colspan="5">Ningún flujo coincide.</td></tr>
           }
         </tbody>
       </table>

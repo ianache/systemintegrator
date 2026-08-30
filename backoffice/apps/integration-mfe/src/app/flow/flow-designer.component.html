@@ -24,7 +24,6 @@
           @if (f.activeVersionNumber !== null) { · v{{ f.activeVersionNumber }} activa }
         </p>
       </div>
-      <button type="button" class="btn" (click)="openExecutions()">Ver ejecuciones</button>
     </div>
 
     <div class="designer-grid">
@@ -51,7 +50,7 @@
           }
           <div class="draft-actions">
             <button type="button" class="btn save-draft-btn" (click)="saveDraft()">Guardar cambios</button>
-            <button type="button" class="btn btn-primary publish-btn" (click)="publish()">Publicar</button>
+            <button type="button" class="btn btn-primary publish-btn" [disabled]="!graphDraft().trim()" (click)="publish()">Publicar</button>
           </div>
         </div>
       </div>

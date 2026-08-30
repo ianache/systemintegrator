@@ -3,8 +3,11 @@ import { HttpTestingController, provideHttpClientTesting } from '@angular/common
 import { provideRouter, Router } from '@angular/router';
 import { TestBed } from '@angular/core/testing';
 import { FlowListComponent } from './flow-list.component';
+import { CONSOLE_ROUTES } from '../console.routes';
+import { FlowDesignerComponent } from './flow-designer.component';
+import { Flow } from './flow.model';
 
-const FLOW = {
+const FLOW: Flow = {
   id: 'f-1',
   tenantId: 't-1',
   code: 'flow/vehiculo-alta',
@@ -12,7 +15,7 @@ const FLOW = {
   draftGraph: null,
   triggerSummary: 'CRON */5',
   activeVersionNumber: null,
-  status: 'DRAFT',
+  status: 'DRAFT' as const,
   nodeCount: 0,
   archived: false,
   createdAt: '2026-08-30T00:00:00Z',
@@ -29,10 +32,10 @@ describe('FlowListComponent', () => {
       providers: [
         provideHttpClient(),
         provideHttpClientTesting(),
-        provideRouter([
-          { path: 'integration/flows/:id', component: FlowListComponent },
-          { path: 'integration/flows', component: FlowListComponent },
-        ]),
+        // Mirror how the shell app mounts integration-mfe's CONSOLE_ROUTES under
+        // '/integration' (see apps/shell/src/app/app.routes.ts), so this test
+        // exercises the exact URLs the component navigates to.
+        provideRouter([{ path: 'integration', children: CONSOLE_ROUTES }]),
       ],
     }).compileComponents();
     http = TestBed.inject(HttpTestingController);
@@ -82,5 +85,25 @@ describe('FlowListComponent', () => {
     expect(createRequest.request.method).toBe('POST');
     expect(createRequest.request.body).toEqual({ code: 'flow/new', name: 'New flow' });
     createRequest.flush(FLOW);
+  });
+
+  it('navigates to the real flow designer route when a row is opened', async () => {
+    const fixture = TestBed.createComponent(FlowListComponent);
+    fixture.detectChanges();
+
+    const listRequest = http.expectOne('/bff/api/v1/flows');
+    listRequest.flush([]);
+    fixture.detectChanges();
+
+    const router = TestBed.inject(Router);
+    fixture.componentInstance.open({ ...FLOW });
+    await fixture.whenStable();
+
+    expect(router.url).toBe('/integration/flows/f-1');
+    expect(
+      CONSOLE_ROUTES[0].children?.some(
+        (route) => route.path === 'flows/:flowId' && route.component === FlowDesignerComponent,
+      ),
+    ).toBe(true);
   });
 });

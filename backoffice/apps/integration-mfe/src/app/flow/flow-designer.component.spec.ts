@@ -62,6 +62,30 @@ describe('FlowDesignerComponent', () => {
     http.verify();
   });
 
+  it('disables the publish button when the draft graph is empty', () => {
+    const { http, fixture } = setup();
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/flows/f-1').flush({ ...FLOW_DRAFT, draftGraph: null });
+    http.expectOne('/bff/api/v1/flows/f-1/versions').flush([]);
+    fixture.detectChanges();
+
+    const publishBtn = fixture.nativeElement.querySelector('.publish-btn') as HTMLButtonElement;
+    expect(publishBtn.disabled).toBe(true);
+    http.verify();
+  });
+
+  it('enables the publish button when the draft graph has content', () => {
+    const { http, fixture } = setup();
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/flows/f-1').flush(FLOW_DRAFT);
+    http.expectOne('/bff/api/v1/flows/f-1/versions').flush([]);
+    fixture.detectChanges();
+
+    const publishBtn = fixture.nativeElement.querySelector('.publish-btn') as HTMLButtonElement;
+    expect(publishBtn.disabled).toBe(false);
+    http.verify();
+  });
+
   it('saves draft changes', () => {
     const { http, fixture } = setup();
     fixture.detectChanges();

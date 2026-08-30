@@ -45,11 +45,6 @@ export class FlowListComponent implements OnInit {
     this.router.navigate(['/integration/flows', flow.id]);
   }
 
-  openExecutions(flow: Flow, event: Event): void {
-    event.stopPropagation();
-    this.router.navigate(['/integration/flows', flow.id, 'executions']);
-  }
-
   statusBadgeClass(status: FlowStatus): string {
     return 'badge status-' + status.toLowerCase();
   }
