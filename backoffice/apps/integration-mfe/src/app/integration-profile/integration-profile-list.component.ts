@@ -4,6 +4,7 @@ import { Router } from '@angular/router';
 import { IntegrationProfile, SyncDirection } from './integration-profile.model';
 import { IntegrationProfileService } from './integration-profile.service';
 import { IntegrationProfileWizardComponent } from './integration-profile-wizard.component';
+import { IntegrationTabsComponent } from '../shared/integration-tabs.component';
 
 type ProfileListState = 'loading' | 'ready' | 'empty' | 'session-expired' | 'forbidden' | 'unavailable';
 type DirectionFilter = 'ALL' | SyncDirection;
@@ -20,7 +21,7 @@ export const WINDOW = new InjectionToken<BrowserWindow>('WINDOW', {
   changeDetection: ChangeDetectionStrategy.OnPush,
   selector: 'app-integration-profile-list',
   standalone: true,
-  imports: [IntegrationProfileWizardComponent],
+  imports: [IntegrationProfileWizardComponent, IntegrationTabsComponent],
   templateUrl: './integration-profile-list.component.html',
   styleUrl: './integration-profile-list.component.css',
 })
