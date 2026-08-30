@@ -128,4 +128,51 @@ export class GatewayProxyController {
   getCredentials(@Req() request: AuthenticatedRequest) {
     return this.gatewayProxy.getCredentials(request.session.tokens!.access_token!);
   }
+
+  @Get('flows')
+  getFlows(@Req() request: AuthenticatedRequest) {
+    return this.gatewayProxy.getFlows(request.session.tokens!.access_token!);
+  }
+
+  @Get('flows/:flowId')
+  getFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {
+    return this.gatewayProxy.getFlow(request.session.tokens!.access_token!, flowId);
+  }
+
+  @Post('flows')
+  @HttpCode(HttpStatus.CREATED)
+  createFlow(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.gatewayProxy.createFlow(request.session.tokens!.access_token!, body);
+  }
+
+  @Put('flows/:flowId')
+  updateFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string, @Body() body: unknown) {
+    return this.gatewayProxy.updateFlow(request.session.tokens!.access_token!, flowId, body);
+  }
+
+  @Get('flows/:flowId/versions')
+  listFlowVersions(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {
+    return this.gatewayProxy.listFlowVersions(request.session.tokens!.access_token!, flowId);
+  }
+
+  @Post('flows/:flowId/versions/publish')
+  @HttpCode(HttpStatus.CREATED)
+  publishFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {
+    return this.gatewayProxy.publishFlow(request.session.tokens!.access_token!, flowId);
+  }
+
+  @Post('flows/:flowId/versions/:versionNumber/rollback')
+  rollbackFlow(
+    @Req() request: AuthenticatedRequest,
+    @Param('flowId') flowId: string,
+    @Param('versionNumber') versionNumber: string,
+  ) {
+    return this.gatewayProxy.rollbackFlow(request.session.tokens!.access_token!, flowId, Number(versionNumber));
+  }
+
+  @Delete('flows/:flowId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  archiveFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {
+    return this.gatewayProxy.archiveFlow(request.session.tokens!.access_token!, flowId);
+  }
 }

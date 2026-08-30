@@ -43,6 +43,14 @@ describe('Gateway profile proxy', () => {
         { path: 'bff/api/v1/integration-profiles/:profileId', method: RequestMethod.DELETE },
         { path: 'bff/api/v1/integration-profiles/:profileId/sync', method: RequestMethod.POST },
         { path: 'bff/api/v1/integration-profiles/:profileId/mapping/dry-run', method: RequestMethod.POST },
+        { path: 'bff/api/v1/flows', method: RequestMethod.GET },
+        { path: 'bff/api/v1/flows', method: RequestMethod.POST },
+        { path: 'bff/api/v1/flows/:flowId', method: RequestMethod.GET },
+        { path: 'bff/api/v1/flows/:flowId', method: RequestMethod.PUT },
+        { path: 'bff/api/v1/flows/:flowId', method: RequestMethod.DELETE },
+        { path: 'bff/api/v1/flows/:flowId/versions', method: RequestMethod.GET },
+        { path: 'bff/api/v1/flows/:flowId/versions/publish', method: RequestMethod.POST },
+        { path: 'bff/api/v1/flows/:flowId/versions/:versionNumber/rollback', method: RequestMethod.POST },
         { path: 'bff/api/v1/inbox/dlq/replay', method: RequestMethod.POST },
         { path: 'bff/api/v1/messages', method: RequestMethod.GET },
         { path: 'bff/api/v1/messages/:direction/:id', method: RequestMethod.GET },
@@ -253,5 +261,59 @@ describe('Gateway profile proxy', () => {
       .get('/bff/api/v1/integration-profiles/missing')
       .set('Cookie', 'session=authenticated')
       .expect(404, problem);
+  });
+
+  it('proxies flow creation with the session access token', async () => {
+    const postSpy = jest.spyOn(axios, 'post').mockResolvedValue({ data: { id: 'f-1', code: 'flow/x' } });
+
+    const response = await request(app.getHttpServer())
+      .post('/bff/api/v1/flows')
+      .set('Cookie', 'session=authenticated')
+      .send({ code: 'flow/x', name: 'X' });
+
+    expect(response.status).toBe(HttpStatus.CREATED === undefined ? 201 : HttpStatus.CREATED);
+    expect(postSpy).toHaveBeenCalledWith(
+      'http://gateway.internal/api/v1/flows',
+      { code: 'flow/x', name: 'X' },
+      { headers: { Authorization: 'Bearer session-access-token' } },
+    );
+  });
+
+  it('proxies flow listing with the session access token', async () => {
+    const getSpy = jest.spyOn(axios, 'get').mockResolvedValue({ data: [] });
+
+    await request(app.getHttpServer()).get('/bff/api/v1/flows').set('Cookie', 'session=authenticated');
+
+    expect(getSpy).toHaveBeenCalledWith('http://gateway.internal/api/v1/flows', {
+      headers: { Authorization: 'Bearer session-access-token' },
+    });
+  });
+
+  it('proxies publishing a flow version', async () => {
+    const postSpy = jest.spyOn(axios, 'post').mockResolvedValue({ data: { versionNumber: 1 } });
+
+    await request(app.getHttpServer())
+      .post('/bff/api/v1/flows/f-1/versions/publish')
+      .set('Cookie', 'session=authenticated');
+
+    expect(postSpy).toHaveBeenCalledWith(
+      'http://gateway.internal/api/v1/flows/f-1/versions/publish',
+      {},
+      { headers: { Authorization: 'Bearer session-access-token' } },
+    );
+  });
+
+  it('proxies rolling back a flow to an earlier version', async () => {
+    const postSpy = jest.spyOn(axios, 'post').mockResolvedValue({ data: { versionNumber: 1 } });
+
+    await request(app.getHttpServer())
+      .post('/bff/api/v1/flows/f-1/versions/1/rollback')
+      .set('Cookie', 'session=authenticated');
+
+    expect(postSpy).toHaveBeenCalledWith(
+      'http://gateway.internal/api/v1/flows/f-1/versions/1/rollback',
+      {},
+      { headers: { Authorization: 'Bearer session-access-token' } },
+    );
   });
 });

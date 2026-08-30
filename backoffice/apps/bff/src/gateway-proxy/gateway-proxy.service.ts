@@ -67,6 +67,38 @@ export class GatewayProxyService {
     return this.forward('get', '/api/v1/credentials', accessToken);
   }
 
+  getFlows(accessToken: string): Promise<unknown> {
+    return this.forward('get', '/api/v1/flows', accessToken);
+  }
+
+  getFlow(accessToken: string, flowId: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/flows/${flowId}`, accessToken);
+  }
+
+  createFlow(accessToken: string, body: unknown): Promise<unknown> {
+    return this.forward('post', '/api/v1/flows', accessToken, body);
+  }
+
+  updateFlow(accessToken: string, flowId: string, body: unknown): Promise<unknown> {
+    return this.forward('put', `/api/v1/flows/${flowId}`, accessToken, body);
+  }
+
+  listFlowVersions(accessToken: string, flowId: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/flows/${flowId}/versions`, accessToken);
+  }
+
+  publishFlow(accessToken: string, flowId: string): Promise<unknown> {
+    return this.forward('post', `/api/v1/flows/${flowId}/versions/publish`, accessToken, {});
+  }
+
+  rollbackFlow(accessToken: string, flowId: string, versionNumber: number): Promise<unknown> {
+    return this.forward('post', `/api/v1/flows/${flowId}/versions/${versionNumber}/rollback`, accessToken, {});
+  }
+
+  archiveFlow(accessToken: string, flowId: string): Promise<unknown> {
+    return this.forward('delete', `/api/v1/flows/${flowId}`, accessToken);
+  }
+
   private async forward(method: HttpMethod, path: string, accessToken: string, body?: unknown): Promise<unknown> {
     const url = `${this.config.getOrThrow<string>('GATEWAY_URI')}${path}`;
     const options = { headers: { Authorization: `Bearer ${accessToken}` } };
