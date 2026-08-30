@@ -134,6 +134,10 @@ button { font-family: inherit; font-size: inherit; color: inherit; }
 
 .badge.active { color: var(--ok); background: color-mix(in oklab, var(--ok) 15%, var(--surface)); }
 .badge.inactive { color: var(--text-muted); background: var(--surface-2); }
+.badge.error { color: var(--err); background: color-mix(in oklab, var(--err) 15%, var(--surface)); }
+.badge.degraded { color: var(--warn); background: color-mix(in oklab, var(--warn) 15%, var(--surface)); }
+.badge.paused { color: var(--text-muted); background: var(--surface-2); }
+.badge.draft { color: var(--text-dim); background: var(--surface-2); }
 .badge.dir-inbound { color: var(--dir-in); background: color-mix(in oklab, var(--dir-in) 15%, var(--surface)); }
 .badge.dir-outbound { color: var(--dir-out); background: color-mix(in oklab, var(--dir-out) 15%, var(--surface)); }
 .badge.dir-bidirectional { color: var(--accent-fg); background: var(--accent-tint); }
