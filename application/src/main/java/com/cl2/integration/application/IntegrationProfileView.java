@@ -15,6 +15,7 @@ public record IntegrationProfileView(
         SourceOfTruth sourceOfTruth,
         IntegrationProfileConfiguration configuration,
         boolean active,
+        boolean paused,
         Instant createdAt,
         Instant updatedAt,
         long version) {
@@ -22,6 +23,15 @@ public record IntegrationProfileView(
     public IntegrationProfileView(UUID id, UUID tenantId, String businessDomain, String externalSource,
                                   SyncDirection direction, SourceOfTruth sourceOfTruth,
                                   boolean active, Instant createdAt, Instant updatedAt, long version) {
-        this(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, null, active, createdAt, updatedAt, version);
+        this(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, null, active, false,
+                createdAt, updatedAt, version);
+    }
+
+    public IntegrationProfileView(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                  SyncDirection direction, SourceOfTruth sourceOfTruth,
+                                  IntegrationProfileConfiguration configuration, boolean active,
+                                  Instant createdAt, Instant updatedAt, long version) {
+        this(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, configuration, active, false,
+                createdAt, updatedAt, version);
     }
 }

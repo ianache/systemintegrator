@@ -162,6 +162,33 @@ class IntegrationProfileServiceTest {
         assertThat(repository.requestedTenantIds).containsOnly(OTHER_TENANT_ID);
     }
 
+    @Test
+    void pausePersistsThePausedFlag() {
+        IntegrationProfileView created = service.create(TENANT_ID, createCommand("orders", "erp"));
+
+        IntegrationProfileView paused = service.pause(TENANT_ID, created.id());
+
+        assertThat(paused.paused()).isTrue();
+    }
+
+    @Test
+    void resumeClearsThePausedFlag() {
+        IntegrationProfileView created = service.create(TENANT_ID, createCommand("orders", "erp"));
+        service.pause(TENANT_ID, created.id());
+
+        IntegrationProfileView resumed = service.resume(TENANT_ID, created.id());
+
+        assertThat(resumed.paused()).isFalse();
+    }
+
+    @Test
+    void pauseThrowsNotFoundForAnotherTenantsProfile() {
+        IntegrationProfileView created = service.create(TENANT_ID, createCommand("orders", "erp"));
+
+        assertThatThrownBy(() -> service.pause(OTHER_TENANT_ID, created.id()))
+                .isInstanceOf(IntegrationProfileNotFoundException.class);
+    }
+
     private CreateIntegrationProfileCommand createCommand(String businessDomain, String externalSource) {
         return new CreateIntegrationProfileCommand(businessDomain, externalSource, SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
     }

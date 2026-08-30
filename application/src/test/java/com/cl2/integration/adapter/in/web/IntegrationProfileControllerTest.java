@@ -25,6 +25,7 @@ import com.cl2.integration.domain.model.SyncDirection;
 import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
+import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.autoconfigure.web.servlet.WebMvcTest;
@@ -51,6 +52,14 @@ class IntegrationProfileControllerTest {
 
     @MockitoBean
     private com.cl2.integration.integration.transformation.MappingDryRunService mappingDryRunService;
+
+    @MockitoBean
+    private com.cl2.integration.integration.sync.SyncStateRepository syncStateRepository;
+
+    @BeforeEach
+    void stubNoSyncStateByDefault() {
+        given(syncStateRepository.find(any())).willReturn(java.util.Optional.empty());
+    }
 
     @Test
     void triggersSyncForAProfileForTheTenantFromTheHeader() throws Exception {
@@ -326,6 +335,41 @@ class IntegrationProfileControllerTest {
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.output").doesNotExist())
                 .andExpect(jsonPath("$.error").value("Required field 'vin' missing from source path: $.vin"));
+    }
+
+    @Test
+    void pausesAProfile() throws Exception {
+        Instant now = Instant.parse("2026-08-30T00:00:00Z");
+        IntegrationProfileView pausedView = new IntegrationProfileView(PROFILE_ID, TENANT_ID, "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM, null, true, true, now, now, 1);
+        given(service.pause(TENANT_ID, PROFILE_ID)).willReturn(pausedView);
+
+        mockMvc.perform(post(BASE_PATH + "/{profileId}/pause", PROFILE_ID).header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paused").value(true))
+                .andExpect(jsonPath("$.status").value("PAUSED"));
+    }
+
+    @Test
+    void resumesAProfile() throws Exception {
+        given(service.resume(TENANT_ID, PROFILE_ID)).willReturn(profileView(TENANT_ID));
+
+        mockMvc.perform(post(BASE_PATH + "/{profileId}/resume", PROFILE_ID).header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.paused").value(false));
+    }
+
+    @Test
+    void returnsErrorStatusWhenTheLastSyncFailed() throws Exception {
+        given(service.get(TENANT_ID, PROFILE_ID)).willReturn(profileView(TENANT_ID));
+        given(syncStateRepository.find(PROFILE_ID)).willReturn(java.util.Optional.of(
+                new com.cl2.integration.integration.sync.SyncState(PROFILE_ID, null, java.time.Instant.parse("2026-08-30T00:00:00Z"),
+                        com.cl2.integration.integration.sync.SyncRunStatus.FAILED, "boom")));
+
+        mockMvc.perform(get(BASE_PATH + "/{profileId}", PROFILE_ID).header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.status").value("ERROR"))
+                .andExpect(jsonPath("$.lastSyncAt").value("2026-08-30T00:00:00Z"));
     }
 
     private IntegrationProfileView profileView(UUID tenantId) {

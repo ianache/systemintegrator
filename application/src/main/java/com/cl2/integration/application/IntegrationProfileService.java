@@ -67,10 +67,26 @@ public class IntegrationProfileService {
         publishEvent("IntegrationProfileDeactivated", deactivated);
     }
 
+    @Transactional
+    public IntegrationProfileView pause(UUID tenantId, UUID profileId) {
+        IntegrationProfile profile = repository.findById(tenantId, profileId);
+        IntegrationProfileView paused = toView(repository.save(tenantId, profile.pause()));
+        publishEvent("IntegrationProfilePaused", paused);
+        return paused;
+    }
+
+    @Transactional
+    public IntegrationProfileView resume(UUID tenantId, UUID profileId) {
+        IntegrationProfile profile = repository.findById(tenantId, profileId);
+        IntegrationProfileView resumed = toView(repository.save(tenantId, profile.resume()));
+        publishEvent("IntegrationProfileResumed", resumed);
+        return resumed;
+    }
+
     private IntegrationProfileView toView(IntegrationProfile profile) {
         return new IntegrationProfileView(profile.id(), profile.tenantId(), profile.businessDomain(), profile.externalSource(),
-                profile.direction(), profile.sourceOfTruth(), profile.configuration(), profile.active(), profile.createdAt(),
-                profile.updatedAt(), profile.version());
+                profile.direction(), profile.sourceOfTruth(), profile.configuration(), profile.active(), profile.paused(),
+                profile.createdAt(), profile.updatedAt(), profile.version());
     }
 
     private boolean identifiesDifferentActiveProfile(IntegrationProfile profile, UpdateIntegrationProfileCommand command) {

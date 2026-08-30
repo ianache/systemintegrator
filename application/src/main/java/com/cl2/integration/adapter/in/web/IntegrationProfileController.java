@@ -14,7 +14,10 @@ import com.cl2.integration.integration.transformation.MappingDryRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import jakarta.validation.Valid;
 import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
+import com.cl2.integration.integration.sync.SyncState;
+import com.cl2.integration.integration.sync.SyncStateRepository;
 import org.springframework.http.HttpStatus;
 import org.springframework.web.bind.annotation.DeleteMapping;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -37,16 +40,19 @@ public class IntegrationProfileController {
     private final IntegrationProfileService service;
     private final IntegrationSyncService syncService;
     private final MappingDryRunService mappingDryRunService;
+    private final SyncStateRepository syncStateRepository;
     private final ObjectMapper objectMapper;
 
     public IntegrationProfileController(
             IntegrationProfileService service,
             IntegrationSyncService syncService,
             MappingDryRunService mappingDryRunService,
+            SyncStateRepository syncStateRepository,
             ObjectMapper objectMapper) {
         this.service = service;
         this.syncService = syncService;
         this.mappingDryRunService = mappingDryRunService;
+        this.syncStateRepository = syncStateRepository;
         this.objectMapper = objectMapper;
     }
 
@@ -54,9 +60,9 @@ public class IntegrationProfileController {
     @ResponseStatus(HttpStatus.CREATED)
     public IntegrationProfileResponse create(@Valid @RequestBody CreateIntegrationProfileRequest request) {
         IntegrationProfileConfiguration configuration = request.configurationRequest().toDomain(objectMapper);
-        return IntegrationProfileResponse.from(service.create(TenantContext.requireTenantId(),
+        return toResponse(service.create(TenantContext.requireTenantId(),
                 new CreateIntegrationProfileCommand(request.businessDomain(), request.externalSource(), request.syncDirection(),
-                        request.sourceOfTruth(), configuration)), objectMapper);
+                        request.sourceOfTruth(), configuration)));
     }
 
     @PostMapping("/{profileId}/sync")
@@ -69,13 +75,13 @@ public class IntegrationProfileController {
     @GetMapping
     public List<IntegrationProfileResponse> list(@RequestParam(defaultValue = "true") boolean activeOnly) {
         return service.list(TenantContext.requireTenantId(), activeOnly).stream()
-                .map(view -> IntegrationProfileResponse.from(view, objectMapper))
+                .map(this::toResponse)
                 .toList();
     }
 
     @GetMapping("/{profileId}")
     public IntegrationProfileResponse get(@PathVariable UUID profileId) {
-        return IntegrationProfileResponse.from(service.get(TenantContext.requireTenantId(), profileId), objectMapper);
+        return toResponse(service.get(TenantContext.requireTenantId(), profileId));
     }
 
     @PutMapping("/{profileId}")
@@ -83,9 +89,19 @@ public class IntegrationProfileController {
             @PathVariable UUID profileId,
             @Valid @RequestBody UpdateIntegrationProfileRequest request) {
         IntegrationProfileConfiguration configuration = request.configurationRequest().toDomain(objectMapper);
-        return IntegrationProfileResponse.from(service.update(TenantContext.requireTenantId(), profileId,
+        return toResponse(service.update(TenantContext.requireTenantId(), profileId,
                 new UpdateIntegrationProfileCommand(request.businessDomain(), request.externalSource(), request.syncDirection(),
-                        request.sourceOfTruth(), configuration, request.expectedVersion())), objectMapper);
+                        request.sourceOfTruth(), configuration, request.expectedVersion())));
+    }
+
+    @PostMapping("/{profileId}/pause")
+    public IntegrationProfileResponse pause(@PathVariable UUID profileId) {
+        return toResponse(service.pause(TenantContext.requireTenantId(), profileId));
+    }
+
+    @PostMapping("/{profileId}/resume")
+    public IntegrationProfileResponse resume(@PathVariable UUID profileId) {
+        return toResponse(service.resume(TenantContext.requireTenantId(), profileId));
     }
 
     @PostMapping("/{profileId}/mapping/dry-run")
@@ -97,5 +113,10 @@ public class IntegrationProfileController {
     @ResponseStatus(HttpStatus.NO_CONTENT)
     public void deactivate(@PathVariable UUID profileId) {
         service.deactivate(TenantContext.requireTenantId(), profileId);
+    }
+
+    private IntegrationProfileResponse toResponse(com.cl2.integration.application.IntegrationProfileView view) {
+        Optional<SyncState> syncState = syncStateRepository.find(view.id());
+        return IntegrationProfileResponse.from(view, syncState, objectMapper);
     }
 }
