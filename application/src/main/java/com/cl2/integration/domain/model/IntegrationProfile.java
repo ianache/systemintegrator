@@ -16,13 +16,14 @@ public final class IntegrationProfile {
     private final SourceOfTruth sourceOfTruth;
     private final IntegrationProfileConfiguration configuration;
     private final boolean active;
+    private final boolean paused;
     private final Instant createdAt;
     private final Instant updatedAt;
     private final long version;
 
     private IntegrationProfile(UUID id, UUID tenantId, String businessDomain, String externalSource,
                                SyncDirection direction, SourceOfTruth sourceOfTruth,
-                               IntegrationProfileConfiguration configuration, boolean active,
+                               IntegrationProfileConfiguration configuration, boolean active, boolean paused,
                                Instant createdAt, Instant updatedAt, long version) {
         this.id = requireId(id, "id");
         this.tenantId = requireId(tenantId, "tenantId");
@@ -32,6 +33,7 @@ public final class IntegrationProfile {
         this.sourceOfTruth = Objects.requireNonNull(sourceOfTruth, "sourceOfTruth must not be null");
         this.configuration = configuration;
         this.active = active;
+        this.paused = paused;
         this.createdAt = Objects.requireNonNull(createdAt, "createdAt must not be null");
         this.updatedAt = Objects.requireNonNull(updatedAt, "updatedAt must not be null");
         this.version = version;
@@ -47,7 +49,7 @@ public final class IntegrationProfile {
                                             IntegrationProfileConfiguration configuration) {
         Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                configuration, true, now, now, 0);
+                configuration, true, false, now, now, 0);
     }
 
     public static IntegrationProfile rehydrate(UUID id, UUID tenantId, String businessDomain, String externalSource,
@@ -61,8 +63,16 @@ public final class IntegrationProfile {
                                                 SyncDirection direction, SourceOfTruth sourceOfTruth,
                                                 IntegrationProfileConfiguration configuration, boolean active,
                                                 Instant createdAt, Instant updatedAt, long version) {
+        return rehydrate(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth, configuration,
+                active, false, createdAt, updatedAt, version);
+    }
+
+    public static IntegrationProfile rehydrate(UUID id, UUID tenantId, String businessDomain, String externalSource,
+                                                SyncDirection direction, SourceOfTruth sourceOfTruth,
+                                                IntegrationProfileConfiguration configuration, boolean active,
+                                                boolean paused, Instant createdAt, Instant updatedAt, long version) {
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                configuration, active, createdAt, updatedAt, version);
+                configuration, active, paused, createdAt, updatedAt, version);
     }
 
     public IntegrationProfile update(String businessDomain, String externalSource, SyncDirection direction,
@@ -75,7 +85,7 @@ public final class IntegrationProfile {
                                      long expectedVersion) {
         requireExpectedVersion(expectedVersion);
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                configuration, active, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
+                configuration, active, paused, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
     }
 
     public IntegrationProfile deactivate() {
@@ -83,7 +93,27 @@ public final class IntegrationProfile {
             return this;
         }
         return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                configuration, false, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
+                configuration, false, paused, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
+    }
+
+    public IntegrationProfile pause() {
+        if (paused) {
+            return this;
+        }
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                configuration, active, true, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
+    }
+
+    public IntegrationProfile resume() {
+        if (!paused) {
+            return this;
+        }
+        return new IntegrationProfile(id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
+                configuration, active, false, createdAt, Instant.now().truncatedTo(ChronoUnit.MICROS), version + 1);
+    }
+
+    public boolean paused() {
+        return paused;
     }
 
     public UUID id() {

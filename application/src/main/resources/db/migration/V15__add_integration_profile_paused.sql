@@ -1,0 +1,2 @@
+ALTER TABLE integration_profile
+    ADD COLUMN paused BOOLEAN NOT NULL DEFAULT FALSE;

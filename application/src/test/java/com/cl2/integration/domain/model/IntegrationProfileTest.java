@@ -173,6 +173,56 @@ class IntegrationProfileTest {
         assertThat(profile.version()).isEqualTo(7);
     }
 
+    @Test
+    void pauseSetsPausedAndBumpsVersion() {
+        IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), UUID.randomUUID(), "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
+
+        IntegrationProfile paused = profile.pause();
+
+        assertThat(paused.paused()).isTrue();
+        assertThat(paused.version()).isEqualTo(1);
+    }
+
+    @Test
+    void pauseIsANoOpWhenAlreadyPaused() {
+        IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), UUID.randomUUID(), "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM).pause();
+
+        IntegrationProfile pausedAgain = profile.pause();
+
+        assertThat(pausedAgain.version()).isEqualTo(profile.version());
+    }
+
+    @Test
+    void resumeClearsPausedAndBumpsVersion() {
+        IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), UUID.randomUUID(), "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM).pause();
+
+        IntegrationProfile resumed = profile.resume();
+
+        assertThat(resumed.paused()).isFalse();
+        assertThat(resumed.version()).isEqualTo(2);
+    }
+
+    @Test
+    void resumeIsANoOpWhenNotPaused() {
+        IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), UUID.randomUUID(), "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
+
+        IntegrationProfile resumedAgain = profile.resume();
+
+        assertThat(resumedAgain.version()).isEqualTo(profile.version());
+    }
+
+    @Test
+    void newProfilesStartUnpaused() {
+        IntegrationProfile profile = IntegrationProfile.create(UUID.randomUUID(), UUID.randomUUID(), "orders", "erp",
+                SyncDirection.INBOUND, SourceOfTruth.PLATFORM);
+
+        assertThat(profile.paused()).isFalse();
+    }
+
     private IntegrationProfile createProfile() {
         return IntegrationProfile.create(
                 PROFILE_ID, TENANT_ID, "orders", "erp", SyncDirection.BIDIRECTIONAL, SourceOfTruth.PLATFORM);

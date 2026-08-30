@@ -41,6 +41,7 @@ interface SpringDataIntegrationProfileRepository extends Repository<IntegrationP
                 profile.rateLimitPolicyJson = :rateLimitPolicyJson,
                 profile.extractionConfigJson = :extractionConfigJson,
                 profile.active = :active,
+                profile.paused = :paused,
                 profile.updatedAt = :updatedAt,
                 profile.version = profile.version + 1
             where profile.tenantId = :tenantId
@@ -67,5 +68,6 @@ interface SpringDataIntegrationProfileRepository extends Repository<IntegrationP
             @Param("rateLimitPolicyJson") String rateLimitPolicyJson,
             @Param("extractionConfigJson") String extractionConfigJson,
             @Param("active") boolean active,
+            @Param("paused") boolean paused,
             @Param("updatedAt") java.time.Instant updatedAt);
 }

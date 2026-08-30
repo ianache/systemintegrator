@@ -57,7 +57,7 @@ class IntegrationProfilePersistenceAdapter implements IntegrationProfileReposito
                     config != null ? config.retryPolicy() : null,
                     config != null ? config.rateLimitPolicy() : null,
                     config != null ? config.extractionConfig() : null,
-                    profile.active(), profile.updatedAt());
+                    profile.active(), profile.paused(), profile.updatedAt());
             if (updatedRows == 0) {
                 throw new IntegrationProfileConflictException("Integration profile version is stale");
             }

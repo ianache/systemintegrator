@@ -226,6 +226,18 @@ class IntegrationProfilePersistenceAdapterTest {
                 .containsExactlyInAnyOrder(jdbcProfileTenantOne.id(), jdbcProfileTenantTwo.id());
     }
 
+    @Test
+    void pausedFlagRoundTripsThroughSaveAndFindById() {
+        IntegrationProfile profile = adapter.save(TENANT_ID, IntegrationProfile.create(UUID.randomUUID(), TENANT_ID,
+                "orders", "erp", SyncDirection.INBOUND, SourceOfTruth.PLATFORM));
+
+        IntegrationProfile paused = adapter.save(TENANT_ID, profile.pause());
+
+        assertThat(paused.paused()).isTrue();
+        IntegrationProfile reloaded = adapter.findById(TENANT_ID, profile.id());
+        assertThat(reloaded.paused()).isTrue();
+    }
+
     private IntegrationProfile profile(UUID tenantId, String businessDomain, String externalSource) {
         return IntegrationProfile.create(
                 UUID.randomUUID(), tenantId, businessDomain, externalSource,

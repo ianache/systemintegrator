@@ -88,6 +88,9 @@ class IntegrationProfileJpaEntity {
     @Column(nullable = false)
     private boolean active;
 
+    @Column(nullable = false)
+    private boolean paused;
+
     @Version
     @Column(nullable = false)
     private long version;
@@ -123,6 +126,7 @@ class IntegrationProfileJpaEntity {
             this.extractionConfigJson = config.extractionConfig();
         }
         this.active = profile.active();
+        this.paused = profile.paused();
         this.version = profile.version();
         this.createdAt = toMysqlTimestamp(profile.createdAt());
         this.updatedAt = toMysqlTimestamp(profile.updatedAt());
@@ -146,7 +150,7 @@ class IntegrationProfileJpaEntity {
         }
         return IntegrationProfile.rehydrate(
                 id, tenantId, businessDomain, externalSource, direction, sourceOfTruth,
-                config, active, createdAt, updatedAt, version);
+                config, active, paused, createdAt, updatedAt, version);
     }
 
     private static Instant toMysqlTimestamp(Instant timestamp) {
