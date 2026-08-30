@@ -108,6 +108,73 @@ class FlowServiceTest {
         assertThat(service.get(TENANT_ID, created.id()).status()).isEqualTo(FlowStatus.OBSOLETE);
     }
 
+    @Test
+    void publishRejectsAnEmptyDraft() {
+        FlowView created = service.create(TENANT_ID, new CreateFlowCommand("flow/x", "X"));
+
+        assertThatThrownBy(() -> service.publish(TENANT_ID, created.id(), "user@tenant"))
+                .isInstanceOf(IllegalArgumentException.class);
+    }
+
+    @Test
+    void publishCreatesVersionOneAndMarksTheFlowPublished() {
+        FlowView created = service.create(TENANT_ID, new CreateFlowCommand("flow/x", "X"));
+        service.updateDraft(TENANT_ID, created.id(),
+                new UpdateFlowDraftCommand("X", null, "{\"nodes\":[{\"id\":\"n1\"}]}", 0));
+
+        FlowVersionView published = service.publish(TENANT_ID, created.id(), "user@tenant");
+
+        assertThat(published.versionNumber()).isEqualTo(1);
+        assertThat(published.state()).isEqualTo(com.cl2.integration.domain.model.FlowVersionState.ACTIVE);
+        assertThat(published.publishedBy()).isEqualTo("user@tenant");
+        assertThat(service.get(TENANT_ID, created.id()).status()).isEqualTo(FlowStatus.PUBLISHED);
+        assertThat(service.get(TENANT_ID, created.id()).activeVersionNumber()).isEqualTo(1);
+    }
+
+    @Test
+    void publishingASecondVersionSupersedesTheFirst() {
+        FlowView created = service.create(TENANT_ID, new CreateFlowCommand("flow/x", "X"));
+        service.updateDraft(TENANT_ID, created.id(), new UpdateFlowDraftCommand("X", null, "{\"nodes\":[]}", 0));
+        service.publish(TENANT_ID, created.id(), "user@tenant");
+        service.updateDraft(TENANT_ID, created.id(), new UpdateFlowDraftCommand("X", null, "{\"nodes\":[{\"id\":\"n1\"}]}", 2));
+
+        FlowVersionView secondVersion = service.publish(TENANT_ID, created.id(), "user@tenant");
+
+        assertThat(secondVersion.versionNumber()).isEqualTo(2);
+        List<FlowVersionView> versions = service.listVersions(TENANT_ID, created.id());
+        assertThat(versions).hasSize(2);
+        assertThat(versions.get(0).versionNumber()).isEqualTo(2);
+        assertThat(versions.get(0).state()).isEqualTo(com.cl2.integration.domain.model.FlowVersionState.ACTIVE);
+        assertThat(versions.get(1).versionNumber()).isEqualTo(1);
+        assertThat(versions.get(1).state()).isEqualTo(com.cl2.integration.domain.model.FlowVersionState.PUBLISHED);
+    }
+
+    @Test
+    void rollbackReactivatesAnOlderVersionAndMarksTheCurrentOneRolledBack() {
+        FlowView created = service.create(TENANT_ID, new CreateFlowCommand("flow/x", "X"));
+        service.updateDraft(TENANT_ID, created.id(), new UpdateFlowDraftCommand("X", null, "{\"nodes\":[]}", 0));
+        service.publish(TENANT_ID, created.id(), "user@tenant");
+        service.updateDraft(TENANT_ID, created.id(), new UpdateFlowDraftCommand("X", null, "{\"nodes\":[{\"id\":\"n1\"}]}", 2));
+        service.publish(TENANT_ID, created.id(), "user@tenant");
+
+        FlowVersionView rolledBackTo = service.rollback(TENANT_ID, created.id(), 1);
+
+        assertThat(rolledBackTo.versionNumber()).isEqualTo(1);
+        assertThat(rolledBackTo.state()).isEqualTo(com.cl2.integration.domain.model.FlowVersionState.ACTIVE);
+        List<FlowVersionView> versions = service.listVersions(TENANT_ID, created.id());
+        FlowVersionView versionTwo = versions.stream().filter(v -> v.versionNumber() == 2).findFirst().orElseThrow();
+        assertThat(versionTwo.state()).isEqualTo(com.cl2.integration.domain.model.FlowVersionState.ROLLED_BACK);
+        assertThat(service.get(TENANT_ID, created.id()).activeVersionNumber()).isEqualTo(1);
+    }
+
+    @Test
+    void rollbackToAnUnknownVersionThrowsNotFound() {
+        FlowView created = service.create(TENANT_ID, new CreateFlowCommand("flow/x", "X"));
+
+        assertThatThrownBy(() -> service.rollback(TENANT_ID, created.id(), 99))
+                .isInstanceOf(FlowNotFoundException.class);
+    }
+
     private static final class FakeFlowRepository implements FlowRepository {
 
         private final Map<UUID, Flow> flows = new HashMap<>();
