@@ -1,0 +1,78 @@
+<section class="page" aria-labelledby="flow-designer-heading">
+  <button type="button" class="btn-ghost back-link" (click)="back()">← Flows</button>
+
+  @if (state() === 'loading') {
+    <p class="state-message" aria-live="polite">Cargando flujo…</p>
+  } @else if (state() === 'not-found') {
+    <app-console-empty-state
+      title="Flujo no encontrado"
+      description="El flujo solicitado no existe o fue eliminado."
+    />
+  } @else if (state() === 'unavailable') {
+    <app-console-empty-state
+      title="Designer no disponible"
+      description="El motor de flujos todavía no está implementado en el backend."
+    >
+      <button type="button" class="btn" (click)="retry()">Reintentar</button>
+    </app-console-empty-state>
+  } @else if (flow(); as f) {
+    <div class="page-header">
+      <div>
+        <h1 id="flow-designer-heading">{{ f.name }}</h1>
+        <p class="mono cell-sub">
+          {{ f.code }} · {{ f.status }}
+          @if (f.activeVersionNumber !== null) { · v{{ f.activeVersionNumber }} activa }
+        </p>
+      </div>
+      <button type="button" class="btn" (click)="openExecutions()">Ver ejecuciones</button>
+    </div>
+
+    <div class="designer-grid">
+      <div class="card draft-editor">
+        <div class="card-header">Draft</div>
+        <div class="draft-fields">
+          <label>
+            <span class="mono">NAME</span>
+            <input [value]="nameDraft()" (input)="onNameInput($any($event.target).value)" />
+          </label>
+          <label>
+            <span class="mono">TRIGGER</span>
+            <input [value]="triggerDraft()" (input)="onTriggerInput($any($event.target).value)" placeholder="CRON */5" />
+          </label>
+          <label>
+            <span class="mono">GRAPH (JSON)</span>
+            <textarea [value]="graphDraft()" (input)="onGraphInput($any($event.target).value)" rows="12"></textarea>
+          </label>
+          @if (saveError(); as error) {
+            <p role="alert">{{ error }}</p>
+          }
+          @if (publishError(); as error) {
+            <p role="alert">{{ error }}</p>
+          }
+          <div class="draft-actions">
+            <button type="button" class="btn save-draft-btn" (click)="saveDraft()">Guardar cambios</button>
+            <button type="button" class="btn btn-primary publish-btn" (click)="publish()">Publicar</button>
+          </div>
+        </div>
+      </div>
+
+      <div class="card versions-panel">
+        <div class="card-header">Historial de versiones</div>
+        <div class="versions-list">
+          @for (version of versions(); track version.id) {
+            <div class="version-row">
+              <span class="mono version-number">v{{ version.versionNumber }}</span>
+              <span class="mono version-state">{{ version.state }}</span>
+              <span class="version-by cell-sub">{{ version.publishedBy }}</span>
+              @if (version.state !== 'ACTIVE') {
+                <button type="button" class="btn rollback-btn" (click)="rollback(version.versionNumber)">Rollback</button>
+              }
+            </div>
+          } @empty {
+            <p class="cell-sub">Sin versiones publicadas todavía.</p>
+          }
+        </div>
+      </div>
+    </div>
+  }
+</section>
