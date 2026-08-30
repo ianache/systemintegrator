@@ -1,0 +1,78 @@
+<section class="page" aria-labelledby="flows-heading">
+  <app-integration-tabs />
+  <div class="page-header">
+    <div>
+      <h1 id="flows-heading">Flows</h1>
+      <p>Un flujo es un grafo dirigido y versionado: fuentes, transformaciones, ramas y destinos conectados por pipes tipados.</p>
+    </div>
+    <button type="button" class="btn btn-primary new-flow-btn" (click)="openForm()">＋ Nuevo flujo</button>
+  </div>
+
+  @if (formOpen()) {
+    <form class="card new-flow-form" (submit)="submitCreate($event)">
+      <label>
+        <span class="mono">CODE</span>
+        <input name="code" [value]="newCode()" (input)="onCodeInput($any($event.target).value)" placeholder="flow/mi-flujo" required />
+      </label>
+      <label>
+        <span class="mono">NAME</span>
+        <input name="name" [value]="newName()" (input)="onNameInput($any($event.target).value)" placeholder="Mi flujo" required />
+      </label>
+      @if (createError(); as error) {
+        <p role="alert">{{ error }}</p>
+      }
+      <div class="new-flow-actions">
+        <button type="button" class="btn" (click)="closeForm()">Cancelar</button>
+        <button type="submit" class="btn btn-primary">Crear</button>
+      </div>
+    </form>
+  }
+
+  @if (state() === 'loading') {
+    <p class="state-message" aria-live="polite">Cargando flujos…</p>
+  } @else if (state() === 'unavailable') {
+    <app-console-empty-state
+      title="Flows no disponible"
+      description="El motor de flujos todavía no está implementado en el backend."
+    >
+      <button type="button" class="btn" (click)="load()">Reintentar</button>
+    </app-console-empty-state>
+  } @else if (state() === 'empty') {
+    <app-console-empty-state title="Sin flujos" description="No hay flujos configurados todavía." />
+  } @else {
+    <div class="card">
+      <table>
+        <caption class="visually-hidden">Flujos configurados</caption>
+        <thead>
+          <tr>
+            <th scope="col">Flujo</th>
+            <th scope="col">Estado</th>
+            <th scope="col">Versión activa</th>
+            <th scope="col">Nodos</th>
+            <th scope="col">Trigger</th>
+            <th scope="col"></th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (flow of flows(); track flow.id) {
+            <tr (click)="open(flow)" class="row">
+              <td class="cell-primary">
+                {{ flow.name }}
+                <div class="mono cell-sub">{{ flow.code }}</div>
+              </td>
+              <td><span [class]="statusBadgeClass(flow.status)">{{ flow.status }}</span></td>
+              <td class="mono">{{ flow.activeVersionNumber !== null ? ('v' + flow.activeVersionNumber) : '—' }}</td>
+              <td>{{ flow.nodeCount }} nodos</td>
+              <td class="mono cell-sub">{{ flow.triggerSummary ?? '—' }}</td>
+              <td>
+                <button type="button" class="btn" (click)="openExecutions(flow, $event)">Ver traza</button>
+              </td>
+            </tr>
+          } @empty {
+            <tr><td colspan="6">Ningún flujo coincide.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

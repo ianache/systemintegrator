@@ -1,0 +1,5 @@
+.new-flow-form { padding: 16px; display: flex; flex-direction: column; gap: 10px; max-width: 420px; }
+.new-flow-form label { display: flex; flex-direction: column; gap: 4px; font-size: 12px; }
+.new-flow-form input { border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; outline: none; }
+.new-flow-form input:focus { border-color: var(--accent); }
+.new-flow-actions { display: flex; justify-content: flex-end; gap: 8px; }
