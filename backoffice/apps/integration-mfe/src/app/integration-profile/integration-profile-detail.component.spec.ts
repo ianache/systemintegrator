@@ -191,9 +191,42 @@ describe('IntegrationProfileDetailComponent', () => {
 
     const activeChip = fixture.nativeElement.querySelector('.chip.active');
     expect(activeChip.textContent.trim()).toBe('FIELD_MAPPING');
-    expect(fixture.nativeElement.textContent).toContain('vin');
-    const sourcePathInput = fixture.nativeElement.querySelector('.mapping-row input') as HTMLInputElement;
+    const targetInput = fixture.nativeElement.querySelector('[data-testid="mapping-row-target"]') as HTMLInputElement;
+    expect(targetInput.value).toBe('vin');
+    const sourcePathInput = fixture.nativeElement.querySelector('[data-testid="mapping-row-source-path"]') as HTMLInputElement;
     expect(sourcePathInput.value).toBe('$.Vehiculo.Chasis');
+    const typeInput = fixture.nativeElement.querySelector('[data-testid="mapping-row-type"]') as HTMLInputElement;
+    expect(typeInput.value).toBe('STRING');
+  });
+
+  it('edits target, source path, transform, type and default value by typing (input event, not blur)', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, {
+      engine: 'FIELD_MAPPING',
+      fields: [{ target: 'vin', sourcePath: '$.old', transform: '', type: 'STRING', defaultValue: '', required: false }],
+    });
+
+    const setValue = (testId: string, value: string) => {
+      const input = fixture.nativeElement.querySelector(`[data-testid="${testId}"]`) as HTMLInputElement;
+      input.value = value;
+      input.dispatchEvent(new Event('input'));
+      fixture.detectChanges();
+    };
+
+    setValue('mapping-row-target', 'chassisNumber');
+    expect((fixture.nativeElement.querySelector('[data-testid="mapping-row-target"]') as HTMLInputElement).value).toBe('chassisNumber');
+
+    setValue('mapping-row-source-path', '$.new.path');
+    expect((fixture.nativeElement.querySelector('[data-testid="mapping-row-source-path"]') as HTMLInputElement).value).toBe('$.new.path');
+
+    setValue('mapping-row-transform', "#val.toUpperCase()");
+    expect((fixture.nativeElement.querySelector('[data-testid="mapping-row-transform"]') as HTMLInputElement).value).toBe("#val.toUpperCase()");
+
+    setValue('mapping-row-type', 'NUMBER');
+    expect((fixture.nativeElement.querySelector('[data-testid="mapping-row-type"]') as HTMLInputElement).value).toBe('NUMBER');
+
+    setValue('mapping-row-default', '0');
+    expect((fixture.nativeElement.querySelector('[data-testid="mapping-row-default"]') as HTMLInputElement).value).toBe('0');
   });
 
   it('adds and removes field-mapping rows', () => {
@@ -234,6 +267,61 @@ describe('IntegrationProfileDetailComponent', () => {
     expect(fixture.nativeElement.textContent).toContain('El payload de origen se entrega sin alteración');
   });
 
+  function openPolicyTab(fixture: any, configuration: Record<string, unknown> = {}): void {
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
+      ...FULL_PROFILE,
+      configuration: {
+        protocol: 'REST', connector: 'connector', adapter: 'adapter', endpoint: 'https://example.test',
+        credentialRef: null, mapping: null, transformation: null,
+        syncPolicy: { mode: 'EVENT_DRIVEN', trigger: 'vehicle.upserted.v1', batchSize: 200 },
+        retryPolicy: { maxAttempts: 5, backoff: 'EXPONENTIAL', initialIntervalMs: 2000 },
+        rateLimitPolicy: { requestsPerSecond: 25, burst: 50 }, extractionConfig: null,
+        ...configuration,
+      },
+    });
+    fixture.detectChanges();
+    (fixture.nativeElement.querySelectorAll('.tab')[3] as HTMLButtonElement).click();
+    fixture.detectChanges();
+  }
+
+  it('renders the visual policy controls from the saved policy objects', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openPolicyTab(fixture);
+
+    expect(fixture.nativeElement.querySelector('[data-testid="sync-mode"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="sync-trigger"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="sync-batch-size"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="retry-max-attempts"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="retry-backoff"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="rate-requests-per-second"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="rate-burst"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="circuit-breaker-status"]')?.textContent.trim()).toBe('CLOSED');
+    expect(fixture.nativeElement.querySelectorAll('textarea[name$="PolicyJson"]').length).toBe(0);
+  });
+
+  it('updates the policy JSON values through the visual controls before saving', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openPolicyTab(fixture);
+
+    const attempts = fixture.nativeElement.querySelector('[data-testid="retry-max-attempts"]') as HTMLInputElement;
+    attempts.value = '3';
+    attempts.dispatchEvent(new Event('input'));
+    const backoff = fixture.nativeElement.querySelector('[data-testid="retry-backoff"]') as HTMLSelectElement;
+    backoff.value = 'FIXED';
+    backoff.dispatchEvent(new Event('change'));
+    const requests = fixture.nativeElement.querySelector('[data-testid="rate-requests-per-second"]') as HTMLInputElement;
+    requests.value = '10';
+    requests.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+
+    (fixture.nativeElement.querySelector('[data-testid="save-profile"]') as HTMLButtonElement).click();
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1');
+    expect(request.request.body.retryPolicy).toMatchObject({ maxAttempts: 3, backoff: 'FIXED' });
+    expect(request.request.body.rateLimitPolicy).toMatchObject({ requestsPerSecond: 10, burst: 50 });
+    request.flush(FULL_PROFILE);
+  });
+
   it('runs a real dry-run and shows the transformation output', () => {
     const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
     openMapTab(fixture);
@@ -259,21 +347,9 @@ describe('IntegrationProfileDetailComponent', () => {
     expect(fixture.nativeElement.textContent).toContain("Required field 'vin' missing from source path: $.vin");
   });
 
-  it('computes a real retry sequence from the retry policy JSON typed by the user', () => {
+  it('computes the projected retry sequence from the visual retry controls', () => {
     const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
-    fixture.detectChanges();
-    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush(FULL_PROFILE);
-    fixture.detectChanges();
-
-    const polTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
-      (el) => (el as HTMLElement).textContent?.trim() === 'Políticas',
-    ) as HTMLButtonElement;
-    polTabButton.click();
-    fixture.detectChanges();
-
-    const retryArea = fixture.nativeElement.querySelector('[name="retryPolicyJson"]') as HTMLTextAreaElement;
-    retryArea.value = JSON.stringify({ maxAttempts: 4, backoff: 'EXPONENTIAL', initialIntervalMs: 2000 });
-    retryArea.dispatchEvent(new Event('input'));
+    openPolicyTab(fixture, { retryPolicy: { maxAttempts: 4, backoff: 'EXPONENTIAL', initialIntervalMs: 2000 } });
     fixture.detectChanges();
 
     expect(fixture.nativeElement.textContent).toContain('2000ms');

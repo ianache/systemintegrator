@@ -21,16 +21,25 @@
 .validation-note { margin: 0; font-size: 11px; color: var(--text-dim); }
 .wizard-error { margin: 12px 0 0; padding: 10px 13px; background: color-mix(in oklab, var(--err) 12%, var(--surface)); border: 1px solid var(--err); border-radius: 5px; color: var(--err); font-size: 12.5px; }
 
-.tab-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; max-width: 1400px; }
+.tab-grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; align-items: start; max-width: 1400px; min-width: 1040px; }
+.policy-fields { padding: 16px; display: flex; flex-direction: column; gap: 14px; }
+.policy-fields .field input,
+.policy-fields .field select { font-family: 'IBM Plex Mono', monospace; font-size: 12px; }
+.policy-fields .field select { background: var(--surface); }
 .json-status { margin-left: auto; color: var(--ok); }
 .json-status.err { color: var(--err); }
 .json-editor { width: 100%; min-height: 260px; border: 0; border-top: 1px solid var(--border); outline: none; resize: vertical; padding: 14px; font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; line-height: 1.6; background: var(--surface-2); color: var(--text); }
 .json-editor.small { min-height: 140px; }
-.retry-sequence { padding: 0 16px 16px; display: flex; flex-direction: column; gap: 8px; }
+.policy-fields .retry-sequence { background: var(--surface-2); border: 1px solid var(--border-soft); border-radius: 5px; padding: 11px 13px; display: flex; flex-direction: column; gap: 0; }
 .seq-label { font-size: 10px; color: var(--text-dim); letter-spacing: 0.07em; }
-.seq-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.policy-fields .seq-chips { display: flex; flex-wrap: wrap; gap: 5px; margin-top: 8px; }
 .seq-chip { background: var(--surface); border: 1px solid var(--border); border-radius: 3px; padding: 3px 7px; font-size: 10.5px; }
 .seq-chip.dlq { background: var(--accent-tint); border-color: var(--accent-tint-border); color: var(--accent-fg); }
+.circuit-breaker { display: flex; align-items: center; gap: 10px; border: 1px solid var(--border-soft); border-radius: 5px; padding: 11px 13px; }
+.circuit-breaker > div { display: flex; flex-direction: column; gap: 2px; }
+.circuit-title { font-size: 12.5px; font-weight: 500; }
+.circuit-note { font-size: 11px; color: var(--text-dim); }
+.circuit-status { margin-left: auto; font-size: 10.5px; font-weight: 600; color: var(--ok); background: color-mix(in oklab, var(--ok) 15%, var(--surface)); padding: 3px 8px; border-radius: 3px; }
 
 .inactive-note { font-size: 11.5px; color: var(--text-dim); }
 .sync-hint { margin: 0; padding: 14px 16px; font-size: 12px; color: var(--text-muted); line-height: 1.55; border-bottom: 1px solid var(--border-soft); }
@@ -80,7 +89,7 @@
 .mapping-row:hover { background: var(--surface-2); }
 
 .mapping-target { display: flex; align-items: center; gap: 5px; min-width: 0; overflow: hidden; }
-.mapping-target span.mono { font-size: 11.5px; font-weight: 600; overflow: hidden; text-overflow: ellipsis; }
+.mapping-target input.mono { font-size: 11.5px; font-weight: 600; }
 .mapping-required { color: var(--accent-fg); font-weight: 700; }
 
 .mapping-row input {
@@ -92,11 +101,11 @@
   min-width: 0;
 }
 .mapping-row input:focus { border-color: var(--accent-fg); }
-.mapping-row input:nth-of-type(2) { color: var(--text-muted); }
+.mapping-row input[data-testid="mapping-row-transform"] { color: var(--text-muted); }
 
 .mapping-type-cell { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
-.mapping-type-cell span.mono:first-child { font-size: 10px; color: var(--text-muted); white-space: nowrap; }
-.mapping-default { font-size: 10px; color: var(--text-dim); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mapping-type-cell input[data-testid="mapping-row-type"] { font-size: 10px; color: var(--text-muted); padding: 3px 6px; }
+.mapping-default { font-size: 10px; color: var(--text-dim); padding: 3px 6px; }
 
 .mapping-remove { background: none; border: 0; color: var(--text-dim); cursor: pointer; font-size: 14px; line-height: 1; }
 .mapping-remove:hover { color: var(--accent-fg); }

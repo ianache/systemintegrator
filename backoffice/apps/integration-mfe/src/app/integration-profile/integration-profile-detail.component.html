@@ -180,23 +180,41 @@
                       @for (row of mappingConfig().fields; track $index) {
                         <div class="mapping-row">
                           <div class="mapping-target">
-                            <span class="mono">{{ row.target }}</span>
+                            <input
+                              class="mono"
+                              data-testid="mapping-row-target"
+                              [value]="row.target"
+                              (input)="updateMappingRow($index, { target: $any($event.target).value })"
+                            />
                             @if (row.required) { <span class="mapping-required">*</span> }
                           </div>
                           <input
                             class="mono"
+                            data-testid="mapping-row-source-path"
                             [value]="row.sourcePath"
-                            (change)="updateMappingRow($index, { sourcePath: $any($event.target).value })"
+                            (input)="updateMappingRow($index, { sourcePath: $any($event.target).value })"
                           />
                           <input
                             class="mono"
+                            data-testid="mapping-row-transform"
                             placeholder="—"
                             [value]="row.transform"
-                            (change)="updateMappingRow($index, { transform: $any($event.target).value })"
+                            (input)="updateMappingRow($index, { transform: $any($event.target).value })"
                           />
                           <div class="mapping-type-cell">
-                            <span class="mono">{{ row.type }}</span>
-                            <span class="mono mapping-default">{{ row.defaultValue || '—' }}</span>
+                            <input
+                              class="mono"
+                              data-testid="mapping-row-type"
+                              [value]="row.type"
+                              (input)="updateMappingRow($index, { type: $any($event.target).value })"
+                            />
+                            <input
+                              class="mono mapping-default"
+                              data-testid="mapping-row-default"
+                              placeholder="—"
+                              [value]="row.defaultValue"
+                              (input)="updateMappingRow($index, { defaultValue: $any($event.target).value })"
+                            />
                           </div>
                           <button type="button" class="mapping-remove" (click)="removeMappingRow($index)" aria-label="Quitar regla">×</button>
                         </div>
@@ -252,36 +270,44 @@
           }
           @case ('pol') {
             <div data-testid="tab-pol" class="tab-grid-3">
-              <div class="card">
-                <div class="card-header">
-                  <span>Sync policy</span>
-                  <span class="mono json-status" [class.err]="!isJsonValid(edit.syncPolicyJson)">
-                    {{ isJsonValid(edit.syncPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
-                  </span>
+              <div class="card policy-card">
+                <div class="card-header"><span>Sync policy</span></div>
+                <div class="policy-fields">
+                  <label class="field">
+                    <span class="label">MODE</span>
+                    <select data-testid="sync-mode" [value]="syncPolicy().mode" (change)="updatePolicyField('syncPolicyJson', 'mode', $any($event.target).value)">
+                      <option value="EVENT_DRIVEN">EVENT_DRIVEN</option>
+                      <option value="SCHEDULED">SCHEDULED</option>
+                      <option value="ON_DEMAND">ON_DEMAND</option>
+                    </select>
+                  </label>
+                  <label class="field">
+                    <span class="label">TRIGGER</span>
+                    <input data-testid="sync-trigger" [value]="syncPolicy().trigger" (input)="updatePolicyField('syncPolicyJson', 'trigger', $any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">BATCH SIZE</span>
+                    <input data-testid="sync-batch-size" type="number" min="1" [value]="syncPolicy().batchSize" (input)="updatePolicyField('syncPolicyJson', 'batchSize', +$any($event.target).value)" />
+                  </label>
                 </div>
-                <textarea
-                  name="syncPolicyJson"
-                  class="json-editor"
-                  [value]="edit.syncPolicyJson"
-                  (input)="updateField('syncPolicyJson', $any($event.target).value)"
-                ></textarea>
               </div>
-              <div class="card">
-                <div class="card-header">
-                  <span>Retry & backoff</span>
-                  <span class="mono json-status" [class.err]="!isJsonValid(edit.retryPolicyJson)">
-                    {{ isJsonValid(edit.retryPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
-                  </span>
-                </div>
-                <textarea
-                  name="retryPolicyJson"
-                  class="json-editor small"
-                  [value]="edit.retryPolicyJson"
-                  (input)="updateField('retryPolicyJson', $any($event.target).value)"
-                ></textarea>
-                @if (retrySequence().length > 0) {
+              <div class="card policy-card">
+                <div class="card-header"><span>Retry &amp; backoff</span></div>
+                <div class="policy-fields">
+                  <label class="field">
+                    <span class="label">MAX ATTEMPTS</span>
+                    <input data-testid="retry-max-attempts" type="number" min="1" [value]="retryPolicy().maxAttempts" (input)="updatePolicyField('retryPolicyJson', 'maxAttempts', +$any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">BACKOFF</span>
+                    <select data-testid="retry-backoff" [value]="retryPolicy().backoff" (change)="updatePolicyField('retryPolicyJson', 'backoff', $any($event.target).value)">
+                      <option value="EXPONENTIAL">EXPONENTIAL · 2s ×2</option>
+                      <option value="FIXED">FIXED · 5s</option>
+                      <option value="LINEAR">LINEAR · 3s</option>
+                    </select>
+                  </label>
                   <div class="retry-sequence">
-                    <span class="mono seq-label">SECUENCIA CALCULADA</span>
+                    <span class="mono seq-label">SECUENCIA PROYECTADA</span>
                     <div class="seq-chips">
                       @for (step of retrySequence(); track $index) {
                         <span class="mono seq-chip">{{ step }}</span>
@@ -289,21 +315,27 @@
                       <span class="mono seq-chip dlq">→ DLQ</span>
                     </div>
                   </div>
-                }
-              </div>
-              <div class="card">
-                <div class="card-header">
-                  <span>Rate limit</span>
-                  <span class="mono json-status" [class.err]="!isJsonValid(edit.rateLimitPolicyJson)">
-                    {{ isJsonValid(edit.rateLimitPolicyJson) ? 'JSON válido' : 'JSON inválido' }}
-                  </span>
                 </div>
-                <textarea
-                  name="rateLimitPolicyJson"
-                  class="json-editor small"
-                  [value]="edit.rateLimitPolicyJson"
-                  (input)="updateField('rateLimitPolicyJson', $any($event.target).value)"
-                ></textarea>
+              </div>
+              <div class="card policy-card">
+                <div class="card-header"><span>Rate limit &amp; circuit breaker</span></div>
+                <div class="policy-fields">
+                  <label class="field">
+                    <span class="label">REQUESTS / SEGUNDO</span>
+                    <input data-testid="rate-requests-per-second" type="number" min="1" [value]="rateLimitPolicy().requestsPerSecond" (input)="updatePolicyField('rateLimitPolicyJson', 'requestsPerSecond', +$any($event.target).value)" />
+                  </label>
+                  <label class="field">
+                    <span class="label">BURST</span>
+                    <input data-testid="rate-burst" type="number" min="1" [value]="rateLimitPolicy().burst" (input)="updatePolicyField('rateLimitPolicyJson', 'burst', +$any($event.target).value)" />
+                  </label>
+                  <div class="circuit-breaker">
+                    <div>
+                      <span class="circuit-title">Circuit breaker</span>
+                      <span class="circuit-note">Resilience4j · abre al 50% de fallos</span>
+                    </div>
+                    <span data-testid="circuit-breaker-status" class="mono circuit-status">CLOSED</span>
+                  </div>
+                </div>
               </div>
             </div>
           }
