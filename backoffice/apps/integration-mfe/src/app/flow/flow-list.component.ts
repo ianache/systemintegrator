@@ -1,6 +1,6 @@
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
-import { Flow, FlowStatus } from './flow.model';
+import { Flow, FlowMetricsSummary, FlowStatus } from './flow.model';
 import { FlowService } from './flow.service';
 import { ConsoleEmptyStateComponent } from '../shared/console-empty-state.component';
 import { IntegrationTabsComponent } from '../shared/integration-tabs.component';
@@ -25,9 +25,20 @@ export class FlowListComponent implements OnInit {
   readonly newCode = signal('');
   readonly newName = signal('');
   readonly createError = signal<string | null>(null);
+  readonly metrics = signal<FlowMetricsSummary | null>(null);
+  readonly metricsUnavailable = signal(false);
 
   ngOnInit(): void {
     this.load();
+    this.loadMetrics();
+  }
+
+  loadMetrics(): void {
+    this.metricsUnavailable.set(false);
+    this.flowService.getMetricsSummary().subscribe({
+      next: (metrics) => this.metrics.set(metrics),
+      error: () => this.metricsUnavailable.set(true),
+    });
   }
 
   load(): void {

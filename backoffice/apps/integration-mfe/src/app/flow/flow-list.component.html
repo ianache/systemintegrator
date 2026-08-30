@@ -1,5 +1,27 @@
 <section class="page" aria-labelledby="flows-heading">
   <app-integration-tabs />
+  <div class="kpi-grid">
+    <div class="card kpi">
+      <span class="mono kpi-label">FLUJOS PUBLICADOS</span>
+      <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() ? '—' : (metrics()?.publishedFlowCount ?? '—') }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'con versión activa' }}</span>
+    </div>
+    <div class="card kpi">
+      <span class="mono kpi-label">EJECUCIONES 24H</span>
+      <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() ? '—' : (metrics()?.executions24h ?? '—') }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'últimas 24 horas' }}</span>
+    </div>
+    <div class="card kpi">
+      <span class="mono kpi-label">TASA DE ERROR</span>
+      <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() || !metrics() ? '—' : (metrics()!.errorRatePct + '%') }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'últimas 24 horas' }}</span>
+    </div>
+    <div class="card kpi">
+      <span class="mono kpi-label">P95 POR EJECUCIÓN</span>
+      <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() || metrics()?.p95DurationMs == null ? '—' : (metrics()!.p95DurationMs + 'ms') }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'últimas 24 horas' }}</span>
+    </div>
+  </div>
   <div class="page-header">
     <div>
       <h1 id="flows-heading">Flows</h1>

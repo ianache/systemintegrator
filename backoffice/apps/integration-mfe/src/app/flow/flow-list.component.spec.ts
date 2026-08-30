@@ -51,6 +51,12 @@ describe('FlowListComponent', () => {
     const listRequest = http.expectOne('/bff/api/v1/flows');
     expect(listRequest.request.method).toBe('GET');
     listRequest.flush([]);
+    http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
+      publishedFlowCount: 0,
+      executions24h: 0,
+      errorRatePct: 0,
+      p95DurationMs: null,
+    });
     fixture.detectChanges();
 
     // Verify the create button exists
@@ -93,6 +99,12 @@ describe('FlowListComponent', () => {
 
     const listRequest = http.expectOne('/bff/api/v1/flows');
     listRequest.flush([]);
+    http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
+      publishedFlowCount: 0,
+      executions24h: 0,
+      errorRatePct: 0,
+      p95DurationMs: null,
+    });
     fixture.detectChanges();
 
     const router = TestBed.inject(Router);
@@ -105,5 +117,41 @@ describe('FlowListComponent', () => {
         (route) => route.path === 'flows/:flowId' && route.component === FlowDesignerComponent,
       ),
     ).toBe(true);
+  });
+
+  it('renders the KPI cards from the metrics summary', () => {
+    const fixture = TestBed.createComponent(FlowListComponent);
+    fixture.detectChanges();
+
+    http.expectOne('/bff/api/v1/flows').flush([]);
+    http.expectOne('/bff/api/v1/flows/metrics/summary').flush({
+      publishedFlowCount: 3,
+      executions24h: 40,
+      errorRatePct: 2.5,
+      p95DurationMs: 810,
+    });
+    fixture.detectChanges();
+
+    const values = fixture.nativeElement.querySelectorAll('.kpi-value');
+    expect(values[0].textContent.trim()).toBe('3');
+    expect(values[1].textContent.trim()).toBe('40');
+    expect(values[2].textContent.trim()).toContain('2.5');
+    expect(values[3].textContent.trim()).toContain('810');
+  });
+
+  it('shows unavailable KPI cards when the metrics call fails', () => {
+    const fixture = TestBed.createComponent(FlowListComponent);
+    fixture.detectChanges();
+
+    http.expectOne('/bff/api/v1/flows').flush([]);
+    http.expectOne('/bff/api/v1/flows/metrics/summary').flush('error', {
+      status: 500,
+      statusText: 'Server Error',
+    });
+    fixture.detectChanges();
+
+    const values = fixture.nativeElement.querySelectorAll('.kpi-value');
+    expect(values[0].textContent.trim()).toBe('—');
+    expect(fixture.nativeElement.querySelector('.state-message')).toBeFalsy();
   });
 });
