@@ -43,4 +43,12 @@ export class IntegrationProfileService {
   mappingDryRun(id: string, payload: string, transformationJson: string): Observable<MappingDryRunResult> {
     return this.http.post<MappingDryRunResult>(`${BASE_URL}/${id}/mapping/dry-run`, { payload, transformationJson });
   }
+
+  pause(id: string): Observable<IntegrationProfile> {
+    return this.http.post<IntegrationProfile>(`${BASE_URL}/${id}/pause`, {});
+  }
+
+  resume(id: string): Observable<IntegrationProfile> {
+    return this.http.post<IntegrationProfile>(`${BASE_URL}/${id}/resume`, {});
+  }
 }

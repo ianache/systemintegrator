@@ -1,6 +1,7 @@
 export type IntegrationProtocol = 'REST' | 'SOAP' | 'JSON_RPC' | 'KAFKA' | 'JDBC';
 export type SyncDirection = 'INBOUND' | 'OUTBOUND' | 'BIDIRECTIONAL';
 export type SourceOfTruth = 'PLATFORM' | 'EXTERNAL' | 'SHARED';
+export type IntegrationProfileStatus = 'ACTIVE' | 'PAUSED' | 'DRAFT' | 'ERROR' | 'DEGRADED' | 'INACTIVE';
 
 export interface IntegrationProfileConfiguration {
   protocol: IntegrationProtocol | null;
@@ -25,6 +26,9 @@ export interface IntegrationProfile {
   sourceOfTruth: SourceOfTruth;
   configuration: IntegrationProfileConfiguration | null;
   active: boolean;
+  paused: boolean;
+  status: IntegrationProfileStatus;
+  lastSyncAt: string | null;
   createdAt: string;
   updatedAt: string;
   version: number;

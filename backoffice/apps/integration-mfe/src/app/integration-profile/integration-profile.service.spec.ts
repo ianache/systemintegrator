@@ -107,4 +107,18 @@ describe('IntegrationProfileService', () => {
     expect(request.request.body).toEqual({ payload: '{"a":1}', transformationJson: '{"engine":"PASSTHROUGH"}' });
     request.flush({ output: '{"a":1}', error: null });
   });
+
+  it('pauses a profile', () => {
+    service.pause('p-1').subscribe();
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1/pause');
+    expect(request.request.method).toBe('POST');
+    request.flush({});
+  });
+
+  it('resumes a profile', () => {
+    service.resume('p-1').subscribe();
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1/resume');
+    expect(request.request.method).toBe('POST');
+    request.flush({});
+  });
 });
