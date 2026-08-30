@@ -1,14 +1,20 @@
 package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.application.FlowService;
+import com.cl2.integration.application.FlowMetricsService;
+import com.cl2.integration.application.FlowMetricsSummary;
 import com.cl2.integration.application.FlowVersionView;
 import com.cl2.integration.application.FlowView;
 import com.cl2.integration.application.command.CreateFlowCommand;
+import com.cl2.integration.application.command.ReportFlowExecutionCommand;
 import com.cl2.integration.application.command.UpdateFlowDraftCommand;
 import com.cl2.integration.application.exception.FlowConflictException;
+import com.cl2.integration.application.exception.FlowExecutionInvalidException;
 import com.cl2.integration.application.exception.FlowNotFoundException;
 import com.cl2.integration.application.exception.FlowNotPublishableException;
 import com.cl2.integration.domain.model.FlowStatus;
+import com.cl2.integration.domain.model.FlowExecution;
+import com.cl2.integration.domain.model.FlowExecutionStatus;
 import com.cl2.integration.domain.model.FlowVersionState;
 import java.time.Instant;
 import java.util.List;
@@ -43,6 +49,9 @@ class FlowControllerTest {
 
     @MockitoBean
     private FlowService service;
+
+    @MockitoBean
+    private FlowMetricsService metricsService;
 
     @Test
     void createsAFlowForTheTenantFromTheHeader() throws Exception {
@@ -168,6 +177,76 @@ class FlowControllerTest {
                 .andExpect(status().isNoContent());
 
         then(service).should().archive(TENANT_ID, FLOW_ID);
+    }
+
+    @Test
+    void reportsAnExecutionForAFlow() throws Exception {
+        FlowExecution execution = FlowExecution.report(UUID.randomUUID(), TENANT_ID, FLOW_ID, 1,
+                FlowExecutionStatus.SUCCESS, Instant.parse("2026-08-30T00:00:00Z"),
+                Instant.parse("2026-08-30T00:00:01Z"), null);
+        given(metricsService.report(eq(TENANT_ID), eq(FLOW_ID), any(ReportFlowExecutionCommand.class)))
+                .willReturn(execution);
+
+        mockMvc.perform(post(BASE_PATH + "/{flowId}/executions", FLOW_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"flowVersionNumber":1,"status":"SUCCESS","startedAt":"2026-08-30T00:00:00Z","finishedAt":"2026-08-30T00:00:01Z"}
+                                """))
+                .andExpect(status().isCreated())
+                .andExpect(jsonPath("$.status").value("SUCCESS"))
+                .andExpect(jsonPath("$.durationMs").value(1000));
+    }
+
+    @Test
+    void returns404WhenReportingAnExecutionForAMissingFlow() throws Exception {
+        given(metricsService.report(eq(TENANT_ID), eq(FLOW_ID), any(ReportFlowExecutionCommand.class)))
+                .willThrow(new FlowNotFoundException("not found"));
+
+        mockMvc.perform(post(BASE_PATH + "/{flowId}/executions", FLOW_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"flowVersionNumber":1,"status":"SUCCESS","startedAt":"2026-08-30T00:00:00Z","finishedAt":"2026-08-30T00:00:01Z"}
+                                """))
+                .andExpect(status().isNotFound());
+    }
+
+    @Test
+    void returns422WhenFinishedAtIsBeforeStartedAt() throws Exception {
+        given(metricsService.report(eq(TENANT_ID), eq(FLOW_ID), any(ReportFlowExecutionCommand.class)))
+                .willThrow(new FlowExecutionInvalidException("finishedAt must not be before startedAt"));
+
+        mockMvc.perform(post(BASE_PATH + "/{flowId}/executions", FLOW_ID)
+                        .header("X-Tenant-ID", TENANT_ID)
+                        .contentType(MediaType.APPLICATION_JSON)
+                        .content("""
+                                {"flowVersionNumber":1,"status":"SUCCESS","startedAt":"2026-08-30T00:00:01Z","finishedAt":"2026-08-30T00:00:00Z"}
+                                """))
+                .andExpect(status().isUnprocessableEntity());
+    }
+
+    @Test
+    void returnsTheMetricsSummaryForTheTenant() throws Exception {
+        given(metricsService.summarize(TENANT_ID)).willReturn(new FlowMetricsSummary(3, 40, 2.5, 810L));
+
+        mockMvc.perform(get(BASE_PATH + "/metrics/summary").header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.publishedFlowCount").value(3))
+                .andExpect(jsonPath("$.executions24h").value(40))
+                .andExpect(jsonPath("$.errorRatePct").value(2.5))
+                .andExpect(jsonPath("$.p95DurationMs").value(810));
+    }
+
+    @Test
+    void returnsZeroExecutionsAndNullP95WhenTenantHasNoExecutions() throws Exception {
+        given(metricsService.summarize(TENANT_ID)).willReturn(new FlowMetricsSummary(0, 0, 0.0, null));
+
+        mockMvc.perform(get(BASE_PATH + "/metrics/summary").header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isOk())
+                .andExpect(jsonPath("$.executions24h").value(0))
+                .andExpect(jsonPath("$.errorRatePct").value(0.0))
+                .andExpect(jsonPath("$.p95DurationMs").doesNotExist());
     }
 
     private static <T> org.hamcrest.Matcher<java.util.Collection<? extends T>> hasSizeOne() {

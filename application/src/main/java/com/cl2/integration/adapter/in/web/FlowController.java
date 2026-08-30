@@ -1,12 +1,17 @@
 package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.adapter.in.web.dto.CreateFlowRequest;
+import com.cl2.integration.adapter.in.web.dto.FlowExecutionResponse;
+import com.cl2.integration.adapter.in.web.dto.FlowMetricsSummaryResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowSummaryResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowVersionResponse;
+import com.cl2.integration.adapter.in.web.dto.ReportFlowExecutionRequest;
 import com.cl2.integration.adapter.in.web.dto.UpdateFlowDraftRequest;
+import com.cl2.integration.application.FlowMetricsService;
 import com.cl2.integration.application.FlowService;
 import com.cl2.integration.application.command.CreateFlowCommand;
+import com.cl2.integration.application.command.ReportFlowExecutionCommand;
 import com.cl2.integration.application.command.UpdateFlowDraftCommand;
 import com.cl2.integration.infrastructure.tenant.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -31,10 +36,12 @@ import org.springframework.web.bind.annotation.RestController;
 public class FlowController {
 
     private final FlowService service;
+    private final FlowMetricsService metricsService;
     private final ObjectMapper objectMapper;
 
-    public FlowController(FlowService service, ObjectMapper objectMapper) {
+    public FlowController(FlowService service, FlowMetricsService metricsService, ObjectMapper objectMapper) {
         this.service = service;
+        this.metricsService = metricsService;
         this.objectMapper = objectMapper;
     }
 
@@ -50,6 +57,11 @@ public class FlowController {
         return service.list(TenantContext.requireTenantId(), activeOnly).stream()
                 .map(FlowSummaryResponse::from)
                 .toList();
+    }
+
+    @GetMapping("/metrics/summary")
+    public FlowMetricsSummaryResponse metricsSummary() {
+        return FlowMetricsSummaryResponse.from(metricsService.summarize(TenantContext.requireTenantId()));
     }
 
     @GetMapping("/{flowId}")
@@ -84,6 +96,15 @@ public class FlowController {
     public FlowVersionResponse rollback(@PathVariable UUID flowId, @PathVariable int versionNumber) {
         return FlowVersionResponse.from(service.rollback(TenantContext.requireTenantId(), flowId, versionNumber),
                 objectMapper);
+    }
+
+    @PostMapping("/{flowId}/executions")
+    @ResponseStatus(HttpStatus.CREATED)
+    public FlowExecutionResponse reportExecution(@PathVariable UUID flowId,
+                                                  @Valid @RequestBody ReportFlowExecutionRequest request) {
+        ReportFlowExecutionCommand command = new ReportFlowExecutionCommand(request.flowVersionNumber(),
+                request.status(), request.startedAt(), request.finishedAt(), request.errorMessage());
+        return FlowExecutionResponse.from(metricsService.report(TenantContext.requireTenantId(), flowId, command));
     }
 
     @DeleteMapping("/{flowId}")
