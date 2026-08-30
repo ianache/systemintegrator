@@ -15,11 +15,15 @@ public record FlowVersionResponse(
         String publishedBy,
         Instant publishedAt) {
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FlowVersionResponse.class);
+
     public static FlowVersionResponse from(FlowVersionView view, ObjectMapper objectMapper) {
         JsonNode graph;
         try {
             graph = objectMapper.readTree(view.graph());
         } catch (Exception e) {
+            log.warn("Failed to parse stored graph JSON for flow {} version {}: {}", view.flowId(),
+                    view.versionNumber(), e.getMessage());
             graph = null;
         }
         return new FlowVersionResponse(view.id(), view.flowId(), view.versionNumber(), graph,

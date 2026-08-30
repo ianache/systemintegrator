@@ -2,6 +2,7 @@ package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.application.exception.FlowConflictException;
 import com.cl2.integration.application.exception.FlowNotFoundException;
+import com.cl2.integration.application.exception.FlowNotPublishableException;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
 import com.cl2.integration.application.exception.IntegrationProfileNotFoundException;
 import com.cl2.integration.application.exception.TenantRequiredException;
@@ -56,6 +57,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(FlowConflictException.class)
     ProblemDetail handleFlowConflict(FlowConflictException exception, HttpServletRequest request) {
         return problem(HttpStatus.CONFLICT, "FLOW_CONFLICT", "Flow conflicts with an existing flow", request);
+    }
+
+    @ExceptionHandler(FlowNotPublishableException.class)
+    ProblemDetail handleFlowNotPublishable(FlowNotPublishableException exception, HttpServletRequest request) {
+        return problem(HttpStatus.UNPROCESSABLE_ENTITY, "FLOW_NOT_PUBLISHABLE", "Flow draft is empty and cannot be published", request);
     }
 
     @ExceptionHandler(Exception.class)

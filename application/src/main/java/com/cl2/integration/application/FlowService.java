@@ -4,6 +4,7 @@ import com.cl2.integration.application.command.CreateFlowCommand;
 import com.cl2.integration.application.command.UpdateFlowDraftCommand;
 import com.cl2.integration.application.exception.FlowConflictException;
 import com.cl2.integration.application.exception.FlowNotFoundException;
+import com.cl2.integration.application.exception.FlowNotPublishableException;
 import com.cl2.integration.domain.model.Flow;
 import com.cl2.integration.domain.model.FlowVersion;
 import com.cl2.integration.domain.model.FlowVersionState;
@@ -73,7 +74,7 @@ public class FlowService {
     public FlowVersionView publish(UUID tenantId, UUID flowId, String publishedBy) {
         Flow flow = flowRepository.findById(tenantId, flowId);
         if (flow.draftGraph() == null || flow.draftGraph().isBlank()) {
-            throw new IllegalArgumentException("Cannot publish a flow with an empty draft graph");
+            throw new FlowNotPublishableException("Cannot publish a flow with an empty draft graph");
         }
         flowVersionRepository.findActiveByFlowId(tenantId, flowId)
                 .ifPresent(active -> flowVersionRepository.save(tenantId, active.withState(FlowVersionState.PUBLISHED)));

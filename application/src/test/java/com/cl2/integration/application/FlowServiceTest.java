@@ -113,7 +113,7 @@ class FlowServiceTest {
         FlowView created = service.create(TENANT_ID, new CreateFlowCommand("flow/x", "X"));
 
         assertThatThrownBy(() -> service.publish(TENANT_ID, created.id(), "user@tenant"))
-                .isInstanceOf(IllegalArgumentException.class);
+                .isInstanceOf(com.cl2.integration.application.exception.FlowNotPublishableException.class);
     }
 
     @Test

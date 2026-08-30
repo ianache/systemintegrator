@@ -2,6 +2,7 @@ package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.adapter.in.web.dto.CreateFlowRequest;
 import com.cl2.integration.adapter.in.web.dto.FlowResponse;
+import com.cl2.integration.adapter.in.web.dto.FlowSummaryResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowVersionResponse;
 import com.cl2.integration.adapter.in.web.dto.UpdateFlowDraftRequest;
 import com.cl2.integration.application.FlowService;
@@ -45,9 +46,9 @@ public class FlowController {
     }
 
     @GetMapping
-    public List<FlowResponse> list(@RequestParam(defaultValue = "true") boolean activeOnly) {
+    public List<FlowSummaryResponse> list(@RequestParam(defaultValue = "true") boolean activeOnly) {
         return service.list(TenantContext.requireTenantId(), activeOnly).stream()
-                .map(view -> FlowResponse.from(view, objectMapper))
+                .map(FlowSummaryResponse::from)
                 .toList();
     }
 

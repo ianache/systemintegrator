@@ -7,6 +7,7 @@ import com.cl2.integration.application.command.CreateFlowCommand;
 import com.cl2.integration.application.command.UpdateFlowDraftCommand;
 import com.cl2.integration.application.exception.FlowConflictException;
 import com.cl2.integration.application.exception.FlowNotFoundException;
+import com.cl2.integration.application.exception.FlowNotPublishableException;
 import com.cl2.integration.domain.model.FlowStatus;
 import com.cl2.integration.domain.model.FlowVersionState;
 import java.time.Instant;
@@ -77,11 +78,15 @@ class FlowControllerTest {
 
     @Test
     void listsFlowsForTheTenantFromTheHeader() throws Exception {
-        given(service.list(eq(TENANT_ID), eq(true))).willReturn(List.of(flowView()));
+        FlowView withDraft = new FlowView(FLOW_ID, TENANT_ID, "flow/x", "X", "{\"nodes\":[]}", null, null,
+                FlowStatus.DRAFT, 0, false, Instant.parse("2026-08-30T00:00:00Z"),
+                Instant.parse("2026-08-30T00:00:00Z"), 0);
+        given(service.list(eq(TENANT_ID), eq(true))).willReturn(List.of(withDraft));
 
         mockMvc.perform(get(BASE_PATH).header("X-Tenant-ID", TENANT_ID))
                 .andExpect(status().isOk())
-                .andExpect(jsonPath("$", hasSizeOne()));
+                .andExpect(jsonPath("$", hasSizeOne()))
+                .andExpect(jsonPath("$[0].draftGraph").doesNotExist());
 
         then(service).should().list(TENANT_ID, true);
     }
@@ -136,6 +141,15 @@ class FlowControllerTest {
         mockMvc.perform(post(BASE_PATH + "/{flowId}/versions/publish", FLOW_ID).header("X-Tenant-ID", TENANT_ID))
                 .andExpect(status().isCreated())
                 .andExpect(jsonPath("$.state").value("ACTIVE"));
+    }
+
+    @Test
+    void returns422WhenTheDraftIsEmptyOnPublish() throws Exception {
+        given(service.publish(eq(TENANT_ID), eq(FLOW_ID), org.mockito.ArgumentMatchers.anyString()))
+                .willThrow(new FlowNotPublishableException("Cannot publish a flow with an empty draft graph"));
+
+        mockMvc.perform(post(BASE_PATH + "/{flowId}/versions/publish", FLOW_ID).header("X-Tenant-ID", TENANT_ID))
+                .andExpect(status().isUnprocessableEntity());
     }
 
     @Test

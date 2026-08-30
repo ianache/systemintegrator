@@ -30,6 +30,8 @@ public record FlowResponse(
                 view.version());
     }
 
+    private static final org.slf4j.Logger log = org.slf4j.LoggerFactory.getLogger(FlowResponse.class);
+
     private static JsonNode readTree(String json, ObjectMapper objectMapper) {
         if (json == null) {
             return null;
@@ -37,6 +39,7 @@ public record FlowResponse(
         try {
             return objectMapper.readTree(json);
         } catch (JsonProcessingException e) {
+            log.warn("Failed to parse stored draftGraph JSON: {}", e.getMessage());
             return null;
         }
     }
