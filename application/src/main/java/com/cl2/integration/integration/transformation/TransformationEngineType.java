@@ -3,6 +3,8 @@ package com.cl2.integration.integration.transformation;
 public enum TransformationEngineType {
     FIELD_MAPPING,
     JSLT,
+    VELOCITY,
+    MUSTACHE,
     PASSTHROUGH;
 
     public static TransformationEngineType fromString(String value) {
