@@ -424,7 +424,7 @@ describe('IntegrationProfileDetailComponent', () => {
     http.expectNone('/bff/api/v1/integration-profiles/p-1');
   });
 
-  it('only shows the Extracción SQL tab for JDBC profiles, with the probe disabled (no backend dry-run yet)', () => {
+  it('only shows the Extracción SQL tab for JDBC profiles and runs a real dry-run against the backend', () => {
     const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
     fixture.detectChanges();
     http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
@@ -449,8 +449,16 @@ describe('IntegrationProfileDetailComponent', () => {
     const queryEditor = fixture.nativeElement.querySelector('[data-testid="extract-query"]') as HTMLTextAreaElement;
     expect(queryEditor.value).toBe('SELECT 1');
 
-    const probeBtn = fixture.nativeElement.querySelector('.extract-actions button') as HTMLButtonElement;
-    expect(probeBtn.disabled).toBe(true);
+    const probeBtn = fixture.nativeElement.querySelector('[data-testid="run-extraction-dry-run"]') as HTMLButtonElement;
+    expect(probeBtn.disabled).toBe(false);
+
+    probeBtn.click();
+    const request = http.expectOne('/bff/api/v1/integration-profiles/p-1/extraction/dry-run');
+    expect(request.request.method).toBe('POST');
+    request.flush({ rows: [{ id: '1', numero_motor: '4M40A123456' }], totalFetched: 1, error: null });
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.textContent).toContain('4M40A123456');
   });
 
   it('hides the Extracción SQL tab for non-JDBC profiles', () => {

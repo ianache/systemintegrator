@@ -220,21 +220,46 @@
                 <div class="extract-actions">
                   <button
                     type="button"
+                    data-testid="run-extraction-dry-run"
                     class="btn btn-dark"
-                    disabled
-                    title="Próximamente — requiere un endpoint de prueba de extracción (p. ej. POST .../integration-profiles/:id/extraction/dry-run) que el backend aún no expone"
+                    [disabled]="extractionDryRunPending()"
+                    (click)="runExtractionDryRun()"
                   >
-                    Probar consulta
+                    ▶ Probar consulta
                   </button>
                 </div>
               </div>
               <div class="card">
-                <div class="card-header">Resultado de prueba</div>
-                <div class="extract-result-empty">
-                  El backend todavía no expone un endpoint de dry-run para la extracción JDBC (solo existe para el mapping,
-                  vía <span class="mono">POST .../mapping/dry-run</span>). Por eso «Probar consulta» está deshabilitado —
-                  aquí se mostraría una muestra de filas contra el pool de solo lectura una vez que ese endpoint exista.
+                <div class="card-header">
+                  <span>Resultado de prueba</span>
+                  @if (extractionDryRunResult(); as r) {
+                    @if (r.totalFetched !== null) {
+                      <span class="mono cell-sub">{{ r.totalFetched }} fila(s) totales</span>
+                    }
+                  }
                 </div>
+                @if (extractionDryRunPending()) {
+                  <div class="extract-result-empty">Ejecutando…</div>
+                } @else if (extractionDryRunResult(); as r) {
+                  @if (r.error) {
+                    <div class="mapping-dry-run-error" role="alert">{{ r.error }}</div>
+                  } @else if (r.rows && r.rows.length > 0) {
+                    <div class="extract-result-table">
+                      <div class="extract-result-row extract-result-header">
+                        @for (col of extractResultColumns(r.rows); track col) { <span class="mono">{{ col }}</span> }
+                      </div>
+                      @for (row of r.rows; track $index) {
+                        <div class="extract-result-row">
+                          @for (col of extractResultColumns(r.rows); track col) { <span class="mono">{{ row[col] }}</span> }
+                        </div>
+                      }
+                    </div>
+                  } @else {
+                    <div class="extract-result-empty">La consulta se ejecutó pero no devolvió filas.</div>
+                  }
+                } @else {
+                  <div class="extract-result-empty">Ejecuta «Probar consulta» para ver una muestra de hasta 20 filas contra la fuente real.</div>
+                }
               </div>
             </div>
           }

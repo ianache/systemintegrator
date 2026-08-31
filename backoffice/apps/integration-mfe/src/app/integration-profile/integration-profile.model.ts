@@ -70,6 +70,12 @@ export interface MappingDryRunResult {
   error: string | null;
 }
 
+export interface ExtractionDryRunResult {
+  rows: Record<string, unknown>[] | null;
+  totalFetched: number | null;
+  error: string | null;
+}
+
 export interface ApiProblem {
   title?: string;
   status?: number;

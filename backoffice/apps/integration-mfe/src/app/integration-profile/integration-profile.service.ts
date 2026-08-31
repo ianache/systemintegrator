@@ -3,6 +3,7 @@ import { Injectable, inject } from '@angular/core';
 import { Observable } from 'rxjs';
 import {
   CreateIntegrationProfilePayload,
+  ExtractionDryRunResult,
   IntegrationProfile,
   MappingDryRunResult,
   TriggerSyncResult,
@@ -42,6 +43,10 @@ export class IntegrationProfileService {
 
   mappingDryRun(id: string, payload: string, transformationJson: string): Observable<MappingDryRunResult> {
     return this.http.post<MappingDryRunResult>(`${BASE_URL}/${id}/mapping/dry-run`, { payload, transformationJson });
+  }
+
+  extractionDryRun(id: string): Observable<ExtractionDryRunResult> {
+    return this.http.post<ExtractionDryRunResult>(`${BASE_URL}/${id}/extraction/dry-run`, {});
   }
 
   pause(id: string): Observable<IntegrationProfile> {

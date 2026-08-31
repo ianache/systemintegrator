@@ -3,6 +3,7 @@ import { HttpErrorResponse } from '@angular/common/http';
 import { ActivatedRoute, Router, RouterLink } from '@angular/router';
 import {
   ApiProblem,
+  ExtractionDryRunResult,
   IntegrationProfile,
   IntegrationProtocol,
   MappingDryRunResult,
@@ -214,6 +215,9 @@ export class IntegrationProfileDetailComponent implements OnInit {
   readonly samplePayload = signal('{\n  \n}');
   readonly dryRunResult = signal<MappingDryRunResult | null>(null);
   readonly dryRunPending = signal(false);
+
+  readonly extractionDryRunResult = signal<ExtractionDryRunResult | null>(null);
+  readonly extractionDryRunPending = signal(false);
 
   readonly mappingConfig = computed<MappingConfig>(() => parseMappingConfig(this.editModel()?.transformationJson ?? ''));
   readonly syncPolicy = computed<SyncPolicyConfig>(() => parsePolicy(this.editModel()?.syncPolicyJson ?? '', {
@@ -440,6 +444,28 @@ export class IntegrationProfileDetailComponent implements OnInit {
       error: () => {
         this.dryRunPending.set(false);
         this.dryRunResult.set({ output: null, error: 'No se pudo ejecutar el dry-run.' });
+      },
+    });
+  }
+
+  extractResultColumns(rows: Record<string, unknown>[]): string[] {
+    return rows.length ? Object.keys(rows[0]) : [];
+  }
+
+  runExtractionDryRun(): void {
+    const current = this.profile();
+    if (!current) return;
+    this.extractionDryRunPending.set(true);
+    this.extractionDryRunResult.set(null);
+    this.profileService.extractionDryRun(current.id).subscribe({
+      next: (result) => {
+        this.extractionDryRunPending.set(false);
+        this.extractionDryRunResult.set(result);
+      },
+      error: (error: HttpErrorResponse) => {
+        this.extractionDryRunPending.set(false);
+        const problem = error.error as ApiProblem | undefined;
+        this.extractionDryRunResult.set({ rows: null, totalFetched: null, error: problem?.detail || 'No se pudo ejecutar la consulta.' });
       },
     });
   }
