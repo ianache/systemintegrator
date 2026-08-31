@@ -18,6 +18,12 @@ interface WizardModel {
 }
 
 const STEP_LABELS = ['Dominio y fuente', 'Dirección y source of truth', 'Conectividad', 'Revisión'];
+const STEP_HINTS = [
+  'Qué dominio de negocio y qué fuente externa acopla este perfil.',
+  'Sentido de la sincronización y quién manda el dato ganador.',
+  'Protocolo, connector, adapter y credenciales para hablar con la fuente.',
+  'Revisa el payload antes de crear el perfil en estado Borrador.',
+];
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -35,6 +41,7 @@ export class IntegrationProfileWizardComponent {
   @Output() created = new EventEmitter<IntegrationProfile>();
 
   readonly stepLabels = STEP_LABELS;
+  readonly stepHints = STEP_HINTS;
   readonly step = signal(0);
   readonly expert = signal(false);
   readonly submitting = signal(false);
@@ -85,6 +92,14 @@ export class IntegrationProfileWizardComponent {
   back(): void {
     this.errorMessage.set(null);
     this.step.update((s) => Math.max(0, s - 1));
+  }
+
+  /** Sidebar steps can only jump backward to an already-visited step — forward navigation still goes through next()'s validation. */
+  goToStep(index: number): void {
+    if (index <= this.step()) {
+      this.errorMessage.set(null);
+      this.step.set(index);
+    }
   }
 
   close(): void {

@@ -5,7 +5,10 @@
         <span class="modal-title">Nuevo Integration Profile</span>
         <span class="modal-sub">{{ expert() ? 'Edición directa del payload' : stepLabels[step()] }}</span>
       </div>
-      <button type="button" class="btn" (click)="toggleExpert()">{{ expert() ? 'Modo guiado' : 'Modo experto' }}</button>
+      <button type="button" class="expert-toggle" (click)="toggleExpert()">
+        <span class="expert-toggle-track" [class.on]="expert()"><span class="expert-toggle-knob"></span></span>
+        Modo experto
+      </button>
       <button type="button" class="btn-ghost close-btn" (click)="close()">×</button>
     </div>
 
@@ -15,6 +18,7 @@
 
     @if (expert()) {
       <div class="modal-body">
+        <div class="expert-hint">Modo experto: se edita el perfil completo como un único payload <span class="mono">POST /api/v1/integration-profiles</span>. La validación se aplica al guardar.</div>
         <textarea
           class="expert-json"
           [value]="expertJson()"
@@ -22,69 +26,98 @@
         ></textarea>
       </div>
     } @else {
-      <div class="modal-body">
-        @switch (step()) {
-          @case (0) {
-            <label class="field">
-              <span class="label">BUSINESS DOMAIN</span>
-              <input name="businessDomain" [value]="model().businessDomain" (input)="updateField('businessDomain', $any($event.target).value)" />
-            </label>
-            <label class="field">
-              <span class="label">EXTERNAL SOURCE</span>
-              <input name="externalSource" [value]="model().externalSource" (input)="updateField('externalSource', $any($event.target).value)" />
-            </label>
+      <div class="modal-body-layout">
+        <aside class="step-sidebar">
+          @for (label of stepLabels; track label; let i = $index) {
+            <button
+              type="button"
+              class="step-item"
+              [class.active]="step() === i"
+              [class.visited]="i < step()"
+              [disabled]="i > step()"
+              (click)="goToStep(i)"
+            >
+              <span class="step-dot">{{ i + 1 }}</span>
+              <span class="step-item-text">
+                <span class="step-item-label">{{ label }}</span>
+                <span class="step-item-hint">{{ stepHints[i] }}</span>
+              </span>
+            </button>
           }
-          @case (1) {
-            <label class="field">
-              <span class="label">SYNC DIRECTION</span>
-              <select name="syncDirection" [value]="model().syncDirection" (change)="updateField('syncDirection', $any($event.target).value)">
-                <option value="INBOUND">INBOUND</option>
-                <option value="OUTBOUND">OUTBOUND</option>
-                <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="label">SOURCE OF TRUTH</span>
-              <select name="sourceOfTruth" [value]="model().sourceOfTruth" (change)="updateField('sourceOfTruth', $any($event.target).value)">
-                <option value="PLATFORM">PLATFORM</option>
-                <option value="EXTERNAL">EXTERNAL</option>
-                <option value="SHARED">SHARED</option>
-              </select>
-            </label>
+        </aside>
+        <div class="modal-body">
+          @switch (step()) {
+            @case (0) {
+              <label class="field">
+                <span class="label">BUSINESS DOMAIN</span>
+                <input name="businessDomain" [value]="model().businessDomain" (input)="updateField('businessDomain', $any($event.target).value)" />
+                <span class="hint">Dominio de negocio, p. ej. vehicle, customer, sales-order.</span>
+              </label>
+              <label class="field">
+                <span class="label">EXTERNAL SOURCE</span>
+                <input name="externalSource" [value]="model().externalSource" (input)="updateField('externalSource', $any($event.target).value)" />
+                <span class="hint">Sistema externo con el que se acopla este perfil, p. ej. SIGO, SAP.</span>
+              </label>
+            }
+            @case (1) {
+              <label class="field">
+                <span class="label">SYNC DIRECTION</span>
+                <select name="syncDirection" [value]="model().syncDirection" (change)="updateField('syncDirection', $any($event.target).value)">
+                  <option value="INBOUND">INBOUND</option>
+                  <option value="OUTBOUND">OUTBOUND</option>
+                  <option value="BIDIRECTIONAL">BIDIRECTIONAL</option>
+                </select>
+                <span class="hint">Hacia dónde viaja el dato: hacia la plataforma, hacia la fuente, o ambos.</span>
+              </label>
+              <label class="field">
+                <span class="label">SOURCE OF TRUTH</span>
+                <select name="sourceOfTruth" [value]="model().sourceOfTruth" (change)="updateField('sourceOfTruth', $any($event.target).value)">
+                  <option value="PLATFORM">PLATFORM</option>
+                  <option value="EXTERNAL">EXTERNAL</option>
+                  <option value="SHARED">SHARED</option>
+                </select>
+                <span class="hint">Quién manda el dato ganador cuando ambos lados difieren.</span>
+              </label>
+            }
+            @case (2) {
+              <label class="field">
+                <span class="label">PROTOCOL</span>
+                <select name="protocol" [value]="model().protocol" (change)="updateField('protocol', $any($event.target).value)">
+                  <option value="">—</option>
+                  <option value="REST">REST</option>
+                  <option value="SOAP">SOAP</option>
+                  <option value="JSON_RPC">JSON_RPC</option>
+                  <option value="KAFKA">KAFKA</option>
+                  <option value="JDBC">JDBC</option>
+                </select>
+                <span class="hint">Protocolo con el que se habla con la fuente externa.</span>
+              </label>
+              <label class="field">
+                <span class="label">CONNECTOR</span>
+                <input name="connector" [value]="model().connector" (input)="updateField('connector', $any($event.target).value)" />
+                <span class="hint">Nombre del connector registrado, p. ej. sigo-jdbc-connector.</span>
+              </label>
+              <label class="field">
+                <span class="label">ADAPTER</span>
+                <input name="adapter" [value]="model().adapter" (input)="updateField('adapter', $any($event.target).value)" />
+                <span class="hint">Adapter que traduce el protocolo al modelo canónico.</span>
+              </label>
+              <label class="field">
+                <span class="label">ENDPOINT</span>
+                <input name="endpoint" [value]="model().endpoint" (input)="updateField('endpoint', $any($event.target).value)" />
+                <span class="hint">URL o cadena de conexión de la fuente externa.</span>
+              </label>
+              <label class="field">
+                <span class="label">CREDENTIAL REF</span>
+                <input name="credentialRef" [value]="model().credentialRef" (input)="updateField('credentialRef', $any($event.target).value)" />
+                <span class="hint">Referencia al secreto en Vault, p. ej. vault://tenant-a/sigo/jdbc.</span>
+              </label>
+            }
+            @case (3) {
+              <pre class="review-json">{{ this.model() | json }}</pre>
+            }
           }
-          @case (2) {
-            <label class="field">
-              <span class="label">PROTOCOL</span>
-              <select name="protocol" [value]="model().protocol" (change)="updateField('protocol', $any($event.target).value)">
-                <option value="">—</option>
-                <option value="REST">REST</option>
-                <option value="SOAP">SOAP</option>
-                <option value="JSON_RPC">JSON_RPC</option>
-                <option value="KAFKA">KAFKA</option>
-                <option value="JDBC">JDBC</option>
-              </select>
-            </label>
-            <label class="field">
-              <span class="label">CONNECTOR</span>
-              <input name="connector" [value]="model().connector" (input)="updateField('connector', $any($event.target).value)" />
-            </label>
-            <label class="field">
-              <span class="label">ADAPTER</span>
-              <input name="adapter" [value]="model().adapter" (input)="updateField('adapter', $any($event.target).value)" />
-            </label>
-            <label class="field">
-              <span class="label">ENDPOINT</span>
-              <input name="endpoint" [value]="model().endpoint" (input)="updateField('endpoint', $any($event.target).value)" />
-            </label>
-            <label class="field">
-              <span class="label">CREDENTIAL REF</span>
-              <input name="credentialRef" [value]="model().credentialRef" (input)="updateField('credentialRef', $any($event.target).value)" />
-            </label>
-          }
-          @case (3) {
-            <pre class="review-json">{{ this.model() | json }}</pre>
-          }
-        }
+        </div>
       </div>
     }
 
