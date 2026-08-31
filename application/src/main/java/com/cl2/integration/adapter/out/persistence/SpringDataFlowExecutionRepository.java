@@ -2,6 +2,8 @@ package com.cl2.integration.adapter.out.persistence;
 
 import com.cl2.integration.domain.model.FlowExecutionStatus;
 import java.time.Instant;
+import java.util.List;
+import java.util.Optional;
 import java.util.UUID;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.Repository;
@@ -10,6 +12,10 @@ import org.springframework.data.repository.query.Param;
 interface SpringDataFlowExecutionRepository extends Repository<FlowExecutionJpaEntity, UUID> {
 
     FlowExecutionJpaEntity save(FlowExecutionJpaEntity entity);
+
+    List<FlowExecutionJpaEntity> findByTenantIdAndFlowIdOrderByStartedAtDesc(UUID tenantId, UUID flowId);
+
+    Optional<FlowExecutionJpaEntity> findByTenantIdAndFlowIdAndId(UUID tenantId, UUID flowId, UUID id);
 
     long countByTenantIdAndStartedAtGreaterThanEqual(UUID tenantId, Instant since);
 

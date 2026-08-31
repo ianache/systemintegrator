@@ -2,6 +2,7 @@ package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.application.exception.FlowConflictException;
 import com.cl2.integration.application.exception.FlowExecutionInvalidException;
+import com.cl2.integration.application.exception.FlowExecutionNotFoundException;
 import com.cl2.integration.application.exception.FlowNotFoundException;
 import com.cl2.integration.application.exception.FlowNotPublishableException;
 import com.cl2.integration.application.exception.IntegrationProfileConflictException;
@@ -68,6 +69,11 @@ public class ApiExceptionHandler {
     @ExceptionHandler(FlowExecutionInvalidException.class)
     ProblemDetail handleFlowExecutionInvalid(FlowExecutionInvalidException exception, HttpServletRequest request) {
         return problem(HttpStatus.UNPROCESSABLE_ENTITY, "FLOW_EXECUTION_INVALID", exception.getMessage(), request);
+    }
+
+    @ExceptionHandler(FlowExecutionNotFoundException.class)
+    ProblemDetail handleFlowExecutionNotFound(FlowExecutionNotFoundException exception, HttpServletRequest request) {
+        return problem(HttpStatus.NOT_FOUND, "FLOW_EXECUTION_NOT_FOUND", "Flow execution was not found", request);
     }
 
     @ExceptionHandler(Exception.class)

@@ -3,13 +3,11 @@ package com.cl2.integration.adapter.in.web.dto;
 import com.cl2.integration.domain.model.FlowExecutionStatus;
 import jakarta.validation.constraints.NotNull;
 import java.time.Instant;
-import java.util.List;
 
-public record ReportFlowExecutionRequest(
-        @NotNull Integer flowVersionNumber,
+public record ReportFlowExecutionStepRequest(
+        @NotNull String nodeId,
         @NotNull FlowExecutionStatus status,
         @NotNull Instant startedAt,
-        @NotNull Instant finishedAt,
-        String errorMessage,
-        List<ReportFlowExecutionStepRequest> steps) {
+        long durationMs,
+        String errorMessage) {
 }

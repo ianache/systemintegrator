@@ -1,6 +1,7 @@
 package com.cl2.integration.adapter.in.web;
 
 import com.cl2.integration.adapter.in.web.dto.CreateFlowRequest;
+import com.cl2.integration.adapter.in.web.dto.FlowExecutionDetailResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowExecutionResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowMetricsSummaryResponse;
 import com.cl2.integration.adapter.in.web.dto.FlowResponse;
@@ -12,6 +13,7 @@ import com.cl2.integration.application.FlowMetricsService;
 import com.cl2.integration.application.FlowService;
 import com.cl2.integration.application.command.CreateFlowCommand;
 import com.cl2.integration.application.command.ReportFlowExecutionCommand;
+import com.cl2.integration.application.command.ReportFlowExecutionStepCommand;
 import com.cl2.integration.application.command.UpdateFlowDraftCommand;
 import com.cl2.integration.infrastructure.tenant.TenantContext;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -102,9 +104,27 @@ public class FlowController {
     @ResponseStatus(HttpStatus.CREATED)
     public FlowExecutionResponse reportExecution(@PathVariable UUID flowId,
                                                   @Valid @RequestBody ReportFlowExecutionRequest request) {
+        List<ReportFlowExecutionStepCommand> steps = request.steps() == null ? List.of()
+                : request.steps().stream()
+                        .map(step -> new ReportFlowExecutionStepCommand(step.nodeId(), step.status(),
+                                step.startedAt(), step.durationMs(), step.errorMessage()))
+                        .toList();
         ReportFlowExecutionCommand command = new ReportFlowExecutionCommand(request.flowVersionNumber(),
-                request.status(), request.startedAt(), request.finishedAt(), request.errorMessage());
+                request.status(), request.startedAt(), request.finishedAt(), request.errorMessage(), steps);
         return FlowExecutionResponse.from(metricsService.report(TenantContext.requireTenantId(), flowId, command));
+    }
+
+    @GetMapping("/{flowId}/executions")
+    public List<FlowExecutionResponse> listExecutions(@PathVariable UUID flowId) {
+        return metricsService.listExecutions(TenantContext.requireTenantId(), flowId).stream()
+                .map(FlowExecutionResponse::from)
+                .toList();
+    }
+
+    @GetMapping("/{flowId}/executions/{executionId}")
+    public FlowExecutionDetailResponse getExecution(@PathVariable UUID flowId, @PathVariable UUID executionId) {
+        return FlowExecutionDetailResponse.from(
+                metricsService.getExecution(TenantContext.requireTenantId(), flowId, executionId));
     }
 
     @DeleteMapping("/{flowId}")
