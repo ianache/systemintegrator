@@ -45,6 +45,11 @@
               <path [attr.d]="edge.d" [attr.stroke]="edge.color" fill="none" stroke-width="1.4" />
             }
           </svg>
+          @for (edge of edgePaths(); track edge.key) {
+            @if (edge.label; as label) {
+              <span class="edge-label mono" [style.left.px]="edge.labelX" [style.top.px]="edge.labelY">{{ label }}</span>
+            }
+          }
           @for (node of graph().nodes; track node.id) {
             <div class="graph-node" [style.left.px]="node.x" [style.top.px]="node.y">
               <span class="graph-node-bar" [style.background]="categoryColor(categoryOf(node.type))"></span>

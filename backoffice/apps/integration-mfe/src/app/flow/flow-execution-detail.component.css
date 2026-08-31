@@ -19,6 +19,10 @@
 .graph-viewport { overflow: auto; background: var(--bg); background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 22px 22px; min-height: 360px; }
 .graph-surface { position: relative; }
 .graph-edges { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.edge-label {
+  position: absolute; font-size: 9.5px; color: var(--text-muted); background: var(--bg);
+  border: 1px solid var(--border); border-radius: 3px; padding: 1px 5px; white-space: nowrap;
+}
 .graph-node {
   position: absolute; width: 180px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); display: flex; align-items: stretch;

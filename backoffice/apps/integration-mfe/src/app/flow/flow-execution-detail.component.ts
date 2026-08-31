@@ -1,10 +1,10 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Flow, FlowExecutionSummary, FlowGraph, FlowGraphNode } from './flow.model';
+import { Flow, FlowExecutionSummary, FlowGraph, FlowGraphEdge, FlowGraphNode } from './flow.model';
 import { FlowService } from './flow.service';
 import { ConsoleEmptyStateComponent } from '../shared/console-empty-state.component';
-import { NODE_H, NODE_W, categoryColor, categoryOf } from './flow-node-catalog';
+import { NODE_H, NODE_W, categoryColor, categoryOf, portOffsetY } from './flow-node-catalog';
 
 type DetailState = 'loading' | 'ready' | 'unavailable';
 type ViewMode = 'GRAPH' | 'TIMELINE';
@@ -13,6 +13,9 @@ interface ReadOnlyEdgePath {
   key: string;
   d: string;
   color: string;
+  label: string | null;
+  labelX: number;
+  labelY: number;
 }
 
 @Component({
@@ -114,7 +117,7 @@ export class FlowExecutionDetailComponent implements OnInit {
       const to = nodesById.get(edge.to);
       if (!from || !to) return;
       const x1 = (from.x ?? 0) + NODE_W;
-      const y1 = (from.y ?? 0) + NODE_H / 2;
+      const y1 = (from.y ?? 0) + portOffsetY(from, edge.fromPort);
       const x2 = to.x ?? 0;
       const y2 = (to.y ?? 0) + NODE_H / 2;
       const midX = (x1 + x2) / 2;
@@ -122,6 +125,9 @@ export class FlowExecutionDetailComponent implements OnInit {
         key: edge.from + '->' + edge.to + ':' + index,
         d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
         color: categoryColor(categoryOf(from.type)),
+        label: edge.fromPort ?? null,
+        labelX: x1 + 8,
+        labelY: y1 - 8,
       });
     });
     return paths;
@@ -152,12 +158,14 @@ export class FlowExecutionDetailComponent implements OnInit {
         name: n.name ?? n.id ?? 'Node ' + (index + 1),
         x: position.x,
         y: position.y,
+        fields: n.fields ?? {},
       };
     });
     const rawEdges = Array.isArray(source.edges) ? source.edges : [];
-    const edges = rawEdges
-      .map((entry) => entry as { from?: unknown; to?: unknown })
-      .filter((e): e is { from: string; to: string } => typeof e.from === 'string' && typeof e.to === 'string');
+    const edges: FlowGraphEdge[] = rawEdges
+      .map((entry) => entry as Partial<FlowGraphEdge>)
+      .filter((e): e is FlowGraphEdge => typeof e.from === 'string' && typeof e.to === 'string')
+      .map((e) => ({ from: e.from, to: e.to, fromPort: e.fromPort, label: e.label }));
     return { nodes, edges };
   }
 }
