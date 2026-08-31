@@ -1,0 +1,72 @@
+<section class="page" aria-labelledby="executions-heading">
+  <button type="button" class="btn-ghost back-link" (click)="back()">← {{ flow()?.name ?? 'Flow' }}</button>
+
+  @if (state() === 'loading') {
+    <p class="state-message" aria-live="polite">Cargando ejecuciones…</p>
+  } @else if (state() === 'unavailable') {
+    <app-console-empty-state
+      title="Ejecuciones no disponibles"
+      description="El backend todavía no expone el historial de ejecuciones de este flujo."
+    >
+      <button type="button" class="btn" (click)="retry()">Reintentar</button>
+    </app-console-empty-state>
+  } @else {
+    <div class="page-header">
+      <div>
+        <h1 id="executions-heading">{{ flow()?.name }}</h1>
+        <p class="mono cell-sub">Ejecuciones de la versión activa.</p>
+      </div>
+    </div>
+
+    <div class="kpi-grid">
+      <div class="card kpi">
+        <span class="mono kpi-label">EJECUCIONES</span>
+        <span class="kpi-value">{{ kpis().total }}</span>
+      </div>
+      <div class="card kpi">
+        <span class="mono kpi-label">TASA DE ERROR</span>
+        <span class="kpi-value">{{ kpis().errorRatePct }}%</span>
+      </div>
+      <div class="card kpi">
+        <span class="mono kpi-label">P95 DURACIÓN</span>
+        <span class="kpi-value">{{ kpis().p95DurationMs !== null ? formatDuration(kpis().p95DurationMs!) : '—' }}</span>
+      </div>
+    </div>
+
+    <div class="executions-toolbar">
+      <div class="segmented">
+        <button type="button" [class.active]="filter() === 'ALL'" (click)="setFilter('ALL')">Todas</button>
+        <button type="button" [class.active]="filter() === 'FAILURE'" (click)="setFilter('FAILURE')">Con fallos</button>
+      </div>
+      <span class="mono cell-sub">{{ filteredExecutions().length }} ejecución(es)</span>
+    </div>
+
+    <div class="card">
+      <table>
+        <caption class="visually-hidden">Ejecuciones del flujo</caption>
+        <thead>
+          <tr>
+            <th scope="col">Execution ID</th>
+            <th scope="col">Estado</th>
+            <th scope="col">Versión</th>
+            <th scope="col">Inicio</th>
+            <th scope="col">Duración</th>
+          </tr>
+        </thead>
+        <tbody>
+          @for (execution of filteredExecutions(); track execution.id) {
+            <tr (click)="open(execution)" class="row">
+              <td class="mono cell-primary">{{ execution.id }}</td>
+              <td><span [class]="statusBadgeClass(execution.status)">{{ execution.status }}</span></td>
+              <td class="mono">v{{ execution.flowVersionNumber }}</td>
+              <td class="mono cell-sub">{{ execution.startedAt | date: 'short' }}</td>
+              <td class="mono">{{ formatDuration(execution.durationMs) }}</td>
+            </tr>
+          } @empty {
+            <tr><td colspan="5">Ninguna ejecución coincide.</td></tr>
+          }
+        </tbody>
+      </table>
+    </div>
+  }
+</section>

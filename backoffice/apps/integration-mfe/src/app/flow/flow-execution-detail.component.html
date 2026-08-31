@@ -1,0 +1,84 @@
+<section class="page" aria-labelledby="execution-heading">
+  <button type="button" class="btn-ghost back-link" (click)="back()">← Ejecuciones</button>
+
+  @if (state() === 'loading') {
+    <p class="state-message" aria-live="polite">Cargando ejecución…</p>
+  } @else if (state() === 'unavailable') {
+    <app-console-empty-state
+      title="Ejecución no disponible"
+      description="El backend todavía no expone el detalle de ejecuciones de flujos."
+    >
+      <button type="button" class="btn" (click)="retry()">Reintentar</button>
+    </app-console-empty-state>
+  } @else if (execution(); as exec) {
+    <div class="exec-header">
+      <div class="exec-header-title">
+        <span id="execution-heading" class="mono exec-id">{{ exec.id }}</span>
+        <span [class]="statusBadgeClass(exec.status)">{{ exec.status }}</span>
+      </div>
+      <span class="mono cell-sub">v{{ exec.flowVersionNumber }} · {{ exec.startedAt | date: 'medium' }}</span>
+      <div class="exec-stats">
+        <div>
+          <span class="mono cell-sub">DURACIÓN TOTAL</span>
+          <span class="mono exec-stat-value">{{ formatDuration(exec.durationMs) }}</span>
+        </div>
+        <div>
+          <span class="mono cell-sub">NODOS</span>
+          <span class="mono exec-stat-value">{{ graph().nodes.length }}</span>
+        </div>
+      </div>
+      <div class="mode-toggle">
+        <button type="button" [class.active]="mode() === 'GRAPH'" (click)="setMode('GRAPH')">Grafo</button>
+        <button type="button" [class.active]="mode() === 'TIMELINE'" (click)="setMode('TIMELINE')">Timeline</button>
+      </div>
+    </div>
+
+    @if (exec.errorMessage) {
+      <div class="card exec-error">{{ exec.errorMessage }}</div>
+    }
+
+    @if (mode() === 'GRAPH') {
+      <div class="card graph-viewport">
+        <div class="graph-surface" [style.width.px]="canvasWidth()" [style.height.px]="canvasHeight()">
+          <svg class="graph-edges" [attr.width]="canvasWidth()" [attr.height]="canvasHeight()">
+            @for (edge of edgePaths(); track edge.key) {
+              <path [attr.d]="edge.d" [attr.stroke]="edge.color" fill="none" stroke-width="1.4" />
+            }
+          </svg>
+          @for (node of graph().nodes; track node.id) {
+            <div class="graph-node" [style.left.px]="node.x" [style.top.px]="node.y">
+              <span class="graph-node-bar" [style.background]="categoryColor(categoryOf(node.type))"></span>
+              <div class="graph-node-body">
+                <span class="mono graph-node-cat" [style.color]="categoryColor(categoryOf(node.type))">{{ categoryOf(node.type) }}</span>
+                <span class="graph-node-name">{{ node.name }}</span>
+              </div>
+            </div>
+          } @empty {
+            <p class="cell-sub">Este flujo no tiene un grafo guardado.</p>
+          }
+        </div>
+      </div>
+    } @else {
+      <div class="card timeline-panel">
+        <p class="cell-sub timeline-note">
+          El backend todavía no registra pasos individuales por nodo para una ejecución — solo el resultado
+          agregado. Esta vista se ampliará con una fila por paso cuando el modelo de dominio incluya ese historial.
+        </p>
+        <div class="timeline-row">
+          <span class="mono">{{ exec.startedAt | date: 'HH:mm:ss' }}</span>
+          <span class="timeline-node">Ejecución completa</span>
+          <span [class]="statusBadgeClass(exec.status)">{{ exec.status }}</span>
+          <span class="mono">{{ formatDuration(exec.durationMs) }}</span>
+          <button
+            type="button"
+            class="btn replay-btn"
+            [disabled]="true"
+            title="Próximamente — requiere un endpoint de reintento (POST .../executions/:id/retry) que el backend aún no expone"
+          >
+            Reprocesar
+          </button>
+        </div>
+      </div>
+    }
+  }
+</section>

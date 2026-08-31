@@ -79,3 +79,15 @@ export interface ReportFlowExecutionPayload {
   finishedAt: string;
   errorMessage?: string | null;
 }
+
+/** Mirrors the backend's FlowExecutionResponse (adapter/in/web/dto). */
+export interface FlowExecutionSummary {
+  id: string;
+  flowId: string;
+  flowVersionNumber: number;
+  status: FlowExecutionStatus;
+  startedAt: string;
+  finishedAt: string;
+  durationMs: number;
+  errorMessage: string | null;
+}

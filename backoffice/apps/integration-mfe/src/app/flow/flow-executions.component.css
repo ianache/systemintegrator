@@ -1,0 +1,29 @@
+.state-message { padding: 24px 0; color: var(--text-muted); }
+.back-link { padding: 8px 0 0 24px; align-self: flex-start; }
+.cell-sub { color: var(--text-dim); font-size: 11px; }
+.cell-primary { font-weight: 500; }
+
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+
+.kpi-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; margin: 16px 0; }
+.kpi { padding: 14px 16px; display: flex; flex-direction: column; gap: 6px; }
+.kpi-label { font-size: 10px; letter-spacing: 0.08em; color: var(--text-dim); text-transform: uppercase; }
+.kpi-value { font-size: 24px; font-weight: 600; letter-spacing: -0.02em; }
+
+.executions-toolbar { display: flex; align-items: center; gap: 10px; margin-bottom: 12px; }
+.segmented { display: flex; background: var(--surface); border: 1px solid var(--border); border-radius: 5px; overflow: hidden; }
+.segmented button { border: 0; padding: 7px 12px; cursor: pointer; font-weight: 500; background: transparent; color: var(--text-muted); }
+.segmented button + button { border-left: 1px solid var(--border); }
+.segmented button.active { background: var(--invert-bg); color: #FFFFFF; }
+.executions-toolbar .cell-sub { margin-left: auto; }
+
+table { width: 100%; border-collapse: collapse; }
+th { text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 0.07em; color: var(--text-dim); padding: 9px 16px; background: var(--surface-2); border-bottom: 1px solid var(--border); }
+td { padding: 11px 16px; border-bottom: 1px solid var(--border-soft); }
+.row { cursor: pointer; }
+.row:hover { background: var(--surface-2); }
+
+.visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); }
+
+.badge.status-success { color: var(--ok); background: color-mix(in oklab, var(--ok) 15%, var(--surface)); }
+.badge.status-failure { color: var(--err); background: color-mix(in oklab, var(--err) 15%, var(--surface)); }

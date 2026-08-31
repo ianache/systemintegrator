@@ -1,4 +1,5 @@
 .state-message { padding: 24px 0; color: var(--text-muted); }
+.view-executions-btn { margin-left: auto; }
 .back-link { padding: 8px 0 0 24px; align-self: flex-start; }
 .cell-sub { color: var(--text-dim); font-size: 11px; }
 
