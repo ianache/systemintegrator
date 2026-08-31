@@ -423,4 +423,48 @@ describe('IntegrationProfileDetailComponent', () => {
     (fixture.nativeElement.querySelector('[data-testid="deactivate-profile"]') as HTMLButtonElement).click();
     http.expectNone('/bff/api/v1/integration-profiles/p-1');
   });
+
+  it('only shows the Extracción SQL tab for JDBC profiles, with the probe disabled (no backend dry-run yet)', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
+      ...FULL_PROFILE,
+      configuration: {
+        protocol: 'JDBC', connector: 'sigo-jdbc-connector', adapter: 'SigoVehicleAdapter', endpoint: null, credentialRef: null,
+        mapping: null, transformation: null, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null,
+        extractionConfig: { query: 'SELECT 1', watermarkColumn: 'updated_at', watermarkParam: 'lastSyncWithBuffer', keyColumn: 'id', fetchSize: 500, batchMode: false, batchSize: 500 },
+      },
+    });
+    fixture.detectChanges();
+
+    const extractTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Extracción SQL',
+    ) as HTMLButtonElement | undefined;
+    expect(extractTabButton).toBeTruthy();
+
+    extractTabButton!.click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="tab-extract"]')).not.toBeNull();
+    const queryEditor = fixture.nativeElement.querySelector('[data-testid="extract-query"]') as HTMLTextAreaElement;
+    expect(queryEditor.value).toBe('SELECT 1');
+
+    const probeBtn = fixture.nativeElement.querySelector('.extract-actions button') as HTMLButtonElement;
+    expect(probeBtn.disabled).toBe(true);
+  });
+
+  it('hides the Extracción SQL tab for non-JDBC profiles', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    fixture.detectChanges();
+    http.expectOne('/bff/api/v1/integration-profiles/p-1').flush({
+      ...FULL_PROFILE,
+      configuration: { protocol: 'REST', connector: 'sap-rest-connector', adapter: 'SapAdapter', endpoint: null, credentialRef: null, mapping: null, transformation: null, syncPolicy: null, retryPolicy: null, rateLimitPolicy: null, extractionConfig: null },
+    });
+    fixture.detectChanges();
+
+    const extractTabButton = Array.from(fixture.nativeElement.querySelectorAll('.tab')).find(
+      (el) => (el as HTMLElement).textContent?.trim() === 'Extracción SQL',
+    );
+    expect(extractTabButton).toBeUndefined();
+  });
 });

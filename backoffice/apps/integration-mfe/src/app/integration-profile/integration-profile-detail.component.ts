@@ -18,7 +18,7 @@ export const CONFIRM = new InjectionToken<(message: string) => boolean>('CONFIRM
   factory: () => (message: string) => window.confirm(message),
 });
 
-export type DetailTab = 'general' | 'conn' | 'map' | 'pol' | 'sync';
+export type DetailTab = 'general' | 'conn' | 'extract' | 'map' | 'pol' | 'sync';
 type DetailState = 'loading' | 'ready' | 'not-found' | 'unavailable';
 
 interface EditModel {
@@ -80,6 +80,16 @@ interface RateLimitPolicyConfig {
   burst: number;
 }
 
+interface ExtractionConfigForm {
+  query: string;
+  watermarkParam: string;
+  watermarkColumn: string;
+  keyColumn: string;
+  fetchSize: number;
+  batchMode: boolean;
+  batchSize: number;
+}
+
 function parsePolicy<T extends object>(json: string, defaults: T): T {
   try {
     const parsed = JSON.parse(json);
@@ -136,9 +146,10 @@ function serializeMappingConfig(config: MappingConfig): string {
   return JSON.stringify({ engine: 'PASSTHROUGH' }, null, 2);
 }
 
-const TABS: { id: DetailTab; label: string }[] = [
+const TABS: { id: DetailTab; label: string; jdbcOnly?: boolean }[] = [
   { id: 'general', label: 'General' },
   { id: 'conn', label: 'Conectividad' },
+  { id: 'extract', label: 'Extracción SQL', jdbcOnly: true },
   { id: 'map', label: 'Mapping & Transformation' },
   { id: 'pol', label: 'Políticas' },
   { id: 'sync', label: 'Sincronización' },
@@ -189,7 +200,8 @@ export class IntegrationProfileDetailComponent implements OnInit {
   private readonly toast = inject(ToastService);
   private readonly confirm = inject(CONFIRM);
 
-  readonly tabs = TABS;
+  private readonly allTabs = TABS;
+  readonly tabs = computed(() => this.allTabs.filter((t) => !t.jdbcOnly || this.editModel()?.protocol === 'JDBC'));
   readonly state = signal<DetailState>('loading');
   readonly profile = signal<IntegrationProfile | null>(null);
   readonly tab = signal<DetailTab>('general');
@@ -232,6 +244,27 @@ export class IntegrationProfileDetailComponent implements OnInit {
     };
   });
 
+  readonly extractionConfig = computed<ExtractionConfigForm>(() => {
+    const policy = parsePolicy<Partial<ExtractionConfigForm>>(this.editModel()?.extractionConfigJson ?? '', {
+      query: '',
+      watermarkParam: 'lastSyncWithBuffer',
+      watermarkColumn: '',
+      keyColumn: '',
+      fetchSize: 500,
+      batchMode: false,
+      batchSize: 500,
+    });
+    return {
+      query: typeof policy.query === 'string' ? policy.query : '',
+      watermarkParam: typeof policy.watermarkParam === 'string' ? policy.watermarkParam : 'lastSyncWithBuffer',
+      watermarkColumn: typeof policy.watermarkColumn === 'string' ? policy.watermarkColumn : '',
+      keyColumn: typeof policy.keyColumn === 'string' ? policy.keyColumn : '',
+      fetchSize: Number.isFinite(Number(policy.fetchSize)) ? Math.max(1, Number(policy.fetchSize)) : 500,
+      batchMode: policy.batchMode === true,
+      batchSize: Number.isFinite(Number(policy.batchSize)) ? Math.max(1, Number(policy.batchSize)) : 500,
+    };
+  });
+
   readonly connectivityValid = computed(() => {
     const m = this.editModel();
     if (!m || !m.protocol) return true;
@@ -255,8 +288,11 @@ export class IntegrationProfileDetailComponent implements OnInit {
 
   ngOnInit(): void {
     this.route.queryParamMap.subscribe((query) => {
+      // Checked against allTabs, not the JDBC-filtered tabs(): editModel() may
+      // still be null at this point (profile not loaded yet), which would
+      // otherwise make a deep link straight to ?tab=extract silently fail.
       const requested = query.get('tab') as DetailTab | null;
-      if (requested && this.tabs.some((t) => t.id === requested)) {
+      if (requested && this.allTabs.some((t) => t.id === requested)) {
         this.tab.set(requested);
       }
     });
@@ -335,9 +371,9 @@ export class IntegrationProfileDetailComponent implements OnInit {
   }
 
   updatePolicyField(
-    policy: 'syncPolicyJson' | 'retryPolicyJson' | 'rateLimitPolicyJson',
+    policy: 'syncPolicyJson' | 'retryPolicyJson' | 'rateLimitPolicyJson' | 'extractionConfigJson',
     field: string,
-    value: string | number,
+    value: string | number | boolean,
   ): void {
     const current = this.editModel();
     if (!current) return;

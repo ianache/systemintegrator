@@ -41,7 +41,7 @@
         <div class="wizard-error">{{ err }}</div>
       }
       <div class="tabs">
-        @for (t of tabs; track t.id) {
+        @for (t of tabs(); track t.id) {
           <button type="button" class="tab" [class.active]="tab() === t.id" (click)="setTab(t.id)">{{ t.label }}</button>
         }
       </div>
@@ -136,6 +136,104 @@
                     <div class="validation-row err">✗ Si defines protocol, connector y adapter son obligatorios.</div>
                   }
                   <p class="validation-note">Esta validación es local al formulario; no ejecuta un handshake real contra la fuente externa.</p>
+                </div>
+              </div>
+            </div>
+          }
+          @case ('extract') {
+            <div data-testid="tab-extract" class="tab-grid">
+              <div class="card">
+                <div class="card-header">
+                  <span>Sentencia de extracción</span>
+                  <span class="mono cell-sub">extractionConfig.query</span>
+                </div>
+                <div class="card-grid extract-form">
+                  <label class="field full">
+                    <span class="label">QUERY</span>
+                    <textarea
+                      data-testid="extract-query"
+                      class="json-editor extract-query-editor"
+                      spellcheck="false"
+                      [value]="extractionConfig().query"
+                      (input)="updatePolicyField('extractionConfigJson', 'query', $any($event.target).value)"
+                    ></textarea>
+                    <span class="hint">Los parámetros se enlazan por nombre con :{{ extractionConfig().watermarkParam }}. El conector nunca concatena valores en el SQL.</span>
+                  </label>
+                  <label class="field">
+                    <span class="label">WATERMARK PARAM</span>
+                    <input
+                      class="mono"
+                      [value]="extractionConfig().watermarkParam"
+                      (input)="updatePolicyField('extractionConfigJson', 'watermarkParam', $any($event.target).value)"
+                    />
+                  </label>
+                  <label class="field">
+                    <span class="label">WATERMARK COLUMN</span>
+                    <input
+                      class="mono"
+                      [value]="extractionConfig().watermarkColumn"
+                      (input)="updatePolicyField('extractionConfigJson', 'watermarkColumn', $any($event.target).value)"
+                    />
+                  </label>
+                  <label class="field">
+                    <span class="label">KEY COLUMN</span>
+                    <input
+                      class="mono"
+                      [value]="extractionConfig().keyColumn"
+                      (input)="updatePolicyField('extractionConfigJson', 'keyColumn', $any($event.target).value)"
+                    />
+                  </label>
+                  <label class="field">
+                    <span class="label">FETCH SIZE</span>
+                    <input
+                      class="mono"
+                      type="number"
+                      min="1"
+                      [value]="extractionConfig().fetchSize"
+                      (input)="updatePolicyField('extractionConfigJson', 'fetchSize', $any($event.target).valueAsNumber)"
+                    />
+                  </label>
+                  <label class="field">
+                    <span class="label">BATCH MODE</span>
+                    <select
+                      [value]="extractionConfig().batchMode"
+                      (change)="updatePolicyField('extractionConfigJson', 'batchMode', $any($event.target).value === 'true')"
+                    >
+                      <option [value]="false">DESACTIVADO</option>
+                      <option [value]="true">ACTIVADO</option>
+                    </select>
+                  </label>
+                  @if (extractionConfig().batchMode) {
+                    <label class="field">
+                      <span class="label">BATCH SIZE</span>
+                      <input
+                        class="mono"
+                        type="number"
+                        min="1"
+                        [value]="extractionConfig().batchSize"
+                        (input)="updatePolicyField('extractionConfigJson', 'batchSize', $any($event.target).valueAsNumber)"
+                      />
+                      <span class="hint">Filas agrupadas por lote antes de escribir en el Inbox.</span>
+                    </label>
+                  }
+                </div>
+                <div class="extract-actions">
+                  <button
+                    type="button"
+                    class="btn btn-dark"
+                    disabled
+                    title="Próximamente — requiere un endpoint de prueba de extracción (p. ej. POST .../integration-profiles/:id/extraction/dry-run) que el backend aún no expone"
+                  >
+                    Probar consulta
+                  </button>
+                </div>
+              </div>
+              <div class="card">
+                <div class="card-header">Resultado de prueba</div>
+                <div class="extract-result-empty">
+                  El backend todavía no expone un endpoint de dry-run para la extracción JDBC (solo existe para el mapping,
+                  vía <span class="mono">POST .../mapping/dry-run</span>). Por eso «Probar consulta» está deshabilitado —
+                  aquí se mostraría una muestra de filas contra el pool de solo lectura una vez que ese endpoint exista.
                 </div>
               </div>
             </div>
