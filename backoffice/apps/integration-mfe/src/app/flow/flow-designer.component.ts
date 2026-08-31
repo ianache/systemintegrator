@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnInit, ViewChild, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Flow, FlowGraph, FlowGraphEdge, FlowGraphNode, FlowNodeCategory, FlowVersion } from './flow.model';
 import { FlowService } from './flow.service';
@@ -7,6 +7,12 @@ import { ConsoleEmptyStateComponent } from '../shared/console-empty-state.compon
 import { CATEGORY_ORDER, NODE_CATALOG, NODE_H, NODE_W, categoryColor, categoryOf, hasOutput } from './flow-node-catalog';
 
 type DesignerState = 'loading' | 'ready' | 'not-found' | 'unavailable';
+type TransformEngine = 'JSLT' | 'VELOCITY' | 'MUSTACHE';
+
+interface TransformPreview {
+  output: string | null;
+  note: string | null;
+}
 
 interface PaletteGroup {
   category: FlowNodeCategory;
@@ -66,6 +72,13 @@ export class FlowDesignerComponent implements OnInit {
   readonly selectedEdge = signal<FlowGraphEdge | null>(null);
   readonly edgeDrag = signal<EdgeDragState | null>(null);
   readonly hoveredNodeId = signal<string | null>(null);
+
+  readonly txOpen = signal(false);
+  readonly txNodeId = signal<string | null>(null);
+  readonly txEngine = signal<TransformEngine>('JSLT');
+  readonly txScript = signal('');
+  readonly txSample = signal('{}');
+  readonly txPreview = computed<TransformPreview>(() => this.computeTxPreview(this.txEngine(), this.txScript(), this.txSample()));
 
   @ViewChild('surface') private surfaceRef?: ElementRef<HTMLDivElement>;
 
@@ -214,6 +227,90 @@ export class FlowDesignerComponent implements OnInit {
 
   expressionPlaceholder(node: FlowGraphNode): string {
     return NODE_CATALOG[node.type]?.expressionPlaceholder ?? '';
+  }
+
+  // --- Transformation editor (JSLT / Velocity / Mustache) ------------------
+
+  /** Only the node types whose template is an actual transform script, not a control-flow expression. */
+  isScriptNode(node: FlowGraphNode): boolean {
+    return node.type === 'TRANSFORM_JSLT' || node.type === 'TRANSFORM_VELOCITY' || node.type === 'TRANSFORM_MUSTACHE' || node.type === 'SCRIPT';
+  }
+
+  private engineForNodeType(type: string): TransformEngine {
+    if (type === 'TRANSFORM_VELOCITY') return 'VELOCITY';
+    if (type === 'TRANSFORM_MUSTACHE') return 'MUSTACHE';
+    return 'JSLT';
+  }
+
+  openTransformEditor(node: FlowGraphNode): void {
+    this.txNodeId.set(node.id);
+    this.txEngine.set(this.engineForNodeType(node.type));
+    this.txScript.set(node.fields?.['script'] ?? '');
+    this.txSample.set(node.fields?.['sample'] ?? '{}');
+    this.txOpen.set(true);
+  }
+
+  closeTx(): void {
+    this.txOpen.set(false);
+  }
+
+  setTxEngine(engine: TransformEngine): void {
+    this.txEngine.set(engine);
+  }
+
+  onTxScriptInput(value: string): void {
+    this.txScript.set(value);
+  }
+
+  onTxSampleInput(value: string): void {
+    this.txSample.set(value);
+  }
+
+  saveTx(): void {
+    const nodeId = this.txNodeId();
+    if (!nodeId) return;
+    this.updateNode(nodeId, (n) => ({
+      ...n,
+      fields: { ...(n.fields ?? {}), script: this.txScript(), sample: this.txSample() },
+    }));
+    this.txOpen.set(false);
+  }
+
+  /**
+   * The backend's only dry-run endpoint (`/integration-profiles/:id/mapping/dry-run`)
+   * evaluates an Integration Profile's FIELD_MAPPING/JSLT/PASSTHROUGH mapping
+   * config against tenant-scoped profile data — a different bounded context
+   * from a flow node's standalone transform script, and it has no Velocity or
+   * Mustache engine at all (see TransformationEngineType). So there is no
+   * real endpoint to preview a flow TRANSFORM node against here: Mustache is
+   * evaluated client-side (trivial `{{path}}` interpolation, no library), and
+   * JSLT/Velocity honestly report that a live preview needs the backend.
+   */
+  private computeTxPreview(engine: TransformEngine, script: string, sampleJson: string): TransformPreview {
+    if (engine !== 'MUSTACHE') {
+      return { output: null, note: 'Preview no disponible sin ejecutar en el backend — revisa el endpoint de dry-run.' };
+    }
+    let sample: unknown;
+    try {
+      sample = JSON.parse(sampleJson || '{}');
+    } catch {
+      return { output: null, note: 'El payload de muestra no es JSON válido.' };
+    }
+    try {
+      return { output: this.renderMustacheLite(script, sample), note: null };
+    } catch {
+      return { output: null, note: 'No se pudo evaluar la plantilla Mustache.' };
+    }
+  }
+
+  /** Minimal `{{a.b.c}}` variable interpolation — no sections, no partials, no library. */
+  private renderMustacheLite(template: string, data: unknown): string {
+    return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
+      const value = path
+        .split('.')
+        .reduce<unknown>((acc, key) => (acc != null && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined), data);
+      return value === undefined || value === null ? '' : String(value);
+    });
   }
 
   canvasWidth(): number {

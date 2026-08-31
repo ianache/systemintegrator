@@ -137,6 +137,9 @@
               }
             </label>
           }
+          @if (isScriptNode(node)) {
+            <button type="button" class="btn open-tx-btn" (click)="openTransformEditor(node)">Abrir editor de transformaciones</button>
+          }
           <button type="button" class="btn-ghost remove-node-btn" (click)="removeNode(node.id)">Eliminar nodo del draft</button>
         } @else if (selectedEdge(); as edge) {
           <div class="properties-header">
@@ -167,5 +170,54 @@
         }
       </div>
     </div>
+
+    @if (txOpen()) {
+      <div class="modal-overlay" (click)="closeTx()">
+        <div class="modal tx-modal" (click)="$event.stopPropagation()">
+          <div class="tx-modal-header">
+            <span class="tx-modal-title">Editor de transformaciones</span>
+            <div class="segmented">
+              <button type="button" [class.active]="txEngine() === 'JSLT'" (click)="setTxEngine('JSLT')">JSLT</button>
+              <button type="button" [class.active]="txEngine() === 'VELOCITY'" (click)="setTxEngine('VELOCITY')">VELOCITY</button>
+              <button type="button" [class.active]="txEngine() === 'MUSTACHE'" (click)="setTxEngine('MUSTACHE')">MUSTACHE</button>
+            </div>
+            <button type="button" class="btn-ghost tx-close-btn" (click)="closeTx()">×</button>
+          </div>
+          <div class="tx-modal-body">
+            <div class="tx-pane">
+              <span class="mono tx-pane-label">PLANTILLA</span>
+              <textarea
+                class="mono tx-textarea"
+                spellcheck="false"
+                [value]="txScript()"
+                (input)="onTxScriptInput($any($event.target).value)"
+              ></textarea>
+            </div>
+            <div class="tx-pane">
+              <span class="mono tx-pane-label">PAYLOAD DE MUESTRA</span>
+              <textarea
+                class="mono tx-textarea"
+                spellcheck="false"
+                [value]="txSample()"
+                (input)="onTxSampleInput($any($event.target).value)"
+              ></textarea>
+            </div>
+            <div class="tx-pane">
+              <span class="mono tx-pane-label">PREVIEW</span>
+              @if (txPreview().note; as note) {
+                <p class="tx-preview-note">{{ note }}</p>
+              }
+              @if (txPreview().output !== null) {
+                <pre class="mono tx-preview-output">{{ txPreview().output }}</pre>
+              }
+            </div>
+          </div>
+          <div class="tx-modal-footer">
+            <button type="button" class="btn" (click)="closeTx()">Cancelar</button>
+            <button type="button" class="btn btn-primary" (click)="saveTx()">Guardar en el draft</button>
+          </div>
+        </div>
+      </div>
+    }
   }
 </section>
