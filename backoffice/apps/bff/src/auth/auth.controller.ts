@@ -33,6 +33,10 @@ export class AuthController {
       authorization.codeVerifier,
       issuer,
     );
+    req.session.cookie.maxAge = Math.max(
+      0,
+      req.session.tokens.expiresAt * 1000 - Date.now(),
+    );
     delete req.session.oidc;
     res.redirect('/');
   }

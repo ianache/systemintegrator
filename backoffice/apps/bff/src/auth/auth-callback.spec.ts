@@ -9,7 +9,10 @@ describe('AuthController.callback', () => {
     const req: any = {
       originalUrl: '/auth/callback?code=code-1&state=wrong-state',
       query: { code: 'code-1', state: 'wrong-state' },
-      session: { oidc: { codeVerifier: 'verifier-1', state: 'expected-state' } },
+      session: {
+        oidc: { codeVerifier: 'verifier-1', state: 'expected-state' },
+        cookie: { maxAge: 8 * 60 * 60 * 1000 },
+      },
     };
 
     await expect(controller.callback(req, { redirect: jest.fn() } as any)).rejects.toBeInstanceOf(
@@ -24,7 +27,10 @@ describe('AuthController.callback', () => {
     const req: any = {
       originalUrl: '/auth/callback?code=code-1',
       query: { code: 'code-1' },
-      session: { oidc: { codeVerifier: 'verifier-1', state: 'expected-state' } },
+      session: {
+        oidc: { codeVerifier: 'verifier-1', state: 'expected-state' },
+        cookie: { maxAge: 8 * 60 * 60 * 1000 },
+      },
     };
 
     await expect(controller.callback(req, { redirect: jest.fn() } as any)).rejects.toBeInstanceOf(
@@ -47,7 +53,10 @@ describe('AuthController.callback', () => {
     const req: any = {
       originalUrl: '/auth/callback?code=code-1&state=expected-state',
       query: { code: 'code-1', state: 'expected-state' },
-      session: { oidc: { codeVerifier: 'verifier-1', state: 'expected-state' } },
+      session: {
+        oidc: { codeVerifier: 'verifier-1', state: 'expected-state' },
+        cookie: { maxAge: 8 * 60 * 60 * 1000 },
+      },
     };
     const res = { redirect: jest.fn() };
 
@@ -62,6 +71,36 @@ describe('AuthController.callback', () => {
     expect(req.session.tokens).toEqual(tokens);
     expect(req.session.oidc).toBeUndefined();
     expect(res.redirect).toHaveBeenCalledWith('/');
+  });
+
+  it('aligns the session cookie lifetime with the Keycloak token expiration', async () => {
+    const tokens = {
+      access_token: 'private-access-token',
+      id_token: 'private-id-token',
+      tenantId: 'tenant-a',
+      expiresAt: 1_900,
+    };
+    const authService = {
+      completeAuthorizationCallback: jest.fn().mockResolvedValue(tokens),
+    };
+    const controller = new AuthController(authService as unknown as AuthService);
+    const req: any = {
+      query: { code: 'code-1', state: 'expected-state' },
+      session: {
+        oidc: { codeVerifier: 'verifier-1', state: 'expected-state' },
+        cookie: { maxAge: 8 * 60 * 60 * 1000 },
+      },
+    };
+    const res = { redirect: jest.fn() };
+    const now = 1_000_000;
+    jest.spyOn(Date, 'now').mockReturnValue(now);
+
+    try {
+      await controller.callback(req, res as any);
+      expect(req.session.cookie.maxAge).toBe(tokens.expiresAt * 1000 - now);
+    } finally {
+      jest.restoreAllMocks();
+    }
   });
 
   it('forwards the issuer parameter received from Keycloak to the code exchange', async () => {
@@ -83,7 +122,10 @@ describe('AuthController.callback', () => {
         state: 'expected-state',
         iss: 'https://oauth2.qa.comsatel.com.pe/realms/Apps',
       },
-      session: { oidc: { codeVerifier: 'verifier-1', state: 'expected-state' } },
+      session: {
+        oidc: { codeVerifier: 'verifier-1', state: 'expected-state' },
+        cookie: { maxAge: 8 * 60 * 60 * 1000 },
+      },
     };
 
     await controller.callback(req, { redirect: jest.fn() } as any);

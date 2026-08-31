@@ -1,5 +1,6 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable, InjectionToken, inject, signal } from '@angular/core';
+import { catchError, Observable, of, tap } from 'rxjs';
 
 export interface Session {
   authenticated: boolean;
@@ -24,12 +25,20 @@ export class SessionService {
   readonly session = signal<Session>({ authenticated: false });
 
   refresh(): void {
-    this.http
+    this.check().subscribe();
+  }
+
+  check(): Observable<Session> {
+    return this.http
       .get<Session>('/auth/session', { withCredentials: true })
-      .subscribe({
-        next: (session: Session) => this.session.set(session),
-        error: () => this.session.set({ authenticated: false }),
-      });
+      .pipe(
+        tap((session) => this.session.set(session)),
+        catchError(() => {
+          const anonymousSession = { authenticated: false };
+          this.session.set(anonymousSession);
+          return of(anonymousSession);
+        }),
+      );
   }
 
   login(): void {

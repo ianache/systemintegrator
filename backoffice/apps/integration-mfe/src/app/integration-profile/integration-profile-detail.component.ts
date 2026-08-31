@@ -61,6 +61,36 @@ export interface MappingConfig {
   script: string;
 }
 
+type BackoffStrategy = 'EXPONENTIAL' | 'FIXED' | 'LINEAR';
+
+interface SyncPolicyConfig {
+  mode: string;
+  trigger: string;
+  batchSize: number;
+}
+
+interface RetryPolicyConfig {
+  maxAttempts: number;
+  backoff: BackoffStrategy;
+  initialIntervalMs: number;
+}
+
+interface RateLimitPolicyConfig {
+  requestsPerSecond: number;
+  burst: number;
+}
+
+function parsePolicy<T extends object>(json: string, defaults: T): T {
+  try {
+    const parsed = JSON.parse(json);
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? { ...defaults, ...parsed }
+      : defaults;
+  } catch {
+    return defaults;
+  }
+}
+
 function parseMappingConfig(json: string): MappingConfig {
   let parsed: Record<string, unknown> = {};
   const trimmed = json.trim();
@@ -174,6 +204,33 @@ export class IntegrationProfileDetailComponent implements OnInit {
   readonly dryRunPending = signal(false);
 
   readonly mappingConfig = computed<MappingConfig>(() => parseMappingConfig(this.editModel()?.transformationJson ?? ''));
+  readonly syncPolicy = computed<SyncPolicyConfig>(() => parsePolicy(this.editModel()?.syncPolicyJson ?? '', {
+    mode: 'EVENT_DRIVEN',
+    trigger: 'vehicle.upserted.v1',
+    batchSize: 200,
+  }));
+  readonly retryPolicy = computed<RetryPolicyConfig>(() => {
+    const policy = parsePolicy<Partial<RetryPolicyConfig>>(this.editModel()?.retryPolicyJson ?? '', {
+      maxAttempts: 5,
+      backoff: 'EXPONENTIAL',
+      initialIntervalMs: 2000,
+    });
+    return {
+      maxAttempts: Number.isFinite(Number(policy.maxAttempts)) ? Math.max(1, Number(policy.maxAttempts)) : 5,
+      backoff: policy.backoff === 'FIXED' || policy.backoff === 'LINEAR' ? policy.backoff : 'EXPONENTIAL',
+      initialIntervalMs: Number.isFinite(Number(policy.initialIntervalMs)) ? Math.max(0, Number(policy.initialIntervalMs)) : 2000,
+    };
+  });
+  readonly rateLimitPolicy = computed<RateLimitPolicyConfig>(() => {
+    const policy = parsePolicy<Partial<RateLimitPolicyConfig>>(this.editModel()?.rateLimitPolicyJson ?? '', {
+      requestsPerSecond: 25,
+      burst: 50,
+    });
+    return {
+      requestsPerSecond: Number.isFinite(Number(policy.requestsPerSecond)) ? Math.max(0, Number(policy.requestsPerSecond)) : 25,
+      burst: Number.isFinite(Number(policy.burst)) ? Math.max(0, Number(policy.burst)) : 50,
+    };
+  });
 
   readonly connectivityValid = computed(() => {
     const m = this.editModel();
@@ -182,21 +239,14 @@ export class IntegrationProfileDetailComponent implements OnInit {
   });
 
   readonly retrySequence = computed(() => {
-    const raw = this.editModel()?.retryPolicyJson ?? '';
-    if (!raw.trim()) return [];
-    let parsed: { maxAttempts?: number; backoff?: string; initialIntervalMs?: number };
-    try {
-      parsed = JSON.parse(raw);
-    } catch {
-      return [];
-    }
-    if (parsed.backoff !== 'EXPONENTIAL' || !parsed.maxAttempts || parsed.maxAttempts < 2) return [];
-    const initial = parsed.initialIntervalMs ?? 1000;
+    const parsed = this.retryPolicy();
+    if (parsed.maxAttempts < 2) return [];
     const sequence: string[] = [];
-    let interval = initial;
+    let interval = parsed.initialIntervalMs;
     for (let i = 0; i < parsed.maxAttempts - 1; i++) {
       sequence.push(interval + 'ms');
-      interval *= 2;
+      if (parsed.backoff === 'EXPONENTIAL') interval *= 2;
+      if (parsed.backoff === 'LINEAR') interval += parsed.initialIntervalMs;
     }
     return sequence;
   });
@@ -282,6 +332,27 @@ export class IntegrationProfileDetailComponent implements OnInit {
 
   updateField<K extends keyof EditModel>(key: K, value: EditModel[K]): void {
     this.editModel.update((current) => (current ? { ...current, [key]: value } : current));
+  }
+
+  updatePolicyField(
+    policy: 'syncPolicyJson' | 'retryPolicyJson' | 'rateLimitPolicyJson',
+    field: string,
+    value: string | number,
+  ): void {
+    const current = this.editModel();
+    if (!current) return;
+
+    let parsed: Record<string, unknown> = {};
+    try {
+      const candidate = JSON.parse(current[policy]);
+      if (candidate && typeof candidate === 'object' && !Array.isArray(candidate)) {
+        parsed = candidate;
+      }
+    } catch {
+      parsed = {};
+    }
+
+    this.updateField(policy, JSON.stringify({ ...parsed, [field]: value }, null, 2));
   }
 
   setEngine(engine: MappingEngine): void {

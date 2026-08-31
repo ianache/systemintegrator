@@ -37,7 +37,8 @@ export default withNativeFederation({
     // ignoreUnusedDeps is enabled by default now
     // ignoreUnusedDeps: true,
 
-    // Opt-in: groups chunks in remoteEntry.json for smaller metadata file
-    denseChunking: true
+    // Disabled: was causing shared externals (e.g. rxjs `map`) to resolve
+    // against the wrong merged chunk at runtime.
+    denseChunking: false
   }
 });

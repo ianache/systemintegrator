@@ -1,0 +1,218 @@
+{
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\app.config.ts": {
+    "mtime": 1788037235.0674005,
+    "hash": "a8a7eea3af169d1e9069e9ab23c8cdcf"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\app.routes.ts": {
+    "mtime": 1788037235.0690513,
+    "hash": "f88455b5bcc939ea379b3fd58153840e"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\app.spec.ts": {
+    "mtime": 1788037235.0690513,
+    "hash": "55929a38749ff50158ef5e66f614bef0"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\app.ts": {
+    "mtime": 1788037235.0690513,
+    "hash": "b8db399abc2e79dce690a34859ce1c3b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\console-frame.component.spec.ts": {
+    "mtime": 1788037235.091789,
+    "hash": "be9ce7bc754e6b311dde09c10fa281fc"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\console-frame.component.ts": {
+    "mtime": 1788037235.093796,
+    "hash": "dae264a80d801d66fbad986d33a68a68"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\console.routes.ts": {
+    "mtime": 1788102183.6394987,
+    "hash": "c8c81d7bf2dee5f137963610e58ef51f"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\nx-welcome.ts": {
+    "mtime": 1788037235.2011852,
+    "hash": "12d285972584a4919f23776dff7f0e55"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\connectors\\connectors-page.component.spec.ts": {
+    "mtime": 1788037235.0877883,
+    "hash": "9f298807ee9108cd52d7027524112bd9"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\connectors\\connectors-page.component.ts": {
+    "mtime": 1788037235.0897858,
+    "hash": "a3ce2864f6db3f6e6012a61f309e8386"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\dashboard\\dashboard-page.component.spec.ts": {
+    "mtime": 1788115518.4641964,
+    "hash": "07caedc0abb625212976e71855fbee45"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\dashboard\\dashboard-page.component.ts": {
+    "mtime": 1788115531.0768383,
+    "hash": "595a4454982b9a357cb8b157aa03299c"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\dead-letter-queue\\dead-letter-queue.model.ts": {
+    "mtime": 1788037235.1269236,
+    "hash": "a434550630e5d20a9e07a5ea3c8f529e"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\dead-letter-queue\\dead-letter-queue.service.spec.ts": {
+    "mtime": 1788037235.1269236,
+    "hash": "aefb3511d1502784b966469d4a28813d"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\dead-letter-queue\\dead-letter-queue.service.ts": {
+    "mtime": 1788037235.1269236,
+    "hash": "dc6780679c7796baad43660db373a072"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow-designer.component.spec.ts": {
+    "mtime": 1788102183.6541305,
+    "hash": "7f95382f6bbece9eb016eb1d9e7c891e"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow-designer.component.ts": {
+    "mtime": 1788102183.6571064,
+    "hash": "6c0b709d06b752ddd70676a2aba4a00c"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow-list.component.spec.ts": {
+    "mtime": 1788114658.8372717,
+    "hash": "bfe41955904bebdca75e054db86ec444"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow-list.component.ts": {
+    "mtime": 1788108447.5741627,
+    "hash": "55f8ac32223b99b4f48f0d8be61c0e31"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow.model.ts": {
+    "mtime": 1788108328.3098407,
+    "hash": "837c4627cbfb5a19da4649dd10f238b3"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow.service.spec.ts": {
+    "mtime": 1788108328.319289,
+    "hash": "a620b0ac4b73f7c7cf1d053ee1c345c4"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow.service.ts": {
+    "mtime": 1788108328.319289,
+    "hash": "4ac03d75b6e17e247133c3b1bbb3ed74"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-detail.component.spec.ts": {
+    "mtime": 1788114173.8976915,
+    "hash": "1d104cc965154d071a62688f0377882b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-detail.component.ts": {
+    "mtime": 1788114176.2980902,
+    "hash": "1cb98f89c2d07d455fe9d428e0b2b959"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-list.component.spec.ts": {
+    "mtime": 1788114549.1237748,
+    "hash": "44de17f1d27f5c7e2f19ff7afcfe04d3"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-list.component.ts": {
+    "mtime": 1788113812.182878,
+    "hash": "df3c0138eef26c7299df6c73de4c0d2a"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-wizard.component.spec.ts": {
+    "mtime": 1788037235.1660495,
+    "hash": "7fc9a20946994fda07a131bfab0c72c7"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-wizard.component.ts": {
+    "mtime": 1788037235.1680586,
+    "hash": "b365d96d9a7e2a35aed6f52779e236f2"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile.model.ts": {
+    "mtime": 1788113280.4742706,
+    "hash": "ce55acb0d8ce5fd913096f12261acb7b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile.service.spec.ts": {
+    "mtime": 1788113288.187551,
+    "hash": "0e2a585cd7f292f96662dc9de7cca653"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile.service.ts": {
+    "mtime": 1788113367.5447028,
+    "hash": "fcb93f32b01cf1e922da1516fa58e86a"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\message-monitor\\message-monitor.model.ts": {
+    "mtime": 1788037235.1690586,
+    "hash": "5151fba37cee5eb930a31c2ac4b70e04"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\message-monitor\\message-monitor.service.spec.ts": {
+    "mtime": 1788037235.1819632,
+    "hash": "5922ed60afa68657caf8090bb278f069"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\message-monitor\\message-monitor.service.ts": {
+    "mtime": 1788037235.18566,
+    "hash": "69e0246e97fe5b10d4ab18add4896aa4"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\monitor\\monitor-page.component.spec.ts": {
+    "mtime": 1788037235.1951885,
+    "hash": "f4d2eb12961dcf68115496b962da8da4"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\monitor\\monitor-page.component.ts": {
+    "mtime": 1788037235.198186,
+    "hash": "3a971499d0a58a0e53edd682fb5fb88b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\remote-entry\\entry.routes.ts": {
+    "mtime": 1788037235.2048202,
+    "hash": "f21f86e7c883f4e9bde98588ebdd01a6"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\console-empty-state.component.spec.ts": {
+    "mtime": 1788037235.2068253,
+    "hash": "54cd93ea584a76772755c9f48d7f89e6"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\console-empty-state.component.ts": {
+    "mtime": 1788037235.20982,
+    "hash": "f95ef3fc2f17c59638d42b5d6a19651b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\integration-tabs.component.spec.ts": {
+    "mtime": 1788114427.788668,
+    "hash": "2a59cd5c5f74c7a76b797311b7f21f2b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\integration-tabs.component.ts": {
+    "mtime": 1788114422.671669,
+    "hash": "1b11e94da76336e8910c8ebe1fcdbe0a"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\time-ago.pipe.spec.ts": {
+    "mtime": 1788112987.0296392,
+    "hash": "a9e65b252000b6e06077f0e637eb4c1c"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\time-ago.pipe.ts": {
+    "mtime": 1788113051.5714335,
+    "hash": "affd9fe39c2af93a6b226eb1653d5fe3"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\toast.service.spec.ts": {
+    "mtime": 1788037235.2118251,
+    "hash": "56143f15a7d50c16f8e54fbd91f77e01"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\shared\\toast.service.ts": {
+    "mtime": 1788037235.2138274,
+    "hash": "a290906c8df31fffc23983190a6f5d17"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\app.html": {
+    "mtime": 1788037235.0690513,
+    "hash": "0e2788f8d81c90f9ef4d2ced80787c2b"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\connectors\\connectors-page.component.html": {
+    "mtime": 1788037235.0840685,
+    "hash": "d2737cf66f9f5d432d8b58634a491524"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\dashboard\\dashboard-page.component.html": {
+    "mtime": 1788115533.9794264,
+    "hash": "fc9e04fad33b6d73f07b904d4fd1e369"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow-designer.component.html": {
+    "mtime": 1788102183.6485977,
+    "hash": "000b185097f3945e90a2092bc6d803f5"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\flow\\flow-list.component.html": {
+    "mtime": 1788113823.549798,
+    "hash": "8d60ea48b2edc658fa797518f47f191a"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-detail.component.html": {
+    "mtime": 1788114178.9809408,
+    "hash": "602593a14720197aaf8a886fbc9f1120"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-list.component.html": {
+    "mtime": 1788113820.9239984,
+    "hash": "5090c067dce4919aec20c1c129fd4fb2"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\integration-profile\\integration-profile-wizard.component.html": {
+    "mtime": 1788037235.1640499,
+    "hash": "61fc14d5788e95c0a71e39ef17474bcf"
+  },
+  "C:\\Users\\ianache\\Desktop\\DATA\\01-DOCUMENTOS\\03-PERSONAL\\12-systemintegrator\\backoffice\\apps\\integration-mfe\\src\\app\\monitor\\monitor-page.component.html": {
+    "mtime": 1788037235.1921866,
+    "hash": "acdaba92083fcbfabe6d413febaa4617"
+  }
+}
