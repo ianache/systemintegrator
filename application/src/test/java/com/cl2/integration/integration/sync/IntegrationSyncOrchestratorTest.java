@@ -854,4 +854,86 @@ class IntegrationSyncOrchestratorTest {
         // Verify watermark still advances properly
         verify(syncStateRepository).upsert(any());
     }
+
+    @Test
+    void doesNotRewindWatermarkWhenTheNewestRowEqualsTheCurrentWatermark() {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"cronExpression\":\"0 */10 * * * *\",\"overlapBufferSeconds\":300}");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+
+        Instant currentWatermark = Instant.parse("2026-08-01T10:00:00Z");
+        when(syncStateRepository.find(profileId))
+                .thenReturn(Optional.of(new SyncState(profileId, currentWatermark, Instant.now(), SyncRunStatus.SUCCESS, null)));
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(eq("jdbc:mysql://localhost:3306/integration"), eq(secret))).thenReturn(dataSource);
+
+        // A "boundary" row: the >= query keeps re-matching the row that produced the current watermark,
+        // because nothing newer has arrived yet.
+        List<Map<String, Object>> rows = List.of(Map.of("CardCode", "CLI-001", "updated_at", java.sql.Timestamp.from(currentWatermark)));
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(currentWatermark)))
+                .thenReturn(rows);
+        when(transformationService.transform(anyString(), eq(profile))).thenReturn("{\"customerId\":\"CLI-001\"}");
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
+        verify(syncStateRepository).upsert(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(currentWatermark);
+    }
+
+    @Test
+    void leavesWatermarkUnchangedWhenNoRowsAreExtracted() {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{\"cronExpression\":\"0 */10 * * * *\",\"overlapBufferSeconds\":300}");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+
+        Instant currentWatermark = Instant.parse("2026-08-01T10:00:00Z");
+        when(syncStateRepository.find(profileId))
+                .thenReturn(Optional.of(new SyncState(profileId, currentWatermark, Instant.now(), SyncRunStatus.SUCCESS, null)));
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(eq("jdbc:mysql://localhost:3306/integration"), eq(secret))).thenReturn(dataSource);
+
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(currentWatermark)))
+                .thenReturn(List.of());
+
+        orchestrator.run(profile);
+
+        ArgumentCaptor<SyncState> stateCaptor = ArgumentCaptor.forClass(SyncState.class);
+        verify(syncStateRepository).upsert(stateCaptor.capture());
+        assertThat(stateCaptor.getValue().lastWatermark()).isEqualTo(currentWatermark);
+        assertThat(stateCaptor.getValue().lastRunStatus()).isEqualTo(SyncRunStatus.SUCCESS);
+
+        verify(outboxRepository, never()).save(any());
+        verify(syncStateRecorder, never()).recordFailure(any(), any(), anyString());
+    }
+
+    @Test
+    void failsRunWhenSyncPolicyJsonIsMalformedInsteadOfSilentlyDroppingTheOverlapBuffer() {
+        String extractionConfigJson = "{\"query\":\"SELECT CardCode, updated_at FROM customers WHERE updated_at >= :lastSyncWithBuffer\","
+                + "\"watermarkParam\":\"lastSyncWithBuffer\",\"keyColumn\":\"CardCode\",\"watermarkColumn\":\"updated_at\"}";
+        IntegrationProfile profile = profileWith(extractionConfigJson, "{not-valid-json");
+
+        ResolvedSecret secret = ResolvedSecret.basic("secret/sap/hana", "user", "pass");
+        when(secretResolver.resolve("secret/sap/hana", tenantId)).thenReturn(secret);
+        when(syncStateRepository.find(profileId)).thenReturn(Optional.empty());
+
+        HikariDataSource dataSource = mock(HikariDataSource.class, org.mockito.Mockito.withSettings().lenient());
+        when(jdbcDataSourceFactory.create(eq("jdbc:mysql://localhost:3306/integration"), eq(secret))).thenReturn(dataSource);
+
+        when(genericJdbcAdapter.extract(any(NamedParameterJdbcTemplate.class), any(ExtractionConfig.class), eq(Instant.EPOCH)))
+                .thenReturn(List.of());
+
+        assertThatThrownBy(() -> orchestrator.run(profile)).isInstanceOf(IntegrationSyncException.class);
+
+        verify(syncStateRepository, never()).upsert(any());
+        verify(syncStateRecorder).recordFailure(eq(profileId), any(Instant.class), anyString());
+    }
 }

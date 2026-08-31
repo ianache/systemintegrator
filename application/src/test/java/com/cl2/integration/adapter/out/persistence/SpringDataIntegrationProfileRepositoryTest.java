@@ -16,6 +16,9 @@ class SpringDataIntegrationProfileRepositoryTest {
                 .filter(method -> method.getName().startsWith("find")
                         || method.getName().startsWith("exists")
                         || method.getName().startsWith("update"))
+                // findAllByActiveTrueAndProtocol is deliberately cross-tenant: the scheduler needs to
+                // discover active profiles for a protocol across every tenant, not within one.
+                .filter(method -> !method.getName().equals("findAllByActiveTrueAndProtocol"))
                 .allMatch(method -> Arrays.stream(method.getParameterTypes())
                         .anyMatch(parameterType -> parameterType.equals(java.util.UUID.class))))
                 .isTrue();
