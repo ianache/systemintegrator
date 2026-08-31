@@ -81,6 +81,11 @@ export interface ReportFlowExecutionPayload {
   errorMessage?: string | null;
 }
 
+export interface TransformationPreviewResult {
+  output: string | null;
+  error: string | null;
+}
+
 /** Mirrors the backend's FlowExecutionResponse (adapter/in/web/dto). */
 export interface FlowExecutionSummary {
   id: string;

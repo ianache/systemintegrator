@@ -202,4 +202,10 @@ export class GatewayProxyController {
   archiveFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {
     return this.gatewayProxy.archiveFlow(request.session.tokens!.access_token!, flowId);
   }
+
+  @Post('transformations/preview')
+  @HttpCode(HttpStatus.OK)
+  previewTransformation(@Req() request: AuthenticatedRequest, @Body() body: unknown) {
+    return this.gatewayProxy.previewTransformation(request.session.tokens!.access_token!, body);
+  }
 }

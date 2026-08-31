@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnInit, ViewChild, computed, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Flow, FlowGraph, FlowGraphEdge, FlowGraphNode, FlowNodeCategory, FlowVersion } from './flow.model';
 import { FlowService } from './flow.service';
@@ -82,7 +82,8 @@ export class FlowDesignerComponent implements OnInit {
   readonly txEngine = signal<TransformEngine>('JSLT');
   readonly txScript = signal('');
   readonly txSample = signal('{}');
-  readonly txPreview = computed<TransformPreview>(() => this.computeTxPreview(this.txEngine(), this.txScript(), this.txSample()));
+  readonly txPreview = signal<TransformPreview>({ output: null, note: null });
+  readonly txPreviewPending = signal(false);
 
   @ViewChild('surface') private surfaceRef?: ElementRef<HTMLDivElement>;
 
@@ -252,22 +253,27 @@ export class FlowDesignerComponent implements OnInit {
     this.txScript.set(node.fields?.['script'] ?? '');
     this.txSample.set(node.fields?.['sample'] ?? '{}');
     this.txOpen.set(true);
+    this.schedulePreview();
   }
 
   closeTx(): void {
     this.txOpen.set(false);
+    if (this.txPreviewTimer) clearTimeout(this.txPreviewTimer);
   }
 
   setTxEngine(engine: TransformEngine): void {
     this.txEngine.set(engine);
+    this.schedulePreview();
   }
 
   onTxScriptInput(value: string): void {
     this.txScript.set(value);
+    this.schedulePreview();
   }
 
   onTxSampleInput(value: string): void {
     this.txSample.set(value);
+    this.schedulePreview();
   }
 
   saveTx(): void {
@@ -280,40 +286,33 @@ export class FlowDesignerComponent implements OnInit {
     this.txOpen.set(false);
   }
 
+  private txPreviewTimer: ReturnType<typeof setTimeout> | null = null;
+
   /**
-   * The backend's only dry-run endpoint (`/integration-profiles/:id/mapping/dry-run`)
-   * evaluates an Integration Profile's FIELD_MAPPING/JSLT/PASSTHROUGH mapping
-   * config against tenant-scoped profile data — a different bounded context
-   * from a flow node's standalone transform script, and it has no Velocity or
-   * Mustache engine at all (see TransformationEngineType). So there is no
-   * real endpoint to preview a flow TRANSFORM node against here: Mustache is
-   * evaluated client-side (trivial `{{path}}` interpolation, no library), and
-   * JSLT/Velocity honestly report that a live preview needs the backend.
+   * Debounced live preview against the real backend engines (JSLT/Velocity/
+   * Mustache are all genuine TransformationService implementations now — see
+   * TransformationController's POST /api/v1/transformations/preview, which
+   * exists specifically because this flow node editor has no Integration
+   * Profile to anchor mapping/dry-run against). 400ms matches the mock's own
+   * footer text for this editor.
    */
-  private computeTxPreview(engine: TransformEngine, script: string, sampleJson: string): TransformPreview {
-    if (engine !== 'MUSTACHE') {
-      return { output: null, note: 'Preview no disponible sin ejecutar en el backend — revisa el endpoint de dry-run.' };
-    }
-    let sample: unknown;
-    try {
-      sample = JSON.parse(sampleJson || '{}');
-    } catch {
-      return { output: null, note: 'El payload de muestra no es JSON válido.' };
-    }
-    try {
-      return { output: this.renderMustacheLite(script, sample), note: null };
-    } catch {
-      return { output: null, note: 'No se pudo evaluar la plantilla Mustache.' };
-    }
+  private schedulePreview(): void {
+    if (this.txPreviewTimer) clearTimeout(this.txPreviewTimer);
+    this.txPreviewTimer = setTimeout(() => this.runPreview(), 400);
   }
 
-  /** Minimal `{{a.b.c}}` variable interpolation — no sections, no partials, no library. */
-  private renderMustacheLite(template: string, data: unknown): string {
-    return template.replace(/\{\{\s*([\w.]+)\s*\}\}/g, (_match, path: string) => {
-      const value = path
-        .split('.')
-        .reduce<unknown>((acc, key) => (acc != null && typeof acc === 'object' ? (acc as Record<string, unknown>)[key] : undefined), data);
-      return value === undefined || value === null ? '' : String(value);
+  private runPreview(): void {
+    const engine = this.txEngine();
+    this.txPreviewPending.set(true);
+    this.flowService.previewTransformation(engine, this.txScript(), this.txSample()).subscribe({
+      next: (result) => {
+        this.txPreviewPending.set(false);
+        this.txPreview.set({ output: result.output, note: result.error });
+      },
+      error: () => {
+        this.txPreviewPending.set(false);
+        this.txPreview.set({ output: null, note: 'No se pudo ejecutar el preview.' });
+      },
     });
   }
 

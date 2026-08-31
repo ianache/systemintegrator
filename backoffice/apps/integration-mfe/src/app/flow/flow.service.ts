@@ -8,10 +8,12 @@ import {
   FlowMetricsSummary,
   FlowVersion,
   ReportFlowExecutionPayload,
+  TransformationPreviewResult,
   UpdateFlowDraftPayload,
 } from './flow.model';
 
 const BASE_URL = '/bff/api/v1/flows';
+const TRANSFORMATIONS_URL = '/bff/api/v1/transformations';
 
 @Injectable({ providedIn: 'root' })
 export class FlowService {
@@ -71,5 +73,10 @@ export class FlowService {
 
   getExecution(flowId: string, executionId: string): Observable<FlowExecutionSummary> {
     return this.http.get<FlowExecutionSummary>(`${BASE_URL}/${flowId}/executions/${executionId}`);
+  }
+
+  /** Real backend preview for a standalone script — see TransformationController. */
+  previewTransformation(engine: string, script: string, payload: string): Observable<TransformationPreviewResult> {
+    return this.http.post<TransformationPreviewResult>(`${TRANSFORMATIONS_URL}/preview`, { engine, script, payload });
   }
 }

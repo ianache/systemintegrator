@@ -119,6 +119,10 @@ export class GatewayProxyService {
     return this.forward('delete', `/api/v1/flows/${flowId}`, accessToken);
   }
 
+  previewTransformation(accessToken: string, body: unknown): Promise<unknown> {
+    return this.forward('post', '/api/v1/transformations/preview', accessToken, body);
+  }
+
   private async forward(method: HttpMethod, path: string, accessToken: string, body?: unknown): Promise<unknown> {
     const url = `${this.config.getOrThrow<string>('GATEWAY_URI')}${path}`;
     const options = { headers: { Authorization: `Bearer ${accessToken}` } };

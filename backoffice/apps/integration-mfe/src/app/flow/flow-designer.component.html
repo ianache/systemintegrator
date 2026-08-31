@@ -213,11 +213,15 @@
             </div>
             <div class="tx-pane">
               <span class="mono tx-pane-label">PREVIEW</span>
-              @if (txPreview().note; as note) {
-                <p class="tx-preview-note">{{ note }}</p>
-              }
-              @if (txPreview().output !== null) {
-                <pre class="mono tx-preview-output">{{ txPreview().output }}</pre>
+              @if (txPreviewPending()) {
+                <p class="tx-preview-note">Evaluando…</p>
+              } @else {
+                @if (txPreview().note; as note) {
+                  <p class="tx-preview-note">{{ note }}</p>
+                }
+                @if (txPreview().output !== null) {
+                  <pre class="mono tx-preview-output">{{ txPreview().output }}</pre>
+                }
               }
             </div>
           </div>
