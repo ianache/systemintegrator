@@ -6,7 +6,7 @@
   } @else if (state() === 'unavailable') {
     <app-console-empty-state
       title="Ejecución no disponible"
-      description="El backend todavía no expone el detalle de ejecuciones de flujos."
+      description="No se pudo cargar el detalle de esta ejecución."
     >
       <button type="button" class="btn" (click)="retry()">Reintentar</button>
     </app-console-empty-state>
@@ -51,11 +51,14 @@
             }
           }
           @for (node of graph().nodes; track node.id) {
-            <div class="graph-node" [style.left.px]="node.x" [style.top.px]="node.y">
-              <span class="graph-node-bar" [style.background]="categoryColor(categoryOf(node.type))"></span>
+            <div class="graph-node" [style.left.px]="node.x" [style.top.px]="node.y" [class.graph-node-stepped]="stepFor(node.id)">
+              <span class="graph-node-bar" [style.background]="nodeStatusColor(node.id) ?? categoryColor(categoryOf(node.type))"></span>
               <div class="graph-node-body">
                 <span class="mono graph-node-cat" [style.color]="categoryColor(categoryOf(node.type))">{{ categoryOf(node.type) }}</span>
                 <span class="graph-node-name">{{ node.name }}</span>
+                @if (stepFor(node.id); as step) {
+                  <span [class]="statusBadgeClass(step.status)" class="graph-node-status">{{ step.status }}</span>
+                }
               </div>
             </div>
           } @empty {
@@ -65,24 +68,45 @@
       </div>
     } @else {
       <div class="card timeline-panel">
-        <p class="cell-sub timeline-note">
-          El backend todavía no registra pasos individuales por nodo para una ejecución — solo el resultado
-          agregado. Esta vista se ampliará con una fila por paso cuando el modelo de dominio incluya ese historial.
-        </p>
-        <div class="timeline-row">
-          <span class="mono">{{ exec.startedAt | date: 'HH:mm:ss' }}</span>
-          <span class="timeline-node">Ejecución completa</span>
-          <span [class]="statusBadgeClass(exec.status)">{{ exec.status }}</span>
-          <span class="mono">{{ formatDuration(exec.durationMs) }}</span>
-          <button
-            type="button"
-            class="btn replay-btn"
-            [disabled]="true"
-            title="Próximamente — requiere un endpoint de reintento (POST .../executions/:id/retry) que el backend aún no expone"
-          >
-            Reprocesar
-          </button>
-        </div>
+        @if (exec.steps.length) {
+          @for (step of exec.steps; track step.stepOrder) {
+            <div class="timeline-row">
+              <span class="mono">{{ step.startedAt | date: 'HH:mm:ss' }}</span>
+              <span class="timeline-node">{{ step.nodeId }}</span>
+              <span [class]="statusBadgeClass(step.status)">{{ step.status }}</span>
+              <span class="mono">{{ formatDuration(step.durationMs) }}</span>
+              <button
+                type="button"
+                class="btn replay-btn"
+                [disabled]="true"
+                title="Próximamente — requiere un endpoint de reintento (POST .../executions/:id/retry) que el backend aún no expone"
+              >
+                Reprocesar
+              </button>
+            </div>
+            @if (step.errorMessage) {
+              <div class="card exec-error timeline-step-error">{{ step.errorMessage }}</div>
+            }
+          }
+        } @else {
+          <p class="cell-sub timeline-note">
+            Esta ejecución no reportó pasos individuales por nodo — solo el resultado agregado.
+          </p>
+          <div class="timeline-row">
+            <span class="mono">{{ exec.startedAt | date: 'HH:mm:ss' }}</span>
+            <span class="timeline-node">Ejecución completa</span>
+            <span [class]="statusBadgeClass(exec.status)">{{ exec.status }}</span>
+            <span class="mono">{{ formatDuration(exec.durationMs) }}</span>
+            <button
+              type="button"
+              class="btn replay-btn"
+              [disabled]="true"
+              title="Próximamente — requiere un endpoint de reintento (POST .../executions/:id/retry) que el backend aún no expone"
+            >
+              Reprocesar
+            </button>
+          </div>
+        }
       </div>
     }
   }

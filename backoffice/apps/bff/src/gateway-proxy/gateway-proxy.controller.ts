@@ -197,6 +197,20 @@ export class GatewayProxyController {
     return this.gatewayProxy.reportFlowExecution(request.session.tokens!.access_token!, flowId, body);
   }
 
+  @Get('flows/:flowId/executions')
+  listFlowExecutions(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {
+    return this.gatewayProxy.listFlowExecutions(request.session.tokens!.access_token!, flowId);
+  }
+
+  @Get('flows/:flowId/executions/:executionId')
+  getFlowExecution(
+    @Req() request: AuthenticatedRequest,
+    @Param('flowId') flowId: string,
+    @Param('executionId') executionId: string,
+  ) {
+    return this.gatewayProxy.getFlowExecution(request.session.tokens!.access_token!, flowId, executionId);
+  }
+
   @Delete('flows/:flowId')
   @HttpCode(HttpStatus.NO_CONTENT)
   archiveFlow(@Req() request: AuthenticatedRequest, @Param('flowId') flowId: string) {

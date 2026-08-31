@@ -5,7 +5,7 @@ import { ActivatedRoute, convertToParamMap, provideRouter, Router } from '@angul
 import { BehaviorSubject } from 'rxjs';
 import { CONSOLE_ROUTES } from '../console.routes';
 import { FlowExecutionDetailComponent } from './flow-execution-detail.component';
-import { FlowExecutionSummary } from './flow.model';
+import { FlowExecutionDetail } from './flow.model';
 
 const FLOW = {
   id: 'f-1',
@@ -29,7 +29,7 @@ const FLOW = {
   version: 1,
 };
 
-const EXECUTION: FlowExecutionSummary = {
+const EXECUTION: FlowExecutionDetail = {
   id: 'e-1',
   flowId: 'f-1',
   flowVersionNumber: 1,
@@ -38,6 +38,7 @@ const EXECUTION: FlowExecutionSummary = {
   finishedAt: '2026-08-30T10:05:31Z',
   durationMs: 31000,
   errorMessage: 'connection refused',
+  steps: [],
 };
 
 function setup() {

@@ -97,3 +97,18 @@ export interface FlowExecutionSummary {
   durationMs: number;
   errorMessage: string | null;
 }
+
+/** Mirrors the backend's FlowExecutionStepResponse. */
+export interface FlowExecutionStep {
+  nodeId: string;
+  status: FlowExecutionStatus;
+  startedAt: string;
+  durationMs: number;
+  errorMessage: string | null;
+  stepOrder: number;
+}
+
+/** Mirrors the backend's FlowExecutionDetailResponse. */
+export interface FlowExecutionDetail extends FlowExecutionSummary {
+  steps: FlowExecutionStep[];
+}

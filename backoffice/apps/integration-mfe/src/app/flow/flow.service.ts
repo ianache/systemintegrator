@@ -4,6 +4,7 @@ import { Observable } from 'rxjs';
 import {
   CreateFlowPayload,
   Flow,
+  FlowExecutionDetail,
   FlowExecutionSummary,
   FlowMetricsSummary,
   FlowVersion,
@@ -59,20 +60,12 @@ export class FlowService {
     return this.http.post(`${BASE_URL}/${flowId}/executions`, payload);
   }
 
-  /**
-   * FlowController only exposes POST .../executions (reportExecution) today —
-   * there is no GET list/detail endpoint yet. These follow the same path
-   * convention so the execution views light up the moment the backend adds
-   * them; until then they 404 and the views fall back to their "no
-   * disponible" empty state, same as the flow designer does for other
-   * not-yet-implemented backend pieces.
-   */
   listExecutions(flowId: string): Observable<FlowExecutionSummary[]> {
     return this.http.get<FlowExecutionSummary[]>(`${BASE_URL}/${flowId}/executions`);
   }
 
-  getExecution(flowId: string, executionId: string): Observable<FlowExecutionSummary> {
-    return this.http.get<FlowExecutionSummary>(`${BASE_URL}/${flowId}/executions/${executionId}`);
+  getExecution(flowId: string, executionId: string): Observable<FlowExecutionDetail> {
+    return this.http.get<FlowExecutionDetail>(`${BASE_URL}/${flowId}/executions/${executionId}`);
   }
 
   /** Real backend preview for a standalone script — see TransformationController. */

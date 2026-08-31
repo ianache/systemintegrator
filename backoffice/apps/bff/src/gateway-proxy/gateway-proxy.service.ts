@@ -115,6 +115,14 @@ export class GatewayProxyService {
     return this.forward('post', `/api/v1/flows/${flowId}/executions`, accessToken, body);
   }
 
+  listFlowExecutions(accessToken: string, flowId: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/flows/${flowId}/executions`, accessToken);
+  }
+
+  getFlowExecution(accessToken: string, flowId: string, executionId: string): Promise<unknown> {
+    return this.forward('get', `/api/v1/flows/${flowId}/executions/${executionId}`, accessToken);
+  }
+
   archiveFlow(accessToken: string, flowId: string): Promise<unknown> {
     return this.forward('delete', `/api/v1/flows/${flowId}`, accessToken);
   }

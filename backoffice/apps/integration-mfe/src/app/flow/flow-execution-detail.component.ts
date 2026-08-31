@@ -1,7 +1,7 @@
 import { DatePipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
-import { Flow, FlowExecutionSummary, FlowGraph, FlowGraphEdge, FlowGraphNode } from './flow.model';
+import { Flow, FlowExecutionDetail, FlowExecutionStep, FlowGraph, FlowGraphEdge, FlowGraphNode } from './flow.model';
 import { FlowService } from './flow.service';
 import { ConsoleEmptyStateComponent } from '../shared/console-empty-state.component';
 import { NODE_H, NODE_W, categoryColor, categoryOf, portOffsetY } from './flow-node-catalog';
@@ -33,7 +33,7 @@ export class FlowExecutionDetailComponent implements OnInit {
 
   readonly state = signal<DetailState>('loading');
   readonly flow = signal<Flow | null>(null);
-  readonly execution = signal<FlowExecutionSummary | null>(null);
+  readonly execution = signal<FlowExecutionDetail | null>(null);
   readonly flowId = signal('');
   readonly executionId = signal('');
   readonly mode = signal<ViewMode>('GRAPH');
@@ -81,12 +81,22 @@ export class FlowExecutionDetailComponent implements OnInit {
     this.mode.set(mode);
   }
 
-  statusBadgeClass(status: FlowExecutionSummary['status']): string {
+  statusBadgeClass(status: string): string {
     return 'badge status-' + status.toLowerCase();
   }
 
   formatDuration(ms: number): string {
     return ms >= 1000 ? (ms / 1000).toFixed(1) + ' s' : ms + ' ms';
+  }
+
+  stepFor(nodeId: string): FlowExecutionStep | null {
+    return (this.execution()?.steps ?? []).find((s) => s.nodeId === nodeId) ?? null;
+  }
+
+  nodeStatusColor(nodeId: string): string | null {
+    const step = this.stepFor(nodeId);
+    if (!step) return null;
+    return step.status === 'SUCCESS' ? '#2fa96e' : '#d64545';
   }
 
   categoryOf(type: string): ReturnType<typeof categoryOf> {
@@ -133,14 +143,6 @@ export class FlowExecutionDetailComponent implements OnInit {
     return paths;
   }
 
-  /**
-   * The domain model (FlowExecution) only records the outcome of the whole
-   * run — there is no per-node step history yet, so the graph can only be
-   * drawn with each node's static category color, not a completed/failed/
-   * skipped state per node. Wiring that up needs a FlowExecutionStep concept
-   * on the backend (new entity + migration + orchestrator instrumentation),
-   * which is out of scope for a frontend-only pass.
-   */
   private readGraph(raw: unknown): FlowGraph {
     if (!raw || typeof raw !== 'object') return { nodes: [], edges: [] };
     const source = raw as { nodes?: unknown; edges?: unknown };
