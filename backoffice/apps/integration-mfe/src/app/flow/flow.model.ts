@@ -54,7 +54,8 @@ export interface FlowGraphNode {
 export interface FlowGraphEdge {
   from: string;
   to: string;
-  fromPort?: number;
+  /** Named output port on the source node (e.g. 'true'/'false' for ROUTER_IF, a case name for SWITCH_CASE). Omitted for single-output nodes. */
+  fromPort?: string;
   label?: string;
 }
 

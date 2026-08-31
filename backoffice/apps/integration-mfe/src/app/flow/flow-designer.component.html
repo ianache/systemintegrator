@@ -77,6 +77,11 @@
               <path [attr.d]="d" stroke="var(--text-dim)" stroke-dasharray="4 3" fill="none" stroke-width="1.4" />
             }
           </svg>
+          @for (edge of edgePaths(); track edge.key) {
+            @if (edge.label; as label) {
+              <span class="edge-label mono" [style.left.px]="edge.labelX" [style.top.px]="edge.labelY">{{ label }}</span>
+            }
+          }
           @for (node of graph().nodes; track node.id) {
             <div
               class="canvas-node"
@@ -95,12 +100,16 @@
                 <span class="canvas-node-name">{{ node.name }}</span>
                 <span class="mono canvas-node-type">{{ node.type }}</span>
               </div>
-              @if (hasOutput(node.type)) {
+              @for (port of outputPorts(node); track port) {
                 <span
                   class="canvas-node-port"
-                  title="Arrastra para conectar"
-                  (mousedown)="onPortMouseDown($event, node.id)"
+                  [style.top.px]="portTop(node, port)"
+                  [title]="port ? 'Salida: ' + port : 'Arrastra para conectar'"
+                  (mousedown)="onPortMouseDown($event, node.id, port)"
                 ></span>
+                @if (port) {
+                  <span class="canvas-node-port-label mono" [style.top.px]="portTop(node, port) - 7">{{ port }}</span>
+                }
               }
             </div>
           } @empty {

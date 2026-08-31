@@ -1,4 +1,4 @@
-import { FlowNodeCategory } from './flow.model';
+import { FlowGraphNode, FlowNodeCategory } from './flow.model';
 
 export interface NodeCatalogEntry {
   label: string;
@@ -49,7 +49,7 @@ export const NODE_CATALOG: Record<string, NodeCatalogEntry> = {
     expressionFields: ['expression'], expressionPlaceholder: "payload.estado == '1'",
   },
   SWITCH_CASE: {
-    label: 'Switch (case)', category: 'CONTROL', fields: ['expression'],
+    label: 'Switch (case)', category: 'CONTROL', fields: ['expression', 'cases'],
     expressionFields: ['expression'], expressionPlaceholder: 'payload.tipo',
   },
   FILTER: {
@@ -81,4 +81,30 @@ export function categoryColor(category: FlowNodeCategory): string {
 
 export function hasOutput(type: string): boolean {
   return NODE_CATALOG[type]?.hasOutput ?? true;
+}
+
+/**
+ * Output ports for a node, in render order. Matches the mock's NODE_SPEC.outs:
+ * ROUTER_IF is a fixed true/false branch, SWITCH_CASE derives one port per
+ * case name the user typed into the node's `cases` field (comma-separated)
+ * plus a trailing "default", and every other node with an output gets a
+ * single unnamed port ('' — no label rendered, no fromPort set on its edges).
+ */
+export function outputPortsFor(node: FlowGraphNode): string[] {
+  if (node.type === 'ROUTER_IF') return ['true', 'false'];
+  if (node.type === 'SWITCH_CASE') {
+    const raw = node.fields?.['cases'] ?? '';
+    const cases = raw.split(',').map((c) => c.trim()).filter(Boolean);
+    return [...cases, 'default'];
+  }
+  return hasOutput(node.type) ? [''] : [];
+}
+
+/** Vertical offset (px) of a named output port within a NODE_H-tall node box. */
+export function portOffsetY(node: FlowGraphNode, portKey: string | undefined): number {
+  if (!portKey) return NODE_H / 2;
+  const ports = outputPortsFor(node);
+  const index = ports.indexOf(portKey);
+  if (index === -1) return NODE_H / 2;
+  return Math.round((NODE_H * (index + 1)) / (ports.length + 1));
 }

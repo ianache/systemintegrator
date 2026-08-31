@@ -4,7 +4,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { Flow, FlowGraph, FlowGraphEdge, FlowGraphNode, FlowNodeCategory, FlowVersion } from './flow.model';
 import { FlowService } from './flow.service';
 import { ConsoleEmptyStateComponent } from '../shared/console-empty-state.component';
-import { CATEGORY_ORDER, NODE_CATALOG, NODE_H, NODE_W, categoryColor, categoryOf, hasOutput } from './flow-node-catalog';
+import { CATEGORY_ORDER, NODE_CATALOG, NODE_H, NODE_W, categoryColor, categoryOf, hasOutput, outputPortsFor, portOffsetY } from './flow-node-catalog';
 
 type DesignerState = 'loading' | 'ready' | 'not-found' | 'unavailable';
 type TransformEngine = 'JSLT' | 'VELOCITY' | 'MUSTACHE';
@@ -24,6 +24,9 @@ interface EdgePath {
   d: string;
   color: string;
   data: FlowGraphEdge;
+  label: string | null;
+  labelX: number;
+  labelY: number;
 }
 
 const GRID_COL_GAP = 240;
@@ -40,6 +43,7 @@ interface DragState {
 
 interface EdgeDragState {
   fromId: string;
+  fromPort?: string;
   x: number;
   y: number;
 }
@@ -333,7 +337,7 @@ export class FlowDesignerComponent implements OnInit {
       const to = nodesById.get(edge.to);
       if (!from || !to) return;
       const x1 = (from.x ?? 0) + NODE_W;
-      const y1 = (from.y ?? 0) + NODE_H / 2;
+      const y1 = (from.y ?? 0) + portOffsetY(from, edge.fromPort);
       const x2 = to.x ?? 0;
       const y2 = (to.y ?? 0) + NODE_H / 2;
       const midX = (x1 + x2) / 2;
@@ -342,9 +346,21 @@ export class FlowDesignerComponent implements OnInit {
         d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
         color: this.categoryColor(this.categoryOf(from.type)),
         data: edge,
+        label: edge.fromPort ?? null,
+        labelX: x1 + 8,
+        labelY: y1 - 8,
       });
     });
     return paths;
+  }
+
+  /** Output ports for a node, in render order (see flow-node-catalog's outputPortsFor doc). */
+  outputPorts(node: FlowGraphNode): string[] {
+    return outputPortsFor(node);
+  }
+
+  portTop(node: FlowGraphNode, port: string): number {
+    return portOffsetY(node, port || undefined);
   }
 
   addNode(type: string): void {
@@ -397,11 +413,11 @@ export class FlowDesignerComponent implements OnInit {
     };
   }
 
-  onPortMouseDown(event: MouseEvent, nodeId: string): void {
+  onPortMouseDown(event: MouseEvent, nodeId: string, port: string): void {
     event.preventDefault();
     event.stopPropagation();
     const local = this.toLocalPoint(event.clientX, event.clientY);
-    this.edgeDrag.set({ fromId: nodeId, x: local.x, y: local.y });
+    this.edgeDrag.set({ fromId: nodeId, fromPort: port || undefined, x: local.x, y: local.y });
   }
 
   onNodeMouseEnter(nodeId: string): void {
@@ -418,7 +434,7 @@ export class FlowDesignerComponent implements OnInit {
     const from = this.graph().nodes.find((n) => n.id === drag.fromId);
     if (!from) return null;
     const x1 = (from.x ?? 0) + NODE_W;
-    const y1 = (from.y ?? 0) + NODE_H / 2;
+    const y1 = (from.y ?? 0) + portOffsetY(from, drag.fromPort);
     const midX = (x1 + drag.x) / 2;
     return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${drag.y}, ${drag.x} ${drag.y}`;
   }
@@ -445,9 +461,16 @@ export class FlowDesignerComponent implements OnInit {
     this.edgeDrag.set(null);
     this.hoveredNodeId.set(null);
     if (!drag || !targetId || targetId === drag.fromId) return;
-    const exists = this.graph().edges.some((e) => e.from === drag.fromId && e.to === targetId);
+    const exists = this.graph().edges.some(
+      (e) => e.from === drag.fromId && e.to === targetId && (e.fromPort ?? undefined) === drag.fromPort,
+    );
     if (exists) return;
-    this.graph.update((g) => ({ nodes: g.nodes, edges: [...g.edges, { from: drag.fromId, to: targetId }] }));
+    const newEdge: FlowGraphEdge = { from: drag.fromId, to: targetId };
+    if (drag.fromPort) {
+      newEdge.fromPort = drag.fromPort;
+      newEdge.label = drag.fromPort;
+    }
+    this.graph.update((g) => ({ nodes: g.nodes, edges: [...g.edges, newEdge] }));
   }
 
   private toLocalPoint(clientX: number, clientY: number): { x: number; y: number } {
