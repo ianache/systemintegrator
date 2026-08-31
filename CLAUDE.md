@@ -10,3 +10,16 @@ conocimiento persistente con detección de comunidades y herramientas de
 consulta BFS/DFS — es preferible a una exploración manual con grep/glob
 cuando la pregunta es sobre "cómo se relaciona X con Y" o "qué cubre este
 proyecto" en términos generales.
+
+## graphify
+
+Para cualquier pregunta o análisis sobre el código, la arquitectura, la
+documentación o las relaciones entre componentes del proyecto, usar primero
+el skill `graphify` y consultar el grafo existente si está disponible. Esta
+regla aplica antes de realizar una exploración manual del repositorio.
+
+## Worktrees
+
+Todos los worktrees del proyecto deben crearse siempre dentro de la carpeta
+`.worktrees` en la raíz del repositorio. No crear worktrees en otras carpetas
+como `.claude/worktrees` ni fuera del repositorio.
