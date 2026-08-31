@@ -39,6 +39,30 @@ export interface UpdateFlowDraftPayload {
   expectedVersion: number;
 }
 
+export type FlowNodeCategory = 'SOURCE' | 'TRANSFORM' | 'CONTROL' | 'SPLIT' | 'TARGET';
+
+export interface FlowGraphNode {
+  id: string;
+  type: string;
+  name: string;
+  /** Canvas layout — optional so drafts saved before the visual designer still load. */
+  x?: number;
+  y?: number;
+  fields?: Record<string, string>;
+}
+
+export interface FlowGraphEdge {
+  from: string;
+  to: string;
+  fromPort?: number;
+  label?: string;
+}
+
+export interface FlowGraph {
+  nodes: FlowGraphNode[];
+  edges: FlowGraphEdge[];
+}
+
 export type FlowExecutionStatus = 'SUCCESS' | 'FAILURE';
 
 export interface FlowMetricsSummary {

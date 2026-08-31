@@ -2,15 +2,83 @@
 .back-link { padding: 8px 0 0 24px; align-self: flex-start; }
 .cell-sub { color: var(--text-dim); font-size: 11px; }
 
-.designer-grid { display: grid; grid-template-columns: 1.4fr 1fr; gap: 16px; align-items: start; }
-.draft-fields { padding: 16px; display: flex; flex-direction: column; gap: 12px; }
-.draft-fields label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
-.draft-fields input, .draft-fields textarea {
+.card { background: var(--surface); border: 1px solid var(--border); border-radius: 6px; }
+.card-header { padding: 10px 16px; border-bottom: 1px solid var(--border); font-weight: 600; font-size: 12.5px; }
+
+.draft-toolbar {
+  display: grid; grid-template-columns: 1fr 1fr; gap: 12px 16px; align-items: end;
+  padding: 14px 16px;
+}
+.draft-toolbar label { display: flex; flex-direction: column; gap: 5px; font-size: 12px; }
+.draft-toolbar input {
   border: 1px solid var(--border); border-radius: 5px; padding: 7px 10px; outline: none;
   font-family: 'IBM Plex Mono', monospace; font-size: 12px;
 }
-.draft-fields input:focus, .draft-fields textarea:focus { border-color: var(--accent); }
-.draft-actions { display: flex; justify-content: flex-end; gap: 8px; }
+.draft-toolbar input:focus { border-color: var(--accent); }
+.draft-toolbar-actions { grid-column: 1 / -1; display: flex; align-items: center; justify-content: flex-end; gap: 10px; }
+.inline-error { margin: 0; color: var(--err); font-size: 11.5px; }
+
+.canvas-layout {
+  display: grid; grid-template-columns: 168px minmax(0, 1fr) 260px;
+  min-height: 480px; overflow: hidden;
+}
+
+.node-palette {
+  border-right: 1px solid var(--border); background: var(--surface-2);
+  padding: 12px 10px; display: flex; flex-direction: column; gap: 14px; overflow: auto;
+}
+.palette-group { display: flex; flex-direction: column; gap: 4px; }
+.palette-group-label { font-size: 9.5px; letter-spacing: 0.07em; }
+.palette-item {
+  text-align: left; background: var(--surface); border: 1px solid var(--border); border-radius: 4px;
+  padding: 6px 8px; font-size: 11.5px; cursor: pointer; color: var(--text);
+}
+.palette-item:hover { border-color: var(--border-strong); }
+
+.canvas-viewport {
+  overflow: auto; position: relative; background: var(--bg);
+  background-image: radial-gradient(var(--border) 1px, transparent 1px); background-size: 22px 22px;
+}
+.canvas-surface { position: relative; }
+.canvas-edges { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.canvas-empty-hint { padding: 20px; }
+
+.canvas-node {
+  position: absolute; width: 180px; background: var(--surface); border: 1px solid var(--border);
+  border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); cursor: grab; user-select: none;
+  display: flex; align-items: stretch; overflow: hidden;
+}
+.canvas-node.selected { border-color: var(--accent-fg); box-shadow: 0 0 0 2px var(--accent-tint-border); }
+.canvas-node-bar { width: 3px; flex: 0 0 3px; }
+.canvas-node-body { flex: 1; min-width: 0; padding: 7px 10px 8px; display: flex; flex-direction: column; gap: 2px; }
+.canvas-node-cat { font-size: 9px; letter-spacing: 0.09em; }
+.canvas-node-name {
+  font-size: 12.5px; font-weight: 600; line-height: 1.25;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.canvas-node-type {
+  font-size: 9.5px; color: var(--text-dim);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+
+.node-properties {
+  border-left: 1px solid var(--border); padding: 14px; overflow: auto;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.properties-header { display: flex; flex-direction: column; gap: 3px; }
+.properties-category { font-size: 9.5px; letter-spacing: 0.09em; }
+.properties-title { font-size: 14px; font-weight: 600; }
+.node-properties label { display: flex; flex-direction: column; gap: 5px; font-size: 11px; }
+.node-properties input {
+  border: 1px solid var(--border); border-radius: 5px; padding: 7px 9px; outline: none;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; min-width: 0;
+}
+.node-properties input:focus { border-color: var(--accent-fg); }
+.remove-node-btn {
+  align-self: flex-start; border: 1px solid var(--border); border-radius: 5px; padding: 7px 11px;
+  color: var(--text-muted); font-weight: 500;
+}
+.remove-node-btn:hover { border-color: var(--err); color: var(--err); }
 
 .versions-list { padding: 8px 16px 16px; display: flex; flex-direction: column; gap: 8px; }
 .version-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--border-soft); }

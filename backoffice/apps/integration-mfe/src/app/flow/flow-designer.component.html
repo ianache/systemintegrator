@@ -26,51 +26,106 @@
       </div>
     </div>
 
-    <div class="designer-grid">
-      <div class="card draft-editor">
-        <div class="card-header">Draft</div>
-        <div class="draft-fields">
-          <label>
-            <span class="mono">NAME</span>
-            <input [value]="nameDraft()" (input)="onNameInput($any($event.target).value)" />
-          </label>
-          <label>
-            <span class="mono">TRIGGER</span>
-            <input [value]="triggerDraft()" (input)="onTriggerInput($any($event.target).value)" placeholder="CRON */5" />
-          </label>
-          <label>
-            <span class="mono">GRAPH (JSON)</span>
-            <textarea [value]="graphDraft()" (input)="onGraphInput($any($event.target).value)" rows="12"></textarea>
-          </label>
-          @if (saveError(); as error) {
-            <p role="alert">{{ error }}</p>
-          }
-          @if (publishError(); as error) {
-            <p role="alert">{{ error }}</p>
-          }
-          <div class="draft-actions">
-            <button type="button" class="btn save-draft-btn" (click)="saveDraft()">Guardar cambios</button>
-            <button type="button" class="btn btn-primary publish-btn" [disabled]="!graphDraft().trim()" (click)="publish()">Publicar</button>
+    <div class="card draft-toolbar">
+      <label>
+        <span class="mono">NAME</span>
+        <input [value]="nameDraft()" (input)="onNameInput($any($event.target).value)" />
+      </label>
+      <label>
+        <span class="mono">TRIGGER</span>
+        <input [value]="triggerDraft()" (input)="onTriggerInput($any($event.target).value)" placeholder="CRON */5" />
+      </label>
+      <div class="draft-toolbar-actions">
+        @if (saveError(); as error) {
+          <p role="alert" class="inline-error">{{ error }}</p>
+        }
+        @if (publishError(); as error) {
+          <p role="alert" class="inline-error">{{ error }}</p>
+        }
+        <button type="button" class="btn save-draft-btn" (click)="saveDraft()">Guardar cambios</button>
+        <button type="button" class="btn btn-primary publish-btn" [disabled]="!hasDraft()" (click)="publish()">Publicar</button>
+      </div>
+    </div>
+
+    <div class="canvas-layout card">
+      <aside class="node-palette">
+        @for (group of paletteGroups; track group.category) {
+          <div class="palette-group">
+            <span class="mono palette-group-label" [style.color]="categoryColor(group.category)">{{ group.category }}</span>
+            @for (item of group.items; track item.type) {
+              <button type="button" class="palette-item" (click)="addNode(item.type)">{{ item.label }}</button>
+            }
           </div>
+        }
+      </aside>
+
+      <div class="canvas-viewport">
+        <div class="canvas-surface" [style.width.px]="canvasWidth()" [style.height.px]="canvasHeight()">
+          <svg class="canvas-edges" [attr.width]="canvasWidth()" [attr.height]="canvasHeight()">
+            @for (edge of edgePaths(); track edge.key) {
+              <path [attr.d]="edge.d" [attr.stroke]="edge.color" fill="none" stroke-width="1.4" />
+            }
+          </svg>
+          @for (node of graph().nodes; track node.id) {
+            <div
+              class="canvas-node"
+              [class.selected]="selectedNodeId() === node.id"
+              [style.left.px]="node.x"
+              [style.top.px]="node.y"
+              (mousedown)="onNodeMouseDown($event, node.id)"
+            >
+              <span class="canvas-node-bar" [style.background]="categoryColor(categoryOf(node.type))"></span>
+              <div class="canvas-node-body">
+                <span class="mono canvas-node-cat" [style.color]="categoryColor(categoryOf(node.type))">{{ categoryOf(node.type) }}</span>
+                <span class="canvas-node-name">{{ node.name }}</span>
+                <span class="mono canvas-node-type">{{ node.type }}</span>
+              </div>
+            </div>
+          } @empty {
+            <p class="cell-sub canvas-empty-hint">Agrega un nodo desde la paleta para empezar el grafo.</p>
+          }
         </div>
       </div>
 
-      <div class="card versions-panel">
-        <div class="card-header">Historial de versiones</div>
-        <div class="versions-list">
-          @for (version of versions(); track version.id) {
-            <div class="version-row">
-              <span class="mono version-number">v{{ version.versionNumber }}</span>
-              <span class="mono version-state">{{ version.state }}</span>
-              <span class="version-by cell-sub">{{ version.publishedBy }}</span>
-              @if (version.state !== 'ACTIVE') {
-                <button type="button" class="btn rollback-btn" (click)="rollback(version.versionNumber)">Rollback</button>
-              }
-            </div>
-          } @empty {
-            <p class="cell-sub">Sin versiones publicadas todavía.</p>
+      <aside class="node-properties">
+        @if (selectedNode(); as node) {
+          <div class="properties-header">
+            <span class="mono properties-category" [style.color]="categoryColor(categoryOf(node.type))">{{ categoryOf(node.type) }}</span>
+            <span class="properties-title">{{ node.name }}</span>
+            <span class="mono cell-sub">{{ node.type }}</span>
+          </div>
+          <label>
+            <span class="mono">NOMBRE</span>
+            <input [value]="node.name" (input)="onNodeNameInput(node.id, $any($event.target).value)" />
+          </label>
+          @for (field of fieldKeys(node); track field) {
+            <label>
+              <span class="mono">{{ field }}</span>
+              <input [value]="node.fields?.[field] ?? ''" (input)="onFieldInput(node.id, field, $any($event.target).value)" />
+            </label>
           }
-        </div>
+          <button type="button" class="btn-ghost remove-node-btn" (click)="removeNode(node.id)">Eliminar nodo del draft</button>
+        } @else {
+          <p class="cell-sub">Selecciona un nodo del canvas para ver y editar sus propiedades.</p>
+        }
+      </aside>
+    </div>
+
+    <div class="card versions-panel">
+      <div class="card-header">Historial de versiones</div>
+      <div class="versions-list">
+        @for (version of versions(); track version.id) {
+          <div class="version-row">
+            <span class="mono version-number">v{{ version.versionNumber }}</span>
+            <span class="mono version-state">{{ version.state }}</span>
+            <span class="version-by cell-sub">{{ version.publishedBy }}</span>
+            @if (version.state !== 'ACTIVE') {
+              <button type="button" class="btn rollback-btn" (click)="rollback(version.versionNumber)">Rollback</button>
+            }
+          </div>
+        } @empty {
+          <p class="cell-sub">Sin versiones publicadas todavía.</p>
+        }
       </div>
     </div>
   }
