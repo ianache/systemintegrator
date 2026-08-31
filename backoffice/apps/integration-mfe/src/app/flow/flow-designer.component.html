@@ -60,19 +60,33 @@
       </aside>
 
       <div class="canvas-viewport">
-        <div class="canvas-surface" [style.width.px]="canvasWidth()" [style.height.px]="canvasHeight()">
+        <div #surface class="canvas-surface" [style.width.px]="canvasWidth()" [style.height.px]="canvasHeight()" (click)="clearSelection()">
           <svg class="canvas-edges" [attr.width]="canvasWidth()" [attr.height]="canvasHeight()">
             @for (edge of edgePaths(); track edge.key) {
-              <path [attr.d]="edge.d" [attr.stroke]="edge.color" fill="none" stroke-width="1.4" />
+              <path
+                [attr.d]="edge.d"
+                [attr.stroke]="edge.color"
+                [attr.stroke-width]="selectedEdge() === edge.data ? 2.6 : 1.4"
+                fill="none"
+                class="edge-path"
+                (click)="selectEdge(edge.data); $event.stopPropagation()"
+              />
+            }
+            @if (tempEdgePath(); as d) {
+              <path [attr.d]="d" stroke="var(--text-dim)" stroke-dasharray="4 3" fill="none" stroke-width="1.4" />
             }
           </svg>
           @for (node of graph().nodes; track node.id) {
             <div
               class="canvas-node"
               [class.selected]="selectedNodeId() === node.id"
+              [class.drop-target]="hoveredNodeId() === node.id && edgeDrag()"
               [style.left.px]="node.x"
               [style.top.px]="node.y"
-              (mousedown)="onNodeMouseDown($event, node.id)"
+              (mousedown)="onNodeMouseDown($event, node.id); $event.stopPropagation()"
+              (click)="$event.stopPropagation()"
+              (mouseenter)="onNodeMouseEnter(node.id)"
+              (mouseleave)="onNodeMouseLeave(node.id)"
             >
               <span class="canvas-node-bar" [style.background]="categoryColor(categoryOf(node.type))"></span>
               <div class="canvas-node-body">
@@ -80,6 +94,13 @@
                 <span class="canvas-node-name">{{ node.name }}</span>
                 <span class="mono canvas-node-type">{{ node.type }}</span>
               </div>
+              @if (hasOutput(node.type)) {
+                <span
+                  class="canvas-node-port"
+                  title="Arrastra para conectar"
+                  (mousedown)="onPortMouseDown($event, node.id)"
+                ></span>
+              }
             </div>
           } @empty {
             <p class="cell-sub canvas-empty-hint">Agrega un nodo desde la paleta para empezar el grafo.</p>
@@ -101,12 +122,29 @@
           @for (field of fieldKeys(node); track field) {
             <label>
               <span class="mono">{{ field }}</span>
-              <input [value]="node.fields?.[field] ?? ''" (input)="onFieldInput(node.id, field, $any($event.target).value)" />
+              @if (isExpressionField(node, field)) {
+                <textarea
+                  class="mono expression-field"
+                  rows="5"
+                  spellcheck="false"
+                  [placeholder]="expressionPlaceholder(node)"
+                  [value]="node.fields?.[field] ?? ''"
+                  (input)="onFieldInput(node.id, field, $any($event.target).value)"
+                ></textarea>
+              } @else {
+                <input [value]="node.fields?.[field] ?? ''" (input)="onFieldInput(node.id, field, $any($event.target).value)" />
+              }
             </label>
           }
           <button type="button" class="btn-ghost remove-node-btn" (click)="removeNode(node.id)">Eliminar nodo del draft</button>
+        } @else if (selectedEdge(); as edge) {
+          <div class="properties-header">
+            <span class="mono properties-category">CONEXIÓN</span>
+            <span class="properties-title mono">{{ edge.from }} → {{ edge.to }}</span>
+          </div>
+          <button type="button" class="btn-ghost remove-node-btn" (click)="removeSelectedEdge()">Eliminar conexión</button>
         } @else {
-          <p class="cell-sub">Selecciona un nodo del canvas para ver y editar sus propiedades.</p>
+          <p class="cell-sub">Selecciona un nodo o conexión del canvas para ver y editar sus propiedades.</p>
         }
       </aside>
     </div>

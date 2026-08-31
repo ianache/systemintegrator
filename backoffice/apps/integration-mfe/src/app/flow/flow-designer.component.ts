@@ -1,5 +1,5 @@
 import { HttpErrorResponse } from '@angular/common/http';
-import { ChangeDetectionStrategy, Component, HostListener, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, ElementRef, HostListener, OnInit, ViewChild, inject, signal } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Flow, FlowGraph, FlowGraphEdge, FlowGraphNode, FlowNodeCategory, FlowVersion } from './flow.model';
 import { FlowService } from './flow.service';
@@ -11,6 +11,12 @@ interface NodeCatalogEntry {
   label: string;
   category: FlowNodeCategory;
   fields: string[];
+  /** Fields rendered as a monospace textarea (expressions/scripts) instead of a single-line input. */
+  expressionFields?: string[];
+  /** Placeholder text shown in the expression textarea, matching the design's sample expressions. */
+  expressionPlaceholder?: string;
+  /** TARGET nodes have no output port in the design. */
+  hasOutput?: boolean;
 }
 
 interface PaletteGroup {
@@ -22,6 +28,7 @@ interface EdgePath {
   key: string;
   d: string;
   color: string;
+  data: FlowGraphEdge;
 }
 
 const NODE_W = 180;
@@ -45,21 +52,45 @@ const NODE_CATALOG: Record<string, NodeCatalogEntry> = {
   REST_SOURCE_POLL: { label: 'REST Source (polling)', category: 'SOURCE', fields: ['url', 'cron', 'itemsPath'] },
   REST_SOURCE_HOOK: { label: 'REST Source (webhook)', category: 'SOURCE', fields: ['path', 'auth'] },
   KAFKA_SOURCE: { label: 'Kafka Source', category: 'SOURCE', fields: ['topics', 'groupId', 'offsetReset'] },
-  TRANSFORM_JSLT: { label: 'Transform (JSLT)', category: 'TRANSFORM', fields: ['script'] },
-  TRANSFORM_VELOCITY: { label: 'Transform (Velocity)', category: 'TRANSFORM', fields: ['script'] },
-  TRANSFORM_MUSTACHE: { label: 'Transform (Mustache)', category: 'TRANSFORM', fields: ['script'] },
+  TRANSFORM_JSLT: {
+    label: 'Transform (JSLT)', category: 'TRANSFORM', fields: ['script'],
+    expressionFields: ['script'], expressionPlaceholder: '{\n  "vin": .Vehiculo.NumeroChasis\n}',
+  },
+  TRANSFORM_VELOCITY: {
+    label: 'Transform (Velocity)', category: 'TRANSFORM', fields: ['script'],
+    expressionFields: ['script'], expressionPlaceholder: '<Vehiculo>$root.chasis</Vehiculo>',
+  },
+  TRANSFORM_MUSTACHE: {
+    label: 'Transform (Mustache)', category: 'TRANSFORM', fields: ['script'],
+    expressionFields: ['script'], expressionPlaceholder: 'Unidad {{placa}} dada de baja.',
+  },
   FIELD_MAPPING: { label: 'Field Mapping', category: 'TRANSFORM', fields: ['rules'] },
   ENRICHER: { label: 'Enricher (lookup)', category: 'TRANSFORM', fields: ['catalog', 'key', 'defaultValue'] },
-  ROUTER_IF: { label: 'Router (if / then)', category: 'CONTROL', fields: ['expression'] },
-  SWITCH_CASE: { label: 'Switch (case)', category: 'CONTROL', fields: ['expression'] },
-  FILTER: { label: 'Filter', category: 'CONTROL', fields: ['expression'] },
+  ROUTER_IF: {
+    label: 'Router (if / then)', category: 'CONTROL', fields: ['expression'],
+    expressionFields: ['expression'], expressionPlaceholder: "payload.estado == '1'",
+  },
+  SWITCH_CASE: {
+    label: 'Switch (case)', category: 'CONTROL', fields: ['expression'],
+    expressionFields: ['expression'], expressionPlaceholder: 'payload.tipo',
+  },
+  FILTER: {
+    label: 'Filter', category: 'CONTROL', fields: ['expression'],
+    expressionFields: ['expression'], expressionPlaceholder: 'payload.placa != null',
+  },
   SPLITTER: { label: 'Splitter', category: 'SPLIT', fields: ['arrayPath'] },
-  AGGREGATOR: { label: 'Aggregator / Join', category: 'SPLIT', fields: ['correlationKey', 'timeoutMs'] },
+  AGGREGATOR: {
+    label: 'Aggregator / Join', category: 'SPLIT', fields: ['correlationKey', 'timeoutMs', 'expression'],
+    expressionFields: ['expression'], expressionPlaceholder: 'buffer.size == expectedCount',
+  },
   DELAY: { label: 'Delay / Throttle', category: 'SPLIT', fields: ['waitMs'] },
-  SCRIPT: { label: 'Script (avanzado)', category: 'SPLIT', fields: ['script'] },
-  KAFKA_TARGET: { label: 'Kafka Target', category: 'TARGET', fields: ['topic', 'key'] },
-  DB_TARGET: { label: 'DB Target (sink)', category: 'TARGET', fields: ['table', 'mode'] },
-  REST_TARGET: { label: 'REST Target', category: 'TARGET', fields: ['method', 'url'] },
+  SCRIPT: {
+    label: 'Script (avanzado)', category: 'SPLIT', fields: ['script'],
+    expressionFields: ['script'], expressionPlaceholder: '// script libre',
+  },
+  KAFKA_TARGET: { label: 'Kafka Target', category: 'TARGET', fields: ['topic', 'key'], hasOutput: false },
+  DB_TARGET: { label: 'DB Target (sink)', category: 'TARGET', fields: ['table', 'mode'], hasOutput: false },
+  REST_TARGET: { label: 'REST Target', category: 'TARGET', fields: ['method', 'url'], hasOutput: false },
 };
 
 interface DragState {
@@ -68,6 +99,12 @@ interface DragState {
   startClientY: number;
   startX: number;
   startY: number;
+}
+
+interface EdgeDragState {
+  fromId: string;
+  x: number;
+  y: number;
 }
 
 @Component({
@@ -95,6 +132,11 @@ export class FlowDesignerComponent implements OnInit {
   readonly graph = signal<FlowGraph>({ nodes: [], edges: [] });
   readonly hasDraft = signal(false);
   readonly selectedNodeId = signal<string | null>(null);
+  readonly selectedEdge = signal<FlowGraphEdge | null>(null);
+  readonly edgeDrag = signal<EdgeDragState | null>(null);
+  readonly hoveredNodeId = signal<string | null>(null);
+
+  @ViewChild('surface') private surfaceRef?: ElementRef<HTMLDivElement>;
 
   readonly paletteGroups: PaletteGroup[] = CATEGORY_ORDER.map((category) => ({
     category,
@@ -207,6 +249,36 @@ export class FlowDesignerComponent implements OnInit {
 
   selectNode(id: string): void {
     this.selectedNodeId.set(id);
+    this.selectedEdge.set(null);
+  }
+
+  selectEdge(edge: FlowGraphEdge): void {
+    this.selectedEdge.set(edge);
+    this.selectedNodeId.set(null);
+  }
+
+  clearSelection(): void {
+    this.selectedNodeId.set(null);
+    this.selectedEdge.set(null);
+  }
+
+  removeSelectedEdge(): void {
+    const edge = this.selectedEdge();
+    if (!edge) return;
+    this.graph.update((g) => ({ nodes: g.nodes, edges: g.edges.filter((e) => e !== edge) }));
+    this.selectedEdge.set(null);
+  }
+
+  hasOutput(type: string): boolean {
+    return NODE_CATALOG[type]?.hasOutput ?? true;
+  }
+
+  isExpressionField(node: FlowGraphNode, field: string): boolean {
+    return (NODE_CATALOG[node.type]?.expressionFields ?? []).includes(field);
+  }
+
+  expressionPlaceholder(node: FlowGraphNode): string {
+    return NODE_CATALOG[node.type]?.expressionPlaceholder ?? '';
   }
 
   canvasWidth(): number {
@@ -237,6 +309,7 @@ export class FlowDesignerComponent implements OnInit {
         key: edge.from + '->' + edge.to + ':' + index,
         d: `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${y2}, ${x2} ${y2}`,
         color: this.categoryColor(this.categoryOf(from.type)),
+        data: edge,
       });
     });
     return paths;
@@ -247,7 +320,7 @@ export class FlowDesignerComponent implements OnInit {
     if (!catalogEntry) return;
     const id = 'n' + this.nextNodeSeq++;
     const index = this.graph().nodes.length;
-    const position = this.gridPosition(index);
+    const position = this.gridPosition(index, index + 1);
     const node: FlowGraphNode = {
       id,
       type,
@@ -266,6 +339,8 @@ export class FlowDesignerComponent implements OnInit {
       edges: g.edges.filter((e) => e.from !== id && e.to !== id),
     }));
     if (this.selectedNodeId() === id) this.selectedNodeId.set(null);
+    const edge = this.selectedEdge();
+    if (edge && (edge.from === id || edge.to === id)) this.selectedEdge.set(null);
   }
 
   onNodeNameInput(id: string, value: string): void {
@@ -280,7 +355,7 @@ export class FlowDesignerComponent implements OnInit {
     const node = this.graph().nodes.find((n) => n.id === id);
     if (!node) return;
     event.preventDefault();
-    this.selectedNodeId.set(id);
+    this.selectNode(id);
     this.dragState = {
       nodeId: id,
       startClientX: event.clientX,
@@ -290,8 +365,39 @@ export class FlowDesignerComponent implements OnInit {
     };
   }
 
+  onPortMouseDown(event: MouseEvent, nodeId: string): void {
+    event.preventDefault();
+    event.stopPropagation();
+    const local = this.toLocalPoint(event.clientX, event.clientY);
+    this.edgeDrag.set({ fromId: nodeId, x: local.x, y: local.y });
+  }
+
+  onNodeMouseEnter(nodeId: string): void {
+    if (this.edgeDrag()) this.hoveredNodeId.set(nodeId);
+  }
+
+  onNodeMouseLeave(nodeId: string): void {
+    if (this.hoveredNodeId() === nodeId) this.hoveredNodeId.set(null);
+  }
+
+  tempEdgePath(): string | null {
+    const drag = this.edgeDrag();
+    if (!drag) return null;
+    const from = this.graph().nodes.find((n) => n.id === drag.fromId);
+    if (!from) return null;
+    const x1 = (from.x ?? 0) + NODE_W;
+    const y1 = (from.y ?? 0) + NODE_H / 2;
+    const midX = (x1 + drag.x) / 2;
+    return `M ${x1} ${y1} C ${midX} ${y1}, ${midX} ${drag.y}, ${drag.x} ${drag.y}`;
+  }
+
   @HostListener('window:mousemove', ['$event'])
   onWindowMouseMove(event: MouseEvent): void {
+    if (this.edgeDrag()) {
+      const local = this.toLocalPoint(event.clientX, event.clientY);
+      this.edgeDrag.set({ ...this.edgeDrag()!, x: local.x, y: local.y });
+      return;
+    }
     const drag = this.dragState;
     if (!drag) return;
     const nextX = Math.max(0, drag.startX + (event.clientX - drag.startClientX));
@@ -302,6 +408,20 @@ export class FlowDesignerComponent implements OnInit {
   @HostListener('window:mouseup')
   onWindowMouseUp(): void {
     this.dragState = null;
+    const drag = this.edgeDrag();
+    const targetId = this.hoveredNodeId();
+    this.edgeDrag.set(null);
+    this.hoveredNodeId.set(null);
+    if (!drag || !targetId || targetId === drag.fromId) return;
+    const exists = this.graph().edges.some((e) => e.from === drag.fromId && e.to === targetId);
+    if (exists) return;
+    this.graph.update((g) => ({ nodes: g.nodes, edges: [...g.edges, { from: drag.fromId, to: targetId }] }));
+  }
+
+  private toLocalPoint(clientX: number, clientY: number): { x: number; y: number } {
+    const rect = this.surfaceRef?.nativeElement.getBoundingClientRect();
+    if (!rect) return { x: clientX, y: clientY };
+    return { x: clientX - rect.left, y: clientY - rect.top };
   }
 
   private updateNode(id: string, updater: (node: FlowGraphNode) => FlowGraphNode): void {
@@ -311,9 +431,15 @@ export class FlowDesignerComponent implements OnInit {
     }));
   }
 
-  private gridPosition(index: number): { x: number; y: number } {
-    const col = index % GRID_COLS;
-    const row = Math.floor(index / GRID_COLS);
+  /**
+   * `total` sizes the grid to roughly a square (more columns as the node count
+   * grows) so a large draft doesn't end up as one absurdly wide row; `index`
+   * always lands in a distinct cell, so nodes never overlap regardless of count.
+   */
+  private gridPosition(index: number, total: number): { x: number; y: number } {
+    const cols = Math.max(GRID_COLS, Math.ceil(Math.sqrt(Math.max(total, 1))));
+    const col = index % cols;
+    const row = Math.floor(index / cols);
     return { x: 40 + col * GRID_COL_GAP, y: 40 + row * GRID_ROW_GAP };
   }
 
@@ -324,7 +450,7 @@ export class FlowDesignerComponent implements OnInit {
     const nodes: FlowGraphNode[] = rawNodes.map((entry, index) => {
       const n = (entry ?? {}) as Partial<FlowGraphNode>;
       const hasPosition = typeof n.x === 'number' && typeof n.y === 'number';
-      const position = hasPosition ? { x: n.x as number, y: n.y as number } : this.gridPosition(index);
+      const position = hasPosition ? { x: n.x as number, y: n.y as number } : this.gridPosition(index, rawNodes.length);
       return {
         id: n.id ?? 'n' + (index + 1),
         type: n.type ?? 'SCRIPT',

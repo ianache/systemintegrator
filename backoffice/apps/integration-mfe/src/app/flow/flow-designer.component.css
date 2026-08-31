@@ -41,15 +41,23 @@
 }
 .canvas-surface { position: relative; }
 .canvas-edges { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.canvas-edges .edge-path { pointer-events: stroke; cursor: pointer; }
 .canvas-empty-hint { padding: 20px; }
 
 .canvas-node {
   position: absolute; width: 180px; background: var(--surface); border: 1px solid var(--border);
   border-radius: 6px; box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08); cursor: grab; user-select: none;
-  display: flex; align-items: stretch; overflow: hidden;
+  display: flex; align-items: stretch; overflow: visible;
 }
 .canvas-node.selected { border-color: var(--accent-fg); box-shadow: 0 0 0 2px var(--accent-tint-border); }
-.canvas-node-bar { width: 3px; flex: 0 0 3px; }
+.canvas-node.drop-target { border-color: var(--ok); box-shadow: 0 0 0 2px color-mix(in oklab, var(--ok) 35%, transparent); }
+.canvas-node-bar { width: 3px; flex: 0 0 3px; border-radius: 6px 0 0 6px; }
+.canvas-node-port {
+  position: absolute; right: -6px; top: 50%; transform: translateY(-50%);
+  width: 11px; height: 11px; border-radius: 50%; background: var(--surface);
+  border: 1.5px solid var(--border-strong); cursor: crosshair;
+}
+.canvas-node-port:hover { border-color: var(--accent-fg); background: var(--accent-tint); }
 .canvas-node-body { flex: 1; min-width: 0; padding: 7px 10px 8px; display: flex; flex-direction: column; gap: 2px; }
 .canvas-node-cat { font-size: 9px; letter-spacing: 0.09em; }
 .canvas-node-name {
@@ -74,6 +82,11 @@
   font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; min-width: 0;
 }
 .node-properties input:focus { border-color: var(--accent-fg); }
+.expression-field {
+  border: 1px solid var(--border); border-radius: 5px; padding: 8px 9px; outline: none; resize: vertical;
+  font-family: 'IBM Plex Mono', monospace; font-size: 11.5px; line-height: 1.6; background: var(--surface-2);
+}
+.expression-field:focus { border-color: var(--accent-fg); }
 .remove-node-btn {
   align-self: flex-start; border: 1px solid var(--border); border-radius: 5px; padding: 7px 11px;
   color: var(--text-muted); font-weight: 500;
