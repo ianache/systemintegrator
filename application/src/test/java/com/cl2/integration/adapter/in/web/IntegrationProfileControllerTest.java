@@ -54,6 +54,9 @@ class IntegrationProfileControllerTest {
     private com.cl2.integration.integration.transformation.MappingDryRunService mappingDryRunService;
 
     @MockitoBean
+    private com.cl2.integration.integration.extraction.ExtractionDryRunService extractionDryRunService;
+
+    @MockitoBean
     private com.cl2.integration.integration.sync.SyncStateRepository syncStateRepository;
 
     @BeforeEach

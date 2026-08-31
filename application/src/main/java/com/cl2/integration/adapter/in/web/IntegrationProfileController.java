@@ -9,6 +9,8 @@ import com.cl2.integration.application.command.CreateIntegrationProfileCommand;
 import com.cl2.integration.application.command.UpdateIntegrationProfileCommand;
 import com.cl2.integration.domain.model.IntegrationProfileConfiguration;
 import com.cl2.integration.infrastructure.tenant.TenantContext;
+import com.cl2.integration.integration.extraction.ExtractionDryRunResult;
+import com.cl2.integration.integration.extraction.ExtractionDryRunService;
 import com.cl2.integration.integration.transformation.MappingDryRunResult;
 import com.cl2.integration.integration.transformation.MappingDryRunService;
 import com.fasterxml.jackson.databind.ObjectMapper;
@@ -40,6 +42,7 @@ public class IntegrationProfileController {
     private final IntegrationProfileService service;
     private final IntegrationSyncService syncService;
     private final MappingDryRunService mappingDryRunService;
+    private final ExtractionDryRunService extractionDryRunService;
     private final SyncStateRepository syncStateRepository;
     private final ObjectMapper objectMapper;
 
@@ -47,11 +50,13 @@ public class IntegrationProfileController {
             IntegrationProfileService service,
             IntegrationSyncService syncService,
             MappingDryRunService mappingDryRunService,
+            ExtractionDryRunService extractionDryRunService,
             SyncStateRepository syncStateRepository,
             ObjectMapper objectMapper) {
         this.service = service;
         this.syncService = syncService;
         this.mappingDryRunService = mappingDryRunService;
+        this.extractionDryRunService = extractionDryRunService;
         this.syncStateRepository = syncStateRepository;
         this.objectMapper = objectMapper;
     }
@@ -107,6 +112,11 @@ public class IntegrationProfileController {
     @PostMapping("/{profileId}/mapping/dry-run")
     public MappingDryRunResult mappingDryRun(@PathVariable UUID profileId, @RequestBody MappingDryRunRequest request) {
         return mappingDryRunService.run(TenantContext.requireTenantId(), profileId, request.payload(), request.transformationJson());
+    }
+
+    @PostMapping("/{profileId}/extraction/dry-run")
+    public ExtractionDryRunResult extractionDryRun(@PathVariable UUID profileId) {
+        return extractionDryRunService.run(TenantContext.requireTenantId(), profileId);
     }
 
     @DeleteMapping("/{profileId}")
