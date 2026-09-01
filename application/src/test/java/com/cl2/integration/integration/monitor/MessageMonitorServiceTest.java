@@ -67,6 +67,39 @@ class MessageMonitorServiceTest {
     }
 
     @Test
+    void filtersByDomain() {
+        InboxJpaEntity units = new InboxJpaEntity(UUID.randomUUID(), tenantId, "units.upserted", "{}", "PROCESSED", 0, Instant.now());
+        OutboxJpaEntity vehicles = OutboxJpaEntity.from(new OutboxEvent(
+                UUID.randomUUID(), tenantId, UUID.randomUUID(), "vehicle", "vehicle.created", "topic", "{}",
+                "PENDING", 0, Instant.now(), null, null, Instant.now()));
+
+        when(inboxRepository.findByTenantId(eq(tenantId), any())).thenReturn(List.of(units));
+        when(outboxRepository.findByTenantId(eq(tenantId), any())).thenReturn(List.of(vehicles));
+
+        List<MessageSummary> result = service.list(tenantId, "ALL", "units", null, null);
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).domain()).isEqualTo("units");
+    }
+
+    @Test
+    void filtersByDateRange() {
+        InboxJpaEntity older = new InboxJpaEntity(UUID.randomUUID(), tenantId, "units.upserted", "{}", "PROCESSED", 0, Instant.parse("2026-01-01T00:00:00Z"));
+        InboxJpaEntity inRange = new InboxJpaEntity(UUID.randomUUID(), tenantId, "units.upserted", "{}", "PROCESSED", 0, Instant.parse("2026-08-20T00:00:00Z"));
+        InboxJpaEntity newer = new InboxJpaEntity(UUID.randomUUID(), tenantId, "units.upserted", "{}", "PROCESSED", 0, Instant.parse("2026-12-01T00:00:00Z"));
+
+        when(inboxRepository.findByTenantId(eq(tenantId), any())).thenReturn(List.of(older, inRange, newer));
+        when(outboxRepository.findByTenantId(eq(tenantId), any())).thenReturn(List.of());
+
+        List<MessageSummary> result = service.list(
+                tenantId, "ALL", null,
+                Instant.parse("2026-08-01T00:00:00Z"), Instant.parse("2026-08-31T00:00:00Z"));
+
+        assertThat(result).hasSize(1);
+        assertThat(result.get(0).timestamp()).isEqualTo(Instant.parse("2026-08-20T00:00:00Z"));
+    }
+
+    @Test
     void retryingAnInboundMessageDispatchesAndMarksProcessedOnSuccess() {
         UUID eventId = UUID.randomUUID();
         InboxJpaEntity entity = new InboxJpaEntity(eventId, tenantId, "units.upserted", "{\"a\":1}", "DEAD_LETTER", 1, Instant.now());

@@ -76,7 +76,7 @@
         <span>DIRECCIÓN</span><span>MESSAGE ID</span><span>EVENTO CANÓNICO</span><span>DOMINIO</span>
         <span>INTENTOS</span><span>TIMESTAMP</span><span class="align-right">ESTADO</span>
       </div>
-      @for (m of messages(); track m.id) {
+      @for (m of pagedMessages(); track m.id) {
         <div class="messages-row" role="button" tabindex="0" (click)="open(m)" (keydown.enter)="open(m)">
           <span class="badge" [class.dir-inbound]="m.direction === 'INBOUND'" [class.dir-outbound]="m.direction === 'OUTBOUND'">
             {{ m.direction }}
@@ -101,6 +101,24 @@
           </div>
         </div>
       }
+      <div class="pagination">
+        <label class="filter-field">
+          <span class="mono filter-label">ITEMS/PÁGINA</span>
+          <select data-testid="monitor-page-size" [value]="pageSize()" (change)="setPageSize(+$any($event.target).value)">
+            @for (n of pageSizeOptions; track n) {
+              <option [value]="n">{{ n }}</option>
+            }
+          </select>
+          <span class="mono page-info" data-testid="monitor-page-info">Página {{ page() }} de {{ totalPages() }}</span>
+        </label>
+        <div class="pagination-controls">
+          <button type="button" class="btn" data-testid="monitor-page-prev" [disabled]="page() <= 1" (click)="prevPage()">‹ Anterior</button>
+          @for (p of pageNumbers(); track p) {
+            <button type="button" class="page-btn" [class.active]="p === page()" (click)="goToPage(p)">{{ p }}</button>
+          }
+          <button type="button" class="btn" data-testid="monitor-page-next" [disabled]="page() >= totalPages()" (click)="nextPage()">Siguiente ›</button>
+        </div>
+      </div>
     }
   </div>
 </section>

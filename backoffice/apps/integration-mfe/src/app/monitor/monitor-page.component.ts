@@ -46,7 +46,17 @@ export class MonitorPageComponent implements OnInit {
   readonly dateFrom = signal('');
   readonly dateTo = signal('');
 
+  readonly pageSizeOptions = [10, 20, 50, 100, 200];
+  readonly pageSize = signal(20);
+  readonly page = signal(1);
+
   readonly messageCount = computed(() => `${this.messages().length} mensajes · ventana reciente`);
+  readonly totalPages = computed(() => Math.max(1, Math.ceil(this.messages().length / this.pageSize())));
+  readonly pagedMessages = computed(() => {
+    const start = (this.page() - 1) * this.pageSize();
+    return this.messages().slice(start, start + this.pageSize());
+  });
+  readonly pageNumbers = computed(() => Array.from({ length: this.totalPages() }, (_, i) => i + 1));
 
   ngOnInit(): void {
     this.profileService.list(true).subscribe({
@@ -86,8 +96,26 @@ export class MonitorPageComponent implements OnInit {
     this.load();
   }
 
+  setPageSize(value: number): void {
+    this.pageSize.set(value);
+    this.page.set(1);
+  }
+
+  goToPage(value: number): void {
+    this.page.set(value);
+  }
+
+  prevPage(): void {
+    this.page.update((value) => Math.max(1, value - 1));
+  }
+
+  nextPage(): void {
+    this.page.update((value) => Math.min(this.totalPages(), value + 1));
+  }
+
   load(): void {
     this.state.set('loading');
+    this.page.set(1);
     const from = this.dateFrom() ? new Date(this.dateFrom() + 'T00:00:00.000Z').toISOString() : undefined;
     const to = this.dateTo() ? new Date(this.dateTo() + 'T23:59:59.999Z').toISOString() : undefined;
     this.messageService.list(this.filter(), this.domainFilter() || undefined, from, to).subscribe({
