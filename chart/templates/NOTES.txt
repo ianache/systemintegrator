@@ -1,0 +1,30 @@
+systemintegrator chart deployed as release "{{ .Release.Name }}" in namespace "{{ .Release.Namespace }}".
+
+Components enabled:
+{{- if .Values.app.enabled }}
+  - app:        {{ include "systemintegrator.fullname" (dict "root" $ "component" "app") }}:{{ .Values.app.service.port }}
+{{- end }}
+{{- if .Values.middleware.enabled }}
+  - middleware: {{ include "systemintegrator.fullname" (dict "root" $ "component" "middleware") }}:{{ .Values.middleware.service.port }}
+{{- end }}
+{{- if .Values.bff.enabled }}
+  - bff:        backoffice-bff:{{ .Values.bff.service.port }}
+{{- end }}
+{{- if .Values.shell.enabled }}
+  - shell:      {{ include "systemintegrator.fullname" (dict "root" $ "component" "shell") }}:{{ .Values.shell.service.port }}
+{{- end }}
+
+{{- if not .Values.ingress.enabled }}
+
+No Ingress is enabled. To reach the shell UI, port-forward it, e.g.:
+  kubectl port-forward svc/{{ include "systemintegrator.fullname" (dict "root" $ "component" "shell") }} 4200:{{ .Values.shell.service.port }}
+{{- end }}
+
+Reminders:
+  - Set bff.oidc.clientSecret (or bff.oidc.existingSecret) to the real Keycloak
+    client secret before this is anything but a local/dev install.
+  - bff.publicUrl must be the externally-reachable origin the browser lands on
+    (the shell's host), not the bff pod's own address -- Keycloak redirects
+    the browser there after login.
+  - global.mysql / global.redis / global.kafka / global.vault point at
+    existing infrastructure; this chart does not deploy them.

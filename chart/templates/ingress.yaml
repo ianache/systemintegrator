@@ -1,0 +1,57 @@
+{{- if .Values.ingress.enabled }}
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "ingress") }}
+  labels:
+    {{- include "systemintegrator.labels" . | nindent 4 }}
+  {{- with .Values.ingress.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  {{- with .Values.ingress.className }}
+  ingressClassName: {{ . }}
+  {{- end }}
+  {{- with .Values.ingress.tls }}
+  tls:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+  rules:
+    {{- if and .Values.shell.enabled .Values.ingress.shell.host }}
+    - host: {{ .Values.ingress.shell.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.shell.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "shell") }}
+                port:
+                  number: {{ .Values.shell.service.port }}
+    {{- end }}
+    {{- if and .Values.bff.enabled .Values.ingress.bff.host }}
+    - host: {{ .Values.ingress.bff.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.bff.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: backoffice-bff
+                port:
+                  number: {{ .Values.bff.service.port }}
+    {{- end }}
+    {{- if and .Values.middleware.enabled .Values.ingress.middleware.host }}
+    - host: {{ .Values.ingress.middleware.host }}
+      http:
+        paths:
+          - path: {{ .Values.ingress.middleware.path }}
+            pathType: Prefix
+            backend:
+              service:
+                name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "middleware") }}
+                port:
+                  number: {{ .Values.middleware.service.port }}
+    {{- end }}
+{{- end }}

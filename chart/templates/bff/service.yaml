@@ -1,0 +1,20 @@
+{{- if .Values.bff.enabled }}
+# NOTE: the Service name is hardcoded to "backoffice-bff" (not release-scoped)
+# because backoffice-shell's nginx.conf has `proxy_pass http://backoffice-bff:4000`
+# baked into its image at build time. Renaming this Service breaks that proxy
+# unless the shell image is also rebuilt with a matching nginx.conf.
+apiVersion: v1
+kind: Service
+metadata:
+  name: backoffice-bff
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "bff") | nindent 4 }}
+spec:
+  type: ClusterIP
+  ports:
+    - name: http
+      port: {{ .Values.bff.service.port }}
+      targetPort: http
+  selector:
+    {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "bff") | nindent 4 }}
+{{- end }}

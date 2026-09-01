@@ -1,0 +1,55 @@
+{{- if .Values.middleware.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "middleware") }}
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "middleware") | nindent 4 }}
+spec:
+  replicas: {{ .Values.middleware.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "middleware") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "middleware") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: middleware
+          image: "{{ .Values.middleware.image.repository }}:{{ .Values.middleware.image.tag }}"
+          imagePullPolicy: {{ .Values.middleware.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.middleware.containerPort }}
+          env:
+            - name: APP_URI
+              value: "http://{{ include "systemintegrator.fullname" (dict "root" $ "component" "app") }}:{{ .Values.app.service.port }}"
+            - name: SPRING_PROFILES_ACTIVE
+              value: {{ .Values.middleware.springProfilesActive | quote }}
+            - name: KEYCLOAK_ISSUER_URI
+              value: {{ .Values.middleware.keycloakIssuerUri | quote }}
+            {{- with .Values.middleware.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.middleware.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.middleware.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.middleware.probes.periodSeconds }}
+            failureThreshold: {{ .Values.middleware.probes.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.middleware.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.middleware.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.middleware.probes.periodSeconds }}
+            failureThreshold: {{ .Values.middleware.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.middleware.resources | nindent 12 }}
+{{- end }}

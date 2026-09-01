@@ -1,0 +1,16 @@
+{{- if .Values.app.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "app") }}
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "app") | nindent 4 }}
+spec:
+  type: {{ .Values.app.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.app.service.port }}
+      targetPort: http
+  selector:
+    {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "app") | nindent 4 }}
+{{- end }}

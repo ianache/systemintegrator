@@ -1,0 +1,49 @@
+{{- if .Values.shell.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "shell") }}
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "shell") | nindent 4 }}
+spec:
+  replicas: {{ .Values.shell.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "shell") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "shell") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: shell
+          image: "{{ .Values.shell.image.repository }}:{{ .Values.shell.image.tag }}"
+          imagePullPolicy: {{ .Values.shell.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.shell.containerPort }}
+          {{- with .Values.shell.extraEnv }}
+          env:
+            {{- toYaml . | nindent 12 }}
+          {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.shell.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.shell.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.shell.probes.periodSeconds }}
+            failureThreshold: {{ .Values.shell.probes.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.shell.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.shell.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.shell.probes.periodSeconds }}
+            failureThreshold: {{ .Values.shell.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.shell.resources | nindent 12 }}
+{{- end }}

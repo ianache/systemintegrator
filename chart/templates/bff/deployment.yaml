@@ -1,0 +1,75 @@
+{{- if .Values.bff.enabled }}
+{{- $hasExistingSecret := not (empty .Values.bff.oidc.existingSecret) }}
+{{- $secretName := .Values.bff.oidc.existingSecret | default (include "systemintegrator.fullname" (dict "root" $ "component" "bff")) }}
+{{- $clientSecretKey := ternary .Values.bff.oidc.existingSecretClientSecretKey "clientSecret" $hasExistingSecret }}
+{{- $sessionSecretKey := ternary .Values.bff.oidc.existingSecretSessionSecretKey "sessionSecret" $hasExistingSecret }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "bff") }}
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "bff") | nindent 4 }}
+spec:
+  replicas: {{ .Values.bff.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "bff") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "bff") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: bff
+          image: "{{ .Values.bff.image.repository }}:{{ .Values.bff.image.tag }}"
+          imagePullPolicy: {{ .Values.bff.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.bff.containerPort }}
+          env:
+            - name: PORT
+              value: {{ .Values.bff.containerPort | quote }}
+            - name: BFF_PUBLIC_URL
+              value: {{ .Values.bff.publicUrl | quote }}
+            - name: BFF_OIDC_CLIENT_ID
+              value: {{ .Values.bff.oidc.clientId | quote }}
+            - name: BFF_OIDC_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $clientSecretKey }}
+            - name: BFF_SESSION_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: {{ $sessionSecretKey }}
+            - name: KEYCLOAK_APPS_ISSUER_URI
+              value: {{ .Values.global.keycloak.appsIssuerUri | quote }}
+            - name: GATEWAY_URI
+              value: {{ .Values.bff.gatewayUri | default (printf "http://%s:%v" (include "systemintegrator.fullname" (dict "root" $ "component" "middleware")) .Values.middleware.service.port) | quote }}
+            - name: REDIS_URL
+              value: "redis://{{ .Values.global.redis.host }}:{{ .Values.global.redis.port }}"
+            {{- with .Values.bff.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.bff.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.bff.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.bff.probes.periodSeconds }}
+            failureThreshold: {{ .Values.bff.probes.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.bff.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.bff.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.bff.probes.periodSeconds }}
+            failureThreshold: {{ .Values.bff.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.bff.resources | nindent 12 }}
+{{- end }}

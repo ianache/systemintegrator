@@ -1,0 +1,16 @@
+{{- if .Values.middleware.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "middleware") }}
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "middleware") | nindent 4 }}
+spec:
+  type: {{ .Values.middleware.service.type }}
+  ports:
+    - name: http
+      port: {{ .Values.middleware.service.port }}
+      targetPort: http
+  selector:
+    {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "middleware") | nindent 4 }}
+{{- end }}

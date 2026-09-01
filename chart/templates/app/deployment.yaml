@@ -1,0 +1,76 @@
+{{- if .Values.app.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "systemintegrator.fullname" (dict "root" $ "component" "app") }}
+  labels:
+    {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "app") | nindent 4 }}
+spec:
+  replicas: {{ .Values.app.replicaCount }}
+  selector:
+    matchLabels:
+      {{- include "systemintegrator.selectorLabels" (dict "root" $ "component" "app") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "systemintegrator.componentLabels" (dict "root" $ "component" "app") | nindent 8 }}
+    spec:
+      {{- with .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: app
+          image: "{{ .Values.app.image.repository }}:{{ .Values.app.image.tag }}"
+          imagePullPolicy: {{ .Values.app.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.app.containerPort }}
+          env:
+            - name: SPRING_PROFILES_ACTIVE
+              value: compose
+            - name: SPRING_DATASOURCE_URL
+              value: "jdbc:mysql://{{ .Values.global.mysql.host }}:{{ .Values.global.mysql.port }}/{{ .Values.global.mysql.database }}?connectionTimeZone=UTC&forceConnectionTimeZoneToSession=true"
+            - name: SPRING_DATASOURCE_USERNAME
+              value: {{ .Values.global.mysql.username | quote }}
+            - name: SPRING_DATASOURCE_PASSWORD
+              {{- if .Values.global.mysql.existingSecret }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.global.mysql.existingSecret }}
+                  key: {{ .Values.global.mysql.existingSecretPasswordKey }}
+              {{- else }}
+              value: {{ .Values.global.mysql.password | quote }}
+              {{- end }}
+            - name: SPRING_DATA_REDIS_HOST
+              value: {{ .Values.global.redis.host | quote }}
+            - name: SPRING_DATA_REDIS_PORT
+              value: {{ .Values.global.redis.port | quote }}
+            - name: KAFKA_BOOTSTRAP_SERVERS
+              value: {{ .Values.global.kafka.bootstrapServers | quote }}
+            - name: VAULT_ENABLED
+              value: {{ .Values.app.vaultEnabled | quote }}
+            - name: VAULT_ADDR
+              value: {{ .Values.global.vault.addr | quote }}
+            - name: VAULT_TOKEN
+              value: {{ .Values.global.vault.token | quote }}
+            {{- with .Values.app.extraEnv }}
+            {{- toYaml . | nindent 12 }}
+            {{- end }}
+          readinessProbe:
+            httpGet:
+              path: {{ .Values.app.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.app.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.app.probes.periodSeconds }}
+            failureThreshold: {{ .Values.app.probes.failureThreshold }}
+          livenessProbe:
+            httpGet:
+              path: {{ .Values.app.probes.path }}
+              port: http
+            initialDelaySeconds: {{ .Values.app.probes.initialDelaySeconds }}
+            periodSeconds: {{ .Values.app.probes.periodSeconds }}
+            failureThreshold: {{ .Values.app.probes.failureThreshold }}
+          resources:
+            {{- toYaml .Values.app.resources | nindent 12 }}
+{{- end }}

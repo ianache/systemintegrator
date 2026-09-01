@@ -1,0 +1,165 @@
+# Default values for the systemintegrator chart.
+# Mirrors docker-compose.yaml for: app, middleware, backoffice-bff, backoffice-shell.
+#
+# Infra dependencies (MySQL, Redis, Kafka, Vault) are NOT part of this chart --
+# point `global.*` at wherever those already run (another chart, a managed
+# service, etc).
+
+global:
+  imagePullSecrets: []
+
+  mysql:
+    host: mysql
+    port: 3306
+    database: integration
+    username: integration
+    # Plaintext fallback for local/dev use only -- prefer existingSecret in
+    # any shared environment.
+    password: integration
+    existingSecret: ""
+    existingSecretPasswordKey: password
+
+  redis:
+    host: redis
+    port: 6379
+
+  kafka:
+    bootstrapServers: "kafka:9092"
+
+  vault:
+    addr: "http://vault:8200"
+    token: root
+
+  keycloak:
+    appsIssuerUri: "https://oauth2.qa.comsatel.com.pe/realms/Apps"
+
+# ---------------------------------------------------------------------------
+# app -- Spring Boot integration backend (docker-compose service: app)
+# ---------------------------------------------------------------------------
+app:
+  enabled: true
+  image:
+    repository: systemintegrator/app
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  containerPort: 8080
+  service:
+    type: ClusterIP
+    port: 8080
+  vaultEnabled: true
+  resources: {}
+  # Extra/override environment variables, e.g. [{name: FOO, value: bar}]
+  extraEnv: []
+  probes:
+    path: /actuator/health
+    initialDelaySeconds: 30
+    periodSeconds: 10
+    failureThreshold: 6
+
+# ---------------------------------------------------------------------------
+# middleware -- public API gateway in front of `app` (docker-compose: middleware)
+# ---------------------------------------------------------------------------
+middleware:
+  enabled: true
+  image:
+    repository: systemintegrator/middleware
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  containerPort: 8081
+  service:
+    type: ClusterIP
+    port: 8081
+  springProfilesActive: local
+  keycloakIssuerUri: ""
+  resources: {}
+  extraEnv: []
+  probes:
+    path: /actuator/health
+    initialDelaySeconds: 20
+    periodSeconds: 10
+    failureThreshold: 6
+
+# ---------------------------------------------------------------------------
+# bff -- NestJS BFF for the backoffice UI (docker-compose service: backoffice-bff)
+#
+# The Service name for this component is hardcoded to "backoffice-bff"
+# (see templates/bff/service.yaml) because backoffice-shell's nginx.conf has
+# `proxy_pass http://backoffice-bff:4000` baked into its image at build time.
+# ---------------------------------------------------------------------------
+bff:
+  enabled: true
+  image:
+    repository: systemintegrator/backoffice-bff
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  containerPort: 4000
+  service:
+    port: 4000
+  # Origin the browser is on when Keycloak redirects back to /auth/callback --
+  # must be the Ingress/LoadBalancer host in front of backoffice-shell, NOT
+  # this pod's own address. See the comment in docker-compose.yaml.
+  publicUrl: "http://localhost:4200"
+  oidc:
+    clientId: backoffice-bff
+    # Plaintext fallback for local/dev use only -- prefer existingSecret.
+    clientSecret: ""
+    # When set, both clientSecret and sessionSecret below are read from this
+    # existing Secret instead of the chart-managed one.
+    existingSecret: ""
+    existingSecretClientSecretKey: clientSecret
+    existingSecretSessionSecretKey: sessionSecret
+  # Plaintext fallback for local/dev use only -- prefer existingSecret above.
+  sessionSecret: "local-backoffice-session-secret-change-me"
+  # Leave empty to auto-derive "http://<release>-middleware:<port>" from the
+  # middleware component below; set explicitly to point elsewhere.
+  gatewayUri: ""
+  resources: {}
+  extraEnv: []
+  probes:
+    path: /api/health
+    initialDelaySeconds: 15
+    periodSeconds: 10
+    failureThreshold: 6
+
+# ---------------------------------------------------------------------------
+# shell -- Angular host app served by nginx (docker-compose: backoffice-shell)
+# ---------------------------------------------------------------------------
+shell:
+  enabled: true
+  image:
+    repository: systemintegrator/backoffice-shell
+    tag: latest
+    pullPolicy: IfNotPresent
+  replicaCount: 1
+  containerPort: 80
+  service:
+    type: ClusterIP
+    port: 80
+  resources: {}
+  extraEnv: []
+  probes:
+    path: /
+    initialDelaySeconds: 10
+    periodSeconds: 10
+    failureThreshold: 6
+
+# ---------------------------------------------------------------------------
+# Ingress (optional) -- one Ingress resource, one host block per component
+# ---------------------------------------------------------------------------
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  tls: []
+  shell:
+    host: backoffice.local
+    path: /
+  bff:
+    host: ""
+    path: /
+  middleware:
+    host: ""
+    path: /

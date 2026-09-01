@@ -1,0 +1,10 @@
+apiVersion: v2
+name: systemintegrator
+description: >-
+  Helm chart for the systemintegrator backend components: app (integration
+  backend), middleware (public API gateway), backoffice-bff (BFF for the
+  backoffice UI) and backoffice-shell (Angular shell). Mirrors the topology
+  defined in docker-compose.yaml for these four services.
+type: application
+version: 0.1.0
+appVersion: "1.0.0"
