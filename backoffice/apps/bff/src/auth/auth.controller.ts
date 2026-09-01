@@ -27,15 +27,16 @@ export class AuthController {
       throw new BadRequestException('Invalid OIDC callback state');
     }
 
+    // Session cookie lifetime stays whatever configure-session.ts set it to
+    // (an 8h idle window) — it must NOT be clamped to the OIDC access token's
+    // own (much shorter) expiry, or the app force-logs-out active users the
+    // moment the access token lapses. The access token itself is kept fresh
+    // per-request by SessionAccessTokenGuard via the refresh token instead.
     req.session.tokens = await this.authService.completeAuthorizationCallback(
       code,
       state,
       authorization.codeVerifier,
       issuer,
-    );
-    req.session.cookie.maxAge = Math.max(
-      0,
-      req.session.tokens.expiresAt * 1000 - Date.now(),
     );
     delete req.session.oidc;
     res.redirect('/');

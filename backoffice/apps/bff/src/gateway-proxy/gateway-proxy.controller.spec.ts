@@ -3,6 +3,7 @@ import { ConfigModule } from '@nestjs/config';
 import { Test } from '@nestjs/testing';
 import axios from 'axios';
 import request from 'supertest';
+import { AuthService } from '../auth/auth.service';
 import { GatewayProxyModule } from './gateway-proxy.module';
 
 describe('Gateway profile proxy', () => {
@@ -315,5 +316,116 @@ describe('Gateway profile proxy', () => {
       {},
       { headers: { Authorization: 'Bearer session-access-token' } },
     );
+  });
+});
+
+describe('Gateway proxy silent access-token refresh', () => {
+  let app: INestApplication;
+  let refreshAccessToken: jest.Mock;
+
+  const buildApp = async (sessionTokens: Record<string, unknown>) => {
+    refreshAccessToken = jest.fn();
+    const moduleRef = await Test.createTestingModule({
+      imports: [
+        ConfigModule.forRoot({
+          isGlobal: true,
+          ignoreEnvFile: true,
+          load: [() => ({ GATEWAY_URI: 'http://gateway.internal' })],
+        }),
+        GatewayProxyModule,
+      ],
+    })
+      .overrideProvider(AuthService)
+      .useValue({ refreshAccessToken })
+      .compile();
+
+    const testApp = moduleRef.createNestApplication();
+    testApp.use((req: any, _res: unknown, next: () => void) => {
+      if (req.headers.cookie === 'session=authenticated') {
+        req.session = { tokens: sessionTokens };
+      }
+      next();
+    });
+    await testApp.init();
+    return testApp;
+  };
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await app.close();
+  });
+
+  it('refreshes an access token that is about to expire before forwarding the request', async () => {
+    app = await buildApp({
+      access_token: 'stale-access-token',
+      refresh_token: 'refresh-token-1',
+      tenantId: 'tenant-a',
+      expiresAt: Math.floor(Date.now() / 1000) + 5, // 5s out — inside the refresh skew window
+    });
+    refreshAccessToken.mockResolvedValue({
+      access_token: 'fresh-access-token',
+      id_token: 'fresh-id-token',
+      refresh_token: 'refresh-token-2',
+      tenantId: 'tenant-a',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    const get = jest.spyOn(axios, 'get').mockResolvedValue({ data: [] });
+
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/integration-profiles')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK);
+
+    expect(refreshAccessToken).toHaveBeenCalledWith('refresh-token-1');
+    expect(get).toHaveBeenCalledWith(expect.any(String), {
+      headers: { Authorization: 'Bearer fresh-access-token' },
+    });
+  });
+
+  it('does not refresh a token that is still comfortably valid', async () => {
+    app = await buildApp({
+      access_token: 'still-valid-access-token',
+      refresh_token: 'refresh-token-1',
+      tenantId: 'tenant-a',
+      expiresAt: Math.floor(Date.now() / 1000) + 3600,
+    });
+    jest.spyOn(axios, 'get').mockResolvedValue({ data: [] });
+
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/integration-profiles')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.OK);
+
+    expect(refreshAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 401 when the token is expiring and there is no refresh token', async () => {
+    app = await buildApp({
+      access_token: 'stale-access-token',
+      tenantId: 'tenant-a',
+      expiresAt: Math.floor(Date.now() / 1000) - 10,
+    });
+
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/integration-profiles')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.UNAUTHORIZED);
+
+    expect(refreshAccessToken).not.toHaveBeenCalled();
+  });
+
+  it('rejects with 401 when Keycloak rejects the refresh token (expired or revoked)', async () => {
+    app = await buildApp({
+      access_token: 'stale-access-token',
+      refresh_token: 'revoked-refresh-token',
+      tenantId: 'tenant-a',
+      expiresAt: Math.floor(Date.now() / 1000) - 10,
+    });
+    refreshAccessToken.mockRejectedValue(new Error('invalid_grant'));
+
+    await request(app.getHttpServer())
+      .get('/bff/api/v1/integration-profiles')
+      .set('Cookie', 'session=authenticated')
+      .expect(HttpStatus.UNAUTHORIZED);
   });
 });

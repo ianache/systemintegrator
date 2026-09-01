@@ -73,34 +73,33 @@ describe('AuthController.callback', () => {
     expect(res.redirect).toHaveBeenCalledWith('/');
   });
 
-  it('aligns the session cookie lifetime with the Keycloak token expiration', async () => {
+  it('keeps the configured session cookie lifetime after login, independent of the OIDC token expiry', async () => {
     const tokens = {
       access_token: 'private-access-token',
       id_token: 'private-id-token',
       tenantId: 'tenant-a',
+      // A short-lived access token must NOT shrink the session cookie: the
+      // guard refreshes the access token per-request instead (see
+      // SessionAccessTokenGuard), so the 8h session survives past this.
       expiresAt: 1_900,
     };
     const authService = {
       completeAuthorizationCallback: jest.fn().mockResolvedValue(tokens),
     };
     const controller = new AuthController(authService as unknown as AuthService);
+    const configuredMaxAge = 8 * 60 * 60 * 1000;
     const req: any = {
       query: { code: 'code-1', state: 'expected-state' },
       session: {
         oidc: { codeVerifier: 'verifier-1', state: 'expected-state' },
-        cookie: { maxAge: 8 * 60 * 60 * 1000 },
+        cookie: { maxAge: configuredMaxAge },
       },
     };
     const res = { redirect: jest.fn() };
-    const now = 1_000_000;
-    jest.spyOn(Date, 'now').mockReturnValue(now);
 
-    try {
-      await controller.callback(req, res as any);
-      expect(req.session.cookie.maxAge).toBe(tokens.expiresAt * 1000 - now);
-    } finally {
-      jest.restoreAllMocks();
-    }
+    await controller.callback(req, res as any);
+
+    expect(req.session.cookie.maxAge).toBe(configuredMaxAge);
   });
 
   it('forwards the issuer parameter received from Keycloak to the code exchange', async () => {

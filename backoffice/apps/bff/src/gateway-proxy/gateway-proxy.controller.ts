@@ -17,22 +17,47 @@ import {
   UseGuards,
 } from '@nestjs/common';
 import type { Request } from 'express';
+import { AuthService } from '../auth/auth.service';
+import type { SessionTokens } from '../auth/session-types';
 import { GatewayProxyService } from './gateway-proxy.service';
 
 interface AuthenticatedRequest extends Request {
   session: Request['session'] & {
-    tokens?: { access_token?: string };
+    tokens?: SessionTokens;
   };
 }
 
+// How far ahead of the token's real expiry we treat it as "expiring soon" and
+// refresh it proactively, so an in-flight request never races the Gateway
+// rejecting a token that expired a few seconds into the round trip.
+const REFRESH_SKEW_MS = 30_000;
+
 @Injectable()
 export class SessionAccessTokenGuard implements CanActivate {
-  canActivate(context: ExecutionContext): boolean {
+  constructor(private readonly authService: AuthService) {}
+
+  async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<AuthenticatedRequest>();
-    if (typeof request.session?.tokens?.access_token !== 'string') {
+    const tokens = request.session?.tokens;
+    if (typeof tokens?.access_token !== 'string') {
       throw new UnauthorizedException('Authentication required');
     }
-    return true;
+
+    const expiringSoon = tokens.expiresAt * 1000 - Date.now() <= REFRESH_SKEW_MS;
+    if (!expiringSoon) {
+      return true;
+    }
+
+    if (typeof tokens.refresh_token !== 'string') {
+      throw new UnauthorizedException('Session expired');
+    }
+
+    try {
+      request.session.tokens = await this.authService.refreshAccessToken(tokens.refresh_token);
+      return true;
+    } catch {
+      throw new UnauthorizedException('Session expired');
+    }
   }
 }
 

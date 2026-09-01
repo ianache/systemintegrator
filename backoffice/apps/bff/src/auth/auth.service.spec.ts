@@ -122,3 +122,80 @@ describe('AuthService.buildAuthorizationUrl', () => {
     expect(discovery).toHaveBeenCalledTimes(2);
   });
 });
+
+describe('AuthService.refreshAccessToken', () => {
+  let service: AuthService;
+  let discovery: jest.SpiedFunction<typeof client.discovery>;
+  let refreshTokenGrant: jest.SpiedFunction<typeof client.refreshTokenGrant>;
+
+  const fakeTokenSet = ({ claims, ...rest }: { claims?: object } & Record<string, unknown> = {}) => ({
+    access_token: 'new-access-token',
+    id_token: 'new-id-token',
+    refresh_token: 'rotated-refresh-token',
+    ...rest,
+    claims: () => ({ tenant_id: 'tenant-a', exp: 2_000_000, ...claims }),
+  });
+
+  beforeEach(() => {
+    discovery = jest.spyOn(client, 'discovery').mockResolvedValue(
+      new client.Configuration(
+        { issuer: ISSUER, authorization_endpoint: AUTHORIZATION_ENDPOINT },
+        ENV.BFF_OIDC_CLIENT_ID,
+        ENV.BFF_OIDC_CLIENT_SECRET,
+      ),
+    );
+    refreshTokenGrant = jest.spyOn(client, 'refreshTokenGrant');
+
+    const config = {
+      getOrThrow: (key: string) => {
+        if (!(key in ENV)) throw new Error(`missing config ${key}`);
+        return ENV[key];
+      },
+    } as unknown as ConfigService;
+
+    service = new AuthService(config);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
+  it('exchanges the refresh token for a fresh access token', async () => {
+    refreshTokenGrant.mockResolvedValue(fakeTokenSet() as any);
+
+    const tokens = await service.refreshAccessToken('old-refresh-token');
+
+    expect(refreshTokenGrant).toHaveBeenCalledWith(expect.anything(), 'old-refresh-token');
+    expect(tokens).toEqual({
+      access_token: 'new-access-token',
+      id_token: 'new-id-token',
+      refresh_token: 'rotated-refresh-token',
+      tenantId: 'tenant-a',
+      expiresAt: 2_000_000,
+    });
+  });
+
+  it('keeps the original refresh token when Keycloak does not rotate it', async () => {
+    refreshTokenGrant.mockResolvedValue(fakeTokenSet({ refresh_token: undefined }) as any);
+
+    const tokens = await service.refreshAccessToken('old-refresh-token');
+
+    expect(tokens.refresh_token).toBe('old-refresh-token');
+  });
+
+  it('rejects a refresh response missing required session claims', async () => {
+    refreshTokenGrant.mockResolvedValue(
+      fakeTokenSet({ claims: { tenant_id: undefined } }) as any,
+    );
+
+    await expect(service.refreshAccessToken('old-refresh-token')).rejects.toThrow(
+      'OIDC refresh response is missing required session claims',
+    );
+  });
+
+  it('propagates a rejection from Keycloak (e.g. an expired or revoked refresh token)', async () => {
+    refreshTokenGrant.mockRejectedValue(new Error('invalid_grant'));
+
+    await expect(service.refreshAccessToken('stale-refresh-token')).rejects.toThrow('invalid_grant');
+  });
+});

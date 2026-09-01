@@ -113,4 +113,38 @@ export class AuthService {
       expiresAt,
     };
   }
+
+  /**
+   * Silently renews the access token using the refresh token Keycloak issued
+   * alongside it, so an active user's session survives past the (short-lived)
+   * access token's own expiry without forcing a re-login.
+   */
+  async refreshAccessToken(refreshToken: string): Promise<SessionTokens> {
+    const tokenSet = await client.refreshTokenGrant(
+      await this.getConfiguration(),
+      refreshToken,
+    );
+    const claims = tokenSet.claims();
+    const tenantId = claims?.tenant_id;
+    const expiresAt = claims?.exp;
+
+    if (
+      typeof tokenSet.access_token !== 'string' ||
+      typeof tokenSet.id_token !== 'string' ||
+      typeof tenantId !== 'string' ||
+      typeof expiresAt !== 'number'
+    ) {
+      throw new Error('OIDC refresh response is missing required session claims');
+    }
+
+    return {
+      access_token: tokenSet.access_token,
+      id_token: tokenSet.id_token,
+      // Keycloak rotates the refresh token on each use; fall back to the
+      // previous one only if this particular grant didn't issue a new one.
+      refresh_token: typeof tokenSet.refresh_token === 'string' ? tokenSet.refresh_token : refreshToken,
+      tenantId,
+      expiresAt,
+    };
+  }
 }
