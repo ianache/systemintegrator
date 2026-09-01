@@ -56,8 +56,9 @@ public class FlowController {
 
     @GetMapping
     public List<FlowSummaryResponse> list(@RequestParam(defaultValue = "true") boolean activeOnly) {
-        return service.list(TenantContext.requireTenantId(), activeOnly).stream()
-                .map(FlowSummaryResponse::from)
+        UUID tenantId = TenantContext.requireTenantId();
+        return service.list(tenantId, activeOnly).stream()
+                .map(view -> FlowSummaryResponse.from(view, metricsService.rowMetrics(tenantId, view.id())))
                 .toList();
     }
 

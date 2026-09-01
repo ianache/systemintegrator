@@ -1,5 +1,4 @@
 <section class="page" aria-labelledby="integration-profiles-heading">
-  <app-integration-tabs />
   <div class="page-header">
     <div>
       <h1 id="integration-profiles-heading">Integraciones</h1>
@@ -7,6 +6,7 @@
     </div>
     <button type="button" class="btn btn-primary new-profile-btn" (click)="openWizard()">＋ Nuevo profile</button>
   </div>
+  <app-integration-tabs />
 
   @if (state() === 'loading') {
     <p aria-live="polite">Cargando integration profiles…</p>

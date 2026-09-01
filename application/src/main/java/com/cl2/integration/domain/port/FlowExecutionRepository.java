@@ -16,6 +16,8 @@ public interface FlowExecutionRepository {
 
     FlowMetricsSummary executionMetrics(UUID tenantId, Instant since);
 
+    FlowMetricsSummary executionMetricsForFlow(UUID tenantId, UUID flowId, Instant since);
+
     List<FlowExecution> findByFlow(UUID tenantId, UUID flowId);
 
     Optional<FlowExecution> findById(UUID tenantId, UUID flowId, UUID executionId);

@@ -1,4 +1,4 @@
-import { ChangeDetectionStrategy, Component, OnInit, inject, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, OnInit, computed, inject, signal } from '@angular/core';
 import { Router } from '@angular/router';
 import { Flow, FlowMetricsSummary, FlowStatus } from './flow.model';
 import { FlowService } from './flow.service';
@@ -28,6 +28,17 @@ export class FlowListComponent implements OnInit {
   readonly metrics = signal<FlowMetricsSummary | null>(null);
   readonly metricsUnavailable = signal(false);
 
+  readonly publishedFlowsNote = computed(() => {
+    const total = this.flows().length;
+    if (total === 0) return 'con versión activa';
+    const draft = this.flows().filter((f) => f.status === 'DRAFT').length;
+    const obsolete = this.flows().filter((f) => f.status === 'OBSOLETE').length;
+    const parts: string[] = [];
+    if (draft > 0) parts.push(`${draft} borrador${draft === 1 ? '' : 'es'}`);
+    if (obsolete > 0) parts.push(`${obsolete} obsoleto${obsolete === 1 ? '' : 's'}`);
+    return parts.length > 0 ? `de ${total} · ${parts.join(', ')}` : `de ${total}`;
+  });
+
   ngOnInit(): void {
     this.load();
     this.loadMetrics();
@@ -54,6 +65,11 @@ export class FlowListComponent implements OnInit {
 
   open(flow: Flow): void {
     this.router.navigate(['/integration/flows', flow.id]);
+  }
+
+  openExecs(flow: Flow, event: Event): void {
+    event.stopPropagation();
+    this.router.navigate(['/integration/flows', flow.id, 'executions']);
   }
 
   statusBadgeClass(status: FlowStatus): string {

@@ -55,17 +55,42 @@ class FlowExecutionPersistenceAdapter implements FlowExecutionRepository {
     @Transactional(readOnly = true)
     public FlowMetricsSummary executionMetrics(UUID tenantId, Instant since) {
         long total = repository.countByTenantIdAndStartedAtGreaterThanEqual(tenantId, since);
+        long failedStepCount = stepRepository.countFailedStepsSince(tenantId, since);
         if (total == 0) {
-            return new FlowMetricsSummary(0, 0, 0.0, null);
+            return new FlowMetricsSummary(0, 0, 0.0, null, null, null, failedStepCount);
         }
         long failures = repository.countByTenantIdAndStartedAtGreaterThanEqualAndStatus(
                 tenantId, since, FlowExecutionStatus.FAILURE);
         double errorRatePct = 100.0 * failures / total;
 
-        int offset = (int) Math.min(Math.ceil(total * 0.95) - 1, total - 1);
-        Long p95 = repository.findDurationAtOffset(tenantId, since, offset);
+        int p95Offset = (int) Math.min(Math.ceil(total * 0.95) - 1, total - 1);
+        Long p95 = repository.findDurationAtOffset(tenantId, since, p95Offset);
+        int p50Offset = (int) Math.min(Math.ceil(total * 0.50) - 1, total - 1);
+        Long p50 = repository.findDurationAtOffset(tenantId, since, p50Offset);
 
-        return new FlowMetricsSummary(0, total, errorRatePct, p95);
+        Long lastRunStepCount = repository
+                .findFirstByTenantIdAndStartedAtGreaterThanEqualOrderByStartedAtDesc(tenantId, since)
+                .map(execution -> stepRepository.countByFlowExecutionId(execution.toDomain().id()))
+                .orElse(null);
+
+        return new FlowMetricsSummary(0, total, errorRatePct, p95, p50, lastRunStepCount, failedStepCount);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public FlowMetricsSummary executionMetricsForFlow(UUID tenantId, UUID flowId, Instant since) {
+        long total = repository.countByTenantIdAndFlowIdAndStartedAtGreaterThanEqual(tenantId, flowId, since);
+        if (total == 0) {
+            return new FlowMetricsSummary(0, 0, 0.0, null, null, null, 0);
+        }
+        long failures = repository.countByTenantIdAndFlowIdAndStartedAtGreaterThanEqualAndStatus(
+                tenantId, flowId, since, FlowExecutionStatus.FAILURE);
+        double errorRatePct = 100.0 * failures / total;
+
+        int offset = (int) Math.min(Math.ceil(total * 0.95) - 1, total - 1);
+        Long p95 = repository.findDurationAtOffsetForFlow(tenantId, flowId, since, offset);
+
+        return new FlowMetricsSummary(0, total, errorRatePct, p95, null, null, 0);
     }
 
     @Override

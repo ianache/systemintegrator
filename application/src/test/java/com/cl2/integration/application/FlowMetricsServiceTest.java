@@ -80,7 +80,7 @@ class FlowMetricsServiceTest {
         Flow draft = Flow.create(UUID.randomUUID(), TENANT_ID, "flow/b", "B");
         given(flowRepository.findAll(TENANT_ID, true)).willReturn(List.of(published, draft));
         given(flowExecutionRepository.executionMetrics(eq(TENANT_ID), any(Instant.class)))
-                .willReturn(new FlowMetricsSummary(0, 10, 5.0, 200L));
+                .willReturn(new FlowMetricsSummary(0, 10, 5.0, 200L, 120L, 6L, 2));
 
         FlowMetricsSummary summary = service.summarize(TENANT_ID);
 
@@ -88,5 +88,20 @@ class FlowMetricsServiceTest {
         assertThat(summary.executions24h()).isEqualTo(10);
         assertThat(summary.errorRatePct()).isEqualTo(5.0);
         assertThat(summary.p95DurationMs()).isEqualTo(200L);
+        assertThat(summary.p50DurationMs()).isEqualTo(120L);
+        assertThat(summary.lastRunStepCount()).isEqualTo(6L);
+        assertThat(summary.failedStepCount()).isEqualTo(2);
+    }
+
+    @Test
+    void rowMetricsDelegatesToTheFlowExecutionRepositoryScopedByFlow() {
+        given(flowExecutionRepository.executionMetricsForFlow(eq(TENANT_ID), eq(FLOW_ID), any(Instant.class)))
+                .willReturn(new FlowMetricsSummary(0, 4, 25.0, 340L, null, null, 0));
+
+        FlowMetricsSummary summary = service.rowMetrics(TENANT_ID, FLOW_ID);
+
+        assertThat(summary.executions24h()).isEqualTo(4);
+        assertThat(summary.errorRatePct()).isEqualTo(25.0);
+        assertThat(summary.p95DurationMs()).isEqualTo(340L);
     }
 }

@@ -116,5 +116,50 @@ class FlowExecutionPersistenceAdapterTest {
         FlowMetricsSummary summary = adapter.executionMetrics(TENANT_ID, now.minus(24, ChronoUnit.HOURS));
 
         assertThat(summary.p95DurationMs()).isEqualTo(1900L);
+        assertThat(summary.p50DurationMs()).isEqualTo(1000L);
+    }
+
+    @Test
+    void computesLastRunStepCountAndFailedStepCount() {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        Instant earlier = now.minus(2, ChronoUnit.HOURS);
+        Instant later = now.minus(1, ChronoUnit.HOURS);
+
+        FlowExecution firstRun = adapter.save(TENANT_ID, FlowExecution.report(UUID.randomUUID(), TENANT_ID, flowId, 1,
+                FlowExecutionStatus.SUCCESS, earlier, earlier.plusMillis(100), null));
+        adapter.saveSteps(firstRun.id(), java.util.List.of(
+                new com.cl2.integration.domain.model.FlowExecutionStep(UUID.randomUUID(), firstRun.id(), "n1",
+                        FlowExecutionStatus.FAILURE, earlier, 50, "boom", 0)));
+
+        FlowExecution lastRun = adapter.save(TENANT_ID, FlowExecution.report(UUID.randomUUID(), TENANT_ID, flowId, 1,
+                FlowExecutionStatus.SUCCESS, later, later.plusMillis(100), null));
+        adapter.saveSteps(lastRun.id(), java.util.List.of(
+                new com.cl2.integration.domain.model.FlowExecutionStep(UUID.randomUUID(), lastRun.id(), "n1",
+                        FlowExecutionStatus.SUCCESS, later, 40, null, 0),
+                new com.cl2.integration.domain.model.FlowExecutionStep(UUID.randomUUID(), lastRun.id(), "n2",
+                        FlowExecutionStatus.SUCCESS, later, 60, null, 1)));
+
+        FlowMetricsSummary summary = adapter.executionMetrics(TENANT_ID, now.minus(24, ChronoUnit.HOURS));
+
+        assertThat(summary.lastRunStepCount()).isEqualTo(2L);
+        assertThat(summary.failedStepCount()).isEqualTo(1L);
+    }
+
+    @Test
+    void executionMetricsForFlowIsScopedToTheGivenFlow() {
+        Instant now = Instant.now().truncatedTo(ChronoUnit.MICROS);
+        Instant t = now.minus(1, ChronoUnit.HOURS);
+        UUID otherFlowId = flowAdapter.save(TENANT_ID, Flow.create(UUID.randomUUID(), TENANT_ID, "flow/y", "Y")).id();
+
+        adapter.save(TENANT_ID, FlowExecution.report(UUID.randomUUID(), TENANT_ID, flowId, 1,
+                FlowExecutionStatus.SUCCESS, t, t.plusMillis(200), null));
+        adapter.save(TENANT_ID, FlowExecution.report(UUID.randomUUID(), TENANT_ID, otherFlowId, 1,
+                FlowExecutionStatus.FAILURE, t, t.plusMillis(500), "boom"));
+
+        FlowMetricsSummary summary = adapter.executionMetricsForFlow(TENANT_ID, flowId, now.minus(24, ChronoUnit.HOURS));
+
+        assertThat(summary.executions24h()).isEqualTo(1);
+        assertThat(summary.errorRatePct()).isEqualTo(0.0);
+        assertThat(summary.p95DurationMs()).isEqualTo(200L);
     }
 }

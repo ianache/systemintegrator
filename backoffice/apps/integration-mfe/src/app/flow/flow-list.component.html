@@ -1,33 +1,33 @@
 <section class="page" aria-labelledby="flows-heading">
+  <div class="page-header">
+    <div>
+      <h1 id="flows-heading">Integraciones</h1>
+      <p>Un flujo es un grafo dirigido y versionado: fuentes, transformaciones, ramas y destinos conectados por pipes tipados.</p>
+    </div>
+    <button type="button" class="btn btn-primary new-flow-btn" (click)="openForm()">＋ Nuevo flujo</button>
+  </div>
   <app-integration-tabs />
   <div class="kpi-grid">
     <div class="card kpi">
       <span class="mono kpi-label">FLUJOS PUBLICADOS</span>
       <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() ? '—' : (metrics()?.publishedFlowCount ?? '—') }}</span>
-      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'con versión activa' }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : publishedFlowsNote() }}</span>
     </div>
     <div class="card kpi">
       <span class="mono kpi-label">EJECUCIONES 24H</span>
       <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() ? '—' : (metrics()?.executions24h ?? '—') }}</span>
-      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'últimas 24 horas' }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() || metrics()?.lastRunStepCount == null ? 'últimas 24 horas' : (metrics()!.lastRunStepCount + ' pasos en la última corrida') }}</span>
     </div>
     <div class="card kpi">
       <span class="mono kpi-label">TASA DE ERROR</span>
       <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() || !metrics() ? '—' : (metrics()!.errorRatePct + '%') }}</span>
-      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'últimas 24 horas' }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() || !metrics() ? 'No disponible' : (metrics()!.failedStepCount + ' pasos con error') }}</span>
     </div>
     <div class="card kpi">
       <span class="mono kpi-label">P95 POR EJECUCIÓN</span>
       <span class="kpi-value" [class.muted]="metricsUnavailable()">{{ metricsUnavailable() || metrics()?.p95DurationMs == null ? '—' : (metrics()!.p95DurationMs + 'ms') }}</span>
-      <span class="kpi-note">{{ metricsUnavailable() ? 'No disponible' : 'últimas 24 horas' }}</span>
+      <span class="kpi-note">{{ metricsUnavailable() || metrics()?.p50DurationMs == null ? 'últimas 24 horas' : ('P50 ' + metrics()!.p50DurationMs + 'ms') }}</span>
     </div>
-  </div>
-  <div class="page-header">
-    <div>
-      <h1 id="flows-heading">Integraciones</h1>
-      <p>Un perfil define cómo un dominio de negocio se acopla a una fuente externa. Un flujo compone varios pasos, ramas y destinos sobre esas mismas fuentes.</p>
-    </div>
-    <button type="button" class="btn btn-primary new-flow-btn" (click)="openForm()">＋ Nuevo flujo</button>
   </div>
 
   @if (formOpen()) {
@@ -62,35 +62,31 @@
   } @else if (state() === 'empty') {
     <app-console-empty-state title="Sin flujos" description="No hay flujos configurados todavía." />
   } @else {
-    <div class="card">
-      <table>
-        <caption class="visually-hidden">Flujos configurados</caption>
-        <thead>
-          <tr>
-            <th scope="col">Flujo</th>
-            <th scope="col">Estado</th>
-            <th scope="col">Versión activa</th>
-            <th scope="col">Nodos</th>
-            <th scope="col">Trigger</th>
-          </tr>
-        </thead>
-        <tbody>
-          @for (flow of flows(); track flow.id) {
-            <tr (click)="open(flow)" class="row">
-              <td class="cell-primary">
-                {{ flow.name }}
-                <div class="mono cell-sub">{{ flow.code }}</div>
-              </td>
-              <td><span [class]="statusBadgeClass(flow.status)">{{ flow.status }}</span></td>
-              <td class="mono">{{ flow.activeVersionNumber !== null ? ('v' + flow.activeVersionNumber) : '—' }}</td>
-              <td>{{ flow.nodeCount }} nodos</td>
-              <td class="mono cell-sub">{{ flow.triggerSummary ?? '—' }}</td>
-            </tr>
-          } @empty {
-            <tr><td colspan="5">Ningún flujo coincide.</td></tr>
-          }
-        </tbody>
-      </table>
+    <div class="card flows-card">
+      <div class="flows-header">
+        <span>FLUJO</span><span>ESTADO</span><span>VERSIÓN</span><span>NODOS</span><span>TRIGGER</span>
+        <span>EJEC. 24H</span><span>ERROR</span><span>P95</span><span class="align-right">EJECUCIONES</span>
+      </div>
+      @for (flow of flows(); track flow.id) {
+        <div class="flows-row" role="button" tabindex="0" (click)="open(flow)" (keydown.enter)="open(flow)">
+          <div class="cell-primary">
+            <span class="flow-name">{{ flow.name }}</span>
+            <span class="mono cell-sub">{{ flow.code }}</span>
+          </div>
+          <span [class]="statusBadgeClass(flow.status)">{{ flow.status }}</span>
+          <span class="mono">{{ flow.activeVersionNumber !== null ? ('v' + flow.activeVersionNumber) : '—' }}</span>
+          <span>{{ flow.nodeCount }} nodos</span>
+          <span class="mono cell-sub">{{ flow.triggerSummary ?? '—' }}</span>
+          <span class="mono">{{ flow.execs24h ?? 0 }}</span>
+          <span class="mono" [class.attempts-error]="(flow.execs24h ?? 0) > 0 && (flow.errorRatePct ?? 0) > 0">{{ (flow.errorRatePct ?? 0) }}%</span>
+          <span class="mono cell-sub">{{ flow.p95DurationMs != null ? (flow.p95DurationMs + 'ms') : '—' }}</span>
+          <div class="align-right">
+            <button type="button" class="btn" (click)="openExecs(flow, $event)">Ver traza</button>
+          </div>
+        </div>
+      } @empty {
+        <p class="state-message">Ningún flujo coincide.</p>
+      }
     </div>
   }
 </section>

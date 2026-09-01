@@ -15,6 +15,9 @@ export interface Flow {
   createdAt: string;
   updatedAt: string;
   version: number;
+  execs24h?: number;
+  errorRatePct?: number;
+  p95DurationMs?: number | null;
 }
 
 export interface FlowVersion {
@@ -71,6 +74,9 @@ export interface FlowMetricsSummary {
   executions24h: number;
   errorRatePct: number;
   p95DurationMs: number | null;
+  p50DurationMs: number | null;
+  lastRunStepCount: number | null;
+  failedStepCount: number;
 }
 
 export interface ReportFlowExecutionPayload {

@@ -54,6 +54,12 @@ public class FlowMetricsService {
     }
 
     @Transactional(readOnly = true)
+    public FlowMetricsSummary rowMetrics(UUID tenantId, UUID flowId) {
+        Instant since = Instant.now().minus(Duration.ofHours(24));
+        return flowExecutionRepository.executionMetricsForFlow(tenantId, flowId, since);
+    }
+
+    @Transactional(readOnly = true)
     public List<FlowExecution> listExecutions(UUID tenantId, UUID flowId) {
         flowRepository.findById(tenantId, flowId); // 404s if the flow itself doesn't exist/isn't this tenant's
         return flowExecutionRepository.findByFlow(tenantId, flowId);

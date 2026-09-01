@@ -91,11 +91,15 @@ class FlowControllerTest {
                 FlowStatus.DRAFT, 0, false, Instant.parse("2026-08-30T00:00:00Z"),
                 Instant.parse("2026-08-30T00:00:00Z"), 0);
         given(service.list(eq(TENANT_ID), eq(true))).willReturn(List.of(withDraft));
+        given(metricsService.rowMetrics(eq(TENANT_ID), eq(FLOW_ID)))
+                .willReturn(new FlowMetricsSummary(0, 2, 0.0, 150L, null, null, 0));
 
         mockMvc.perform(get(BASE_PATH).header("X-Tenant-ID", TENANT_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$", hasSizeOne()))
-                .andExpect(jsonPath("$[0].draftGraph").doesNotExist());
+                .andExpect(jsonPath("$[0].draftGraph").doesNotExist())
+                .andExpect(jsonPath("$[0].execs24h").value(2))
+                .andExpect(jsonPath("$[0].p95DurationMs").value(150));
 
         then(service).should().list(TENANT_ID, true);
     }
@@ -228,19 +232,22 @@ class FlowControllerTest {
 
     @Test
     void returnsTheMetricsSummaryForTheTenant() throws Exception {
-        given(metricsService.summarize(TENANT_ID)).willReturn(new FlowMetricsSummary(3, 40, 2.5, 810L));
+        given(metricsService.summarize(TENANT_ID)).willReturn(new FlowMetricsSummary(3, 40, 2.5, 810L, 620L, 12L, 3));
 
         mockMvc.perform(get(BASE_PATH + "/metrics/summary").header("X-Tenant-ID", TENANT_ID))
                 .andExpect(status().isOk())
                 .andExpect(jsonPath("$.publishedFlowCount").value(3))
                 .andExpect(jsonPath("$.executions24h").value(40))
                 .andExpect(jsonPath("$.errorRatePct").value(2.5))
-                .andExpect(jsonPath("$.p95DurationMs").value(810));
+                .andExpect(jsonPath("$.p95DurationMs").value(810))
+                .andExpect(jsonPath("$.p50DurationMs").value(620))
+                .andExpect(jsonPath("$.lastRunStepCount").value(12))
+                .andExpect(jsonPath("$.failedStepCount").value(3));
     }
 
     @Test
     void returnsZeroExecutionsAndNullP95WhenTenantHasNoExecutions() throws Exception {
-        given(metricsService.summarize(TENANT_ID)).willReturn(new FlowMetricsSummary(0, 0, 0.0, null));
+        given(metricsService.summarize(TENANT_ID)).willReturn(new FlowMetricsSummary(0, 0, 0.0, null, null, null, 0));
 
         mockMvc.perform(get(BASE_PATH + "/metrics/summary").header("X-Tenant-ID", TENANT_ID))
                 .andExpect(status().isOk())
