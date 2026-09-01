@@ -42,6 +42,24 @@
         </button>
       }
     </div>
+    <label class="filter-field">
+      <span class="mono filter-label">PROFILE</span>
+      <select data-testid="monitor-domain-filter" [value]="domainFilter()" (change)="setDomainFilter($any($event.target).value)">
+        <option value="">Todos</option>
+        @for (d of domainOptions(); track d) {
+          <option [value]="d">{{ d }}</option>
+        }
+      </select>
+    </label>
+    <label class="filter-field">
+      <span class="mono filter-label">DESDE</span>
+      <input type="date" data-testid="monitor-date-from" [value]="dateFrom()" (change)="setDateFrom($any($event.target).value)" />
+    </label>
+    <label class="filter-field">
+      <span class="mono filter-label">HASTA</span>
+      <input type="date" data-testid="monitor-date-to" [value]="dateTo()" (change)="setDateTo($any($event.target).value)" />
+    </label>
+    <button type="button" class="btn" data-testid="monitor-clear-dates" (click)="clearDateFilters()">Limpiar fechas</button>
     <span class="mono message-count">{{ messageCount() }}</span>
   </div>
 

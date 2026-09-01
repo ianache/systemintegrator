@@ -64,6 +64,16 @@
 
 .mapping-payload-editor { min-height: 460px; border-top: 0; }
 
+.payload-view-toggle { margin-left: auto; }
+.payload-view-toggle .chip:disabled { opacity: .4; }
+.source-tree { height: 460px; overflow: auto; padding: 8px 6px; background: var(--surface-2); font: 11.5px 'IBM Plex Mono', monospace; }
+.source-tree-row { display: flex; align-items: center; gap: 7px; padding: 3px 8px; }
+.source-tree-caret { width: 12px; flex: 0 0 12px; font-size: 10px; color: var(--text-dim); text-align: center; }
+.source-tree-node { display: inline-flex; gap: 5px; background: var(--surface); border: 1px solid var(--border); border-radius: 4px; padding: 2px 7px; white-space: nowrap; }
+.source-tree-key { font-weight: 600; }
+.source-tree-value { color: var(--text-muted); }
+.source-tree-type { font-size: 10px; color: var(--text-dim); }
+
 .mapping-rows-header {
   display: grid;
   grid-template-columns: 118px minmax(150px, 1.15fr) minmax(140px, 1fr) 84px 26px;

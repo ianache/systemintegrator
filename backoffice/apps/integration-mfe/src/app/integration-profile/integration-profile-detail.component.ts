@@ -156,6 +156,72 @@ const TABS: { id: DetailTab; label: string; jdbcOnly?: boolean }[] = [
   { id: 'sync', label: 'Sincronización' },
 ];
 
+export type PayloadViewMode = 'JSON' | 'TREE';
+
+export interface SourceTreeNode {
+  path: string;
+  key: string;
+  indent: number;
+  isBranch: boolean;
+  typeLabel: string;
+  valuePreview: string;
+  expanded: boolean;
+}
+
+const IDENTIFIER_RE = /^[A-Za-z_$][A-Za-z0-9_$]*$/;
+
+function jsonPathForKey(parentPath: string, key: string): string {
+  return IDENTIFIER_RE.test(key) ? parentPath + '.' + key : parentPath + "['" + key.replace(/'/g, "\\'") + "']";
+}
+
+function formatLeafValue(value: unknown): string {
+  if (value === null) return 'null';
+  if (value === undefined) return 'undefined';
+  return typeof value === 'string' ? '"' + value + '"' : String(value);
+}
+
+function buildSourceTree(root: unknown, collapsedPaths: ReadonlySet<string>): SourceTreeNode[] {
+  const nodes: SourceTreeNode[] = [];
+
+  function walk(value: unknown, path: string, key: string, indent: number): void {
+    const isArray = Array.isArray(value);
+    const isObject = value !== null && typeof value === 'object' && !isArray;
+    const isBranch = isArray || isObject;
+    const expanded = !collapsedPaths.has(path);
+    nodes.push({
+      path,
+      key,
+      indent,
+      isBranch,
+      typeLabel: isArray ? 'array[' + (value as unknown[]).length + ']' : isObject ? 'object' : typeof value,
+      valuePreview: isBranch ? '' : formatLeafValue(value),
+      expanded,
+    });
+    if (!isBranch || !expanded) return;
+    if (isArray) {
+      (value as unknown[]).forEach((item, i) => walk(item, path + '[' + i + ']', String(i), indent + 1));
+    } else {
+      for (const childKey of Object.keys(value as Record<string, unknown>)) {
+        walk((value as Record<string, unknown>)[childKey], jsonPathForKey(path, childKey), childKey, indent + 1);
+      }
+    }
+  }
+
+  if (root !== null && typeof root === 'object') {
+    if (Array.isArray(root)) {
+      root.forEach((item, i) => walk(item, '$[' + i + ']', String(i), 0));
+    } else {
+      for (const key of Object.keys(root as Record<string, unknown>)) {
+        walk((root as Record<string, unknown>)[key], jsonPathForKey('$', key), key, 0);
+      }
+    }
+  } else {
+    walk(root, '$', '$', 0);
+  }
+
+  return nodes;
+}
+
 function stringifyOrEmpty(value: unknown): string {
   return value === null || value === undefined ? '' : JSON.stringify(value, null, 2);
 }
@@ -215,6 +281,23 @@ export class IntegrationProfileDetailComponent implements OnInit {
   readonly samplePayload = signal('{\n  \n}');
   readonly dryRunResult = signal<MappingDryRunResult | null>(null);
   readonly dryRunPending = signal(false);
+
+  private readonly payloadViewModeRequested = signal<PayloadViewMode>('JSON');
+  private readonly treeCollapsedPaths = signal<ReadonlySet<string>>(new Set());
+  readonly payloadViewMode = computed<PayloadViewMode>(() =>
+    this.payloadViewModeRequested() === 'TREE' && !this.isJsonValid(this.samplePayload())
+      ? 'JSON'
+      : this.payloadViewModeRequested(),
+  );
+  readonly sourceTreeNodes = computed<SourceTreeNode[]>(() => {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(this.samplePayload());
+    } catch {
+      return [];
+    }
+    return buildSourceTree(parsed, this.treeCollapsedPaths());
+  });
 
   readonly extractionDryRunResult = signal<ExtractionDryRunResult | null>(null);
   readonly extractionDryRunPending = signal(false);
@@ -428,6 +511,35 @@ export class IntegrationProfileDetailComponent implements OnInit {
 
   updateSamplePayload(value: string): void {
     this.samplePayload.set(value);
+  }
+
+  setPayloadViewMode(mode: PayloadViewMode): void {
+    if (mode === 'TREE' && !this.isJsonValid(this.samplePayload())) return;
+    this.payloadViewModeRequested.set(mode);
+  }
+
+  toggleTreeNode(path: string): void {
+    this.treeCollapsedPaths.update((collapsed) => {
+      const next = new Set(collapsed);
+      if (next.has(path)) next.delete(path);
+      else next.add(path);
+      return next;
+    });
+  }
+
+  onTreeNodeDragStart(event: DragEvent, path: string): void {
+    event.dataTransfer?.setData('text/plain', path);
+    if (event.dataTransfer) event.dataTransfer.effectAllowed = 'copy';
+  }
+
+  onSourcePathDragOver(event: DragEvent): void {
+    event.preventDefault();
+  }
+
+  onSourcePathDrop(index: number, event: DragEvent): void {
+    event.preventDefault();
+    const path = event.dataTransfer?.getData('text/plain');
+    if (path) this.updateMappingRow(index, { sourcePath: path });
   }
 
   runDryRun(): void {

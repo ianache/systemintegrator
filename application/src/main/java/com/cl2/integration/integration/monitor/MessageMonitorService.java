@@ -59,6 +59,10 @@ public class MessageMonitorService {
     }
 
     public List<MessageSummary> list(UUID tenantId, String statusFilter) {
+        return list(tenantId, statusFilter, null, null, null);
+    }
+
+    public List<MessageSummary> list(UUID tenantId, String statusFilter, String domainFilter, Instant from, Instant to) {
         PageRequest window = PageRequest.of(0, WINDOW_SIZE, Sort.unsorted());
 
         Stream<MessageSummary> inbound = inboxRepository.findByTenantId(tenantId, window).stream()
@@ -68,6 +72,9 @@ public class MessageMonitorService {
 
         return Stream.concat(inbound, outbound)
                 .filter(m -> statusFilter == null || "ALL".equals(statusFilter) || statusFilter.equals(m.status()))
+                .filter(m -> domainFilter == null || domainFilter.isBlank() || domainFilter.equals(m.domain()))
+                .filter(m -> from == null || !m.timestamp().isBefore(from))
+                .filter(m -> to == null || !m.timestamp().isAfter(to))
                 .sorted(Comparator.comparing(MessageSummary::timestamp).reversed())
                 .limit(WINDOW_SIZE)
                 .collect(Collectors.toList());

@@ -107,8 +107,14 @@ export class GatewayProxyController {
   }
 
   @Get('messages')
-  getMessages(@Req() request: AuthenticatedRequest, @Query('status') status = 'ALL') {
-    return this.gatewayProxy.getMessages(request.session.tokens!.access_token!, status);
+  getMessages(
+    @Req() request: AuthenticatedRequest,
+    @Query('status') status = 'ALL',
+    @Query('domain') domain?: string,
+    @Query('from') from?: string,
+    @Query('to') to?: string,
+  ) {
+    return this.gatewayProxy.getMessages(request.session.tokens!.access_token!, status, domain, from, to);
   }
 
   @Get('messages/:direction/:id')

@@ -7,8 +7,12 @@ import { MessageDetail, MessageDirection, MessageStatusFilter, MessageSummary } 
 export class MessageMonitorService {
   private readonly http = inject(HttpClient);
 
-  list(status: MessageStatusFilter): Observable<MessageSummary[]> {
-    return this.http.get<MessageSummary[]>('/bff/api/v1/messages', { params: { status } });
+  list(status: MessageStatusFilter, domain?: string, from?: string, to?: string): Observable<MessageSummary[]> {
+    const params: Record<string, string> = { status };
+    if (domain) params['domain'] = domain;
+    if (from) params['from'] = from;
+    if (to) params['to'] = to;
+    return this.http.get<MessageSummary[]>('/bff/api/v1/messages', { params });
   }
 
   get(direction: MessageDirection, id: string): Observable<MessageDetail> {

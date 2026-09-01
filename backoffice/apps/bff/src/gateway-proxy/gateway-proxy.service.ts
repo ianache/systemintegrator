@@ -59,8 +59,12 @@ export class GatewayProxyService {
     return this.forward('post', '/api/v1/inbox/dlq/replay', accessToken, {});
   }
 
-  getMessages(accessToken: string, status: string): Promise<unknown> {
-    return this.forward('get', `/api/v1/messages?status=${encodeURIComponent(status)}`, accessToken);
+  getMessages(accessToken: string, status: string, domain?: string, from?: string, to?: string): Promise<unknown> {
+    const params = new URLSearchParams({ status });
+    if (domain) params.set('domain', domain);
+    if (from) params.set('from', from);
+    if (to) params.set('to', to);
+    return this.forward('get', `/api/v1/messages?${params.toString()}`, accessToken);
   }
 
   getMessage(accessToken: string, direction: string, id: string): Promise<unknown> {

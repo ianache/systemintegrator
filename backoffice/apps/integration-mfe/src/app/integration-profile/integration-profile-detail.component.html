@@ -285,13 +285,61 @@
 
               <div class="mapping-columns">
                 <div class="card mapping-panel">
-                  <div class="card-header"><span>Payload de origen</span></div>
-                  <textarea
-                    data-testid="sample-payload"
-                    class="json-editor mapping-payload-editor"
-                    [value]="samplePayload()"
-                    (input)="updateSamplePayload($any($event.target).value)"
-                  ></textarea>
+                  <div class="card-header">
+                    <span>Payload de origen</span>
+                    <div class="chip-group payload-view-toggle">
+                      <button
+                        type="button"
+                        data-testid="payload-view-json"
+                        class="chip mono"
+                        [class.active]="payloadViewMode() === 'JSON'"
+                        (click)="setPayloadViewMode('JSON')"
+                      >JSON</button>
+                      <button
+                        type="button"
+                        data-testid="payload-view-tree"
+                        class="chip mono"
+                        [class.active]="payloadViewMode() === 'TREE'"
+                        [disabled]="!isJsonValid(samplePayload())"
+                        [title]="isJsonValid(samplePayload()) ? '' : 'JSON inválido, corrige el payload para ver el árbol'"
+                        (click)="setPayloadViewMode('TREE')"
+                      >TREE</button>
+                    </div>
+                  </div>
+                  @if (payloadViewMode() === 'JSON') {
+                    <textarea
+                      data-testid="sample-payload"
+                      class="json-editor mapping-payload-editor"
+                      [value]="samplePayload()"
+                      (input)="updateSamplePayload($any($event.target).value)"
+                    ></textarea>
+                  } @else {
+                    <div data-testid="sample-payload-tree" class="source-tree">
+                      @for (node of sourceTreeNodes(); track node.path) {
+                        <div class="source-tree-row" [style.margin-left.px]="node.indent * 14">
+                          @if (node.isBranch) {
+                            <span class="source-tree-caret" (click)="toggleTreeNode(node.path)">{{ node.expanded ? '▾' : '▸' }}</span>
+                          } @else {
+                            <span class="source-tree-caret"></span>
+                          }
+                          <span
+                            class="source-tree-node"
+                            draggable="true"
+                            [attr.data-testid]="'source-tree-node-' + node.path"
+                            (dragstart)="onTreeNodeDragStart($event, node.path)"
+                          >
+                            <span class="source-tree-key">{{ node.key }}</span>
+                            @if (!node.isBranch) {
+                              <span class="source-tree-value">{{ node.valuePreview }}</span>
+                            }
+                          </span>
+                          @if (node.isBranch) {
+                            <span class="source-tree-type">{{ node.typeLabel }}</span>
+                          }
+                        </div>
+                      }
+                    </div>
+                  }
                 </div>
 
                 <div class="card mapping-panel">
@@ -316,6 +364,8 @@
                             data-testid="mapping-row-source-path"
                             [value]="row.sourcePath"
                             (input)="updateMappingRow($index, { sourcePath: $any($event.target).value })"
+                            (dragover)="onSourcePathDragOver($event)"
+                            (drop)="onSourcePathDrop($index, $event)"
                           />
                           <input
                             class="mono"

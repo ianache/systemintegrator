@@ -1,12 +1,23 @@
-import { ChangeDetectionStrategy, Component, effect, signal } from '@angular/core';
+import { ChangeDetectionStrategy, Component, effect, inject, signal } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { RouterLink, RouterLinkActive } from '@angular/router';
 
 interface NavItem {
   path: string;
   label: string;
-  code: string;
+  icon: string;
   exact?: boolean;
 }
+
+// Inner <svg> markup copied verbatim from the Claude Design mock
+// (docs/design-system/Integration Console (standalone).html) so the rail
+// icons match the design pixel-for-pixel.
+const ICON_DASHBOARD = '<path d="M4 15a8 8 0 1 1 16 0"/><path d="M12 15l4-5"/><circle cx="12" cy="15" r="1"/>';
+const ICON_MONITOR = '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="M3 6l8 6 8-6"/>';
+const ICON_INTEGRATIONS =
+  '<path d="M8 15L4 19"/><path d="M15 8l4-4"/><rect x="8.5" y="11.5" width="4" height="4" rx="1" transform="rotate(-45 10.5 13.5)"/><path d="M13 6l5 5"/><path d="M6 13l5 5"/>';
+const ICON_CONNECTORS = '<path d="M12 2l9 4.5L12 11 3 6.5 12 2z"/><path d="M3 12l9 4.5 9-4.5"/><path d="M3 17.5l9 4.5 9-4.5"/>';
+const ICON_CREDENTIALS = '<circle cx="8" cy="15" r="4"/><path d="M11 12l9-9"/><path d="M16 7l3 3"/><path d="M13 10l2.5 2.5"/>';
 
 @Component({
   changeDetection: ChangeDetectionStrategy.OnPush,
@@ -16,18 +27,20 @@ interface NavItem {
   templateUrl: './sidebar.component.html',
 })
 export class SidebarComponent {
+  private readonly sanitizer = inject(DomSanitizer);
+
   readonly pinned = signal(true);
   readonly hovering = signal(false);
 
   readonly operationItems: NavItem[] = [
-    { path: '/', label: 'Dashboard', code: 'DS', exact: true },
-    { path: '/integration/monitor', label: 'Monitor de mensajes', code: 'MS' },
+    { path: '/', label: 'Dashboard', icon: ICON_DASHBOARD, exact: true },
+    { path: '/integration/monitor', label: 'Monitor de mensajes', icon: ICON_MONITOR },
   ];
 
   readonly configItems: NavItem[] = [
-    { path: '/integration/profiles', label: 'Integraciones', code: 'IX' },
-    { path: '/integration/connectors', label: 'Conectores y adapters', code: 'CX' },
-    { path: '/integration/credentials', label: 'Credenciales', code: 'CR' },
+    { path: '/integration/profiles', label: 'Integraciones', icon: ICON_INTEGRATIONS },
+    { path: '/integration/connectors', label: 'Conectores y adapters', icon: ICON_CONNECTORS },
+    { path: '/integration/credentials', label: 'Credenciales', icon: ICON_CREDENTIALS },
   ];
 
   constructor() {
@@ -52,5 +65,9 @@ export class SidebarComponent {
 
   onLeave(): void {
     this.hovering.set(false);
+  }
+
+  iconHtml(icon: string): SafeHtml {
+    return this.sanitizer.bypassSecurityTrustHtml(icon);
   }
 }

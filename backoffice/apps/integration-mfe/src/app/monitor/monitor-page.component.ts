@@ -4,6 +4,7 @@ import { DeadLetterQueueService } from '../dead-letter-queue/dead-letter-queue.s
 import { DlqReplaySummary } from '../dead-letter-queue/dead-letter-queue.model';
 import { MessageMonitorService } from '../message-monitor/message-monitor.service';
 import { MessageDetail, MessageDirection, MessageStatusFilter, MessageSummary } from '../message-monitor/message-monitor.model';
+import { IntegrationProfileService } from '../integration-profile/integration-profile.service';
 import { ToastService } from '../shared/toast.service';
 
 type MessageListState = 'loading' | 'ready' | 'empty' | 'unavailable';
@@ -19,6 +20,7 @@ type MessageListState = 'loading' | 'ready' | 'empty' | 'unavailable';
 export class MonitorPageComponent implements OnInit {
   private readonly dlqService = inject(DeadLetterQueueService);
   private readonly messageService = inject(MessageMonitorService);
+  private readonly profileService = inject(IntegrationProfileService);
   private readonly toast = inject(ToastService);
 
   readonly replaying = signal(false);
@@ -39,9 +41,21 @@ export class MonitorPageComponent implements OnInit {
     { value: 'DLQ', label: 'DLQ' },
   ];
 
+  readonly domainFilter = signal('');
+  readonly domainOptions = signal<string[]>([]);
+  readonly dateFrom = signal('');
+  readonly dateTo = signal('');
+
   readonly messageCount = computed(() => `${this.messages().length} mensajes · ventana reciente`);
 
   ngOnInit(): void {
+    this.profileService.list(true).subscribe({
+      next: (profiles) => {
+        const domains = Array.from(new Set(profiles.map((p) => p.businessDomain))).sort();
+        this.domainOptions.set(domains);
+      },
+      error: () => this.domainOptions.set([]),
+    });
     this.load();
   }
 
@@ -51,9 +65,32 @@ export class MonitorPageComponent implements OnInit {
     this.load();
   }
 
+  setDomainFilter(value: string): void {
+    this.domainFilter.set(value);
+    this.load();
+  }
+
+  setDateFrom(value: string): void {
+    this.dateFrom.set(value);
+    this.load();
+  }
+
+  setDateTo(value: string): void {
+    this.dateTo.set(value);
+    this.load();
+  }
+
+  clearDateFilters(): void {
+    this.dateFrom.set('');
+    this.dateTo.set('');
+    this.load();
+  }
+
   load(): void {
     this.state.set('loading');
-    this.messageService.list(this.filter()).subscribe({
+    const from = this.dateFrom() ? new Date(this.dateFrom() + 'T00:00:00.000Z').toISOString() : undefined;
+    const to = this.dateTo() ? new Date(this.dateTo() + 'T23:59:59.999Z').toISOString() : undefined;
+    this.messageService.list(this.filter(), this.domainFilter() || undefined, from, to).subscribe({
       next: (messages) => {
         this.messages.set(messages);
         this.state.set(messages.length === 0 ? 'empty' : 'ready');

@@ -18,6 +18,7 @@ describe('MonitorPageComponent', () => {
 
   function flushInitialLoad(fixture: any, messages: unknown[] = []) {
     fixture.detectChanges();
+    http.expectOne((req: any) => req.url === '/bff/api/v1/integration-profiles').flush([]);
     http.expectOne((req: any) => req.url === '/bff/api/v1/messages' && req.params.get('status') === 'ALL').flush(messages);
     fixture.detectChanges();
   }

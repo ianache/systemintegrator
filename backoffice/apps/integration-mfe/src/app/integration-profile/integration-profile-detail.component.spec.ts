@@ -475,4 +475,93 @@ describe('IntegrationProfileDetailComponent', () => {
     );
     expect(extractTabButton).toBeUndefined();
   });
+
+  function setSamplePayload(fixture: any, json: string): void {
+    const textarea = fixture.nativeElement.querySelector('[data-testid="sample-payload"]') as HTMLTextAreaElement;
+    textarea.value = json;
+    textarea.dispatchEvent(new Event('input'));
+    fixture.detectChanges();
+  }
+
+  function fakeDragEvent(): { dataTransfer: { setData: ReturnType<typeof vi.fn>; getData: ReturnType<typeof vi.fn> }; preventDefault: ReturnType<typeof vi.fn> } {
+    const store = new Map<string, string>();
+    return {
+      dataTransfer: {
+        setData: vi.fn((type: string, value: string) => store.set(type, value)),
+        getData: vi.fn((type: string) => store.get(type) ?? ''),
+      },
+      preventDefault: vi.fn(),
+    };
+  }
+
+  it('toggles between JSON and TREE payload views and renders tree nodes', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, { engine: 'FIELD_MAPPING', fields: [] });
+    setSamplePayload(fixture, JSON.stringify({ customer: { email: 'a@b.com' }, items: [{ sku: 'X1' }] }));
+
+    (fixture.nativeElement.querySelector('[data-testid="payload-view-tree"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    expect(fixture.nativeElement.querySelector('[data-testid="sample-payload"]')).toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="sample-payload-tree"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="source-tree-node-$.customer"]')).not.toBeNull();
+    expect(fixture.nativeElement.querySelector('[data-testid="source-tree-node-$.items[0]"]')).not.toBeNull();
+
+    (fixture.nativeElement.querySelector('[data-testid="payload-view-json"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="sample-payload"]')).not.toBeNull();
+  });
+
+  it('disables the TREE toggle and falls back to JSON when the payload is invalid', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, { engine: 'FIELD_MAPPING', fields: [] });
+    setSamplePayload(fixture, '{ not valid json');
+
+    const treeButton = fixture.nativeElement.querySelector('[data-testid="payload-view-tree"]') as HTMLButtonElement;
+    expect(treeButton.disabled).toBe(true);
+
+    treeButton.click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="sample-payload"]')).not.toBeNull();
+  });
+
+  it('drags a tree node onto a mapping row and sets its Source Path via drop', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, {
+      engine: 'FIELD_MAPPING',
+      fields: [{ target: 'email', sourcePath: '', transform: '', type: 'STRING', defaultValue: '', required: false }],
+    });
+    setSamplePayload(fixture, JSON.stringify({ customer: { email: 'a@b.com' } }));
+
+    (fixture.nativeElement.querySelector('[data-testid="payload-view-tree"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+
+    const component = fixture.componentInstance as IntegrationProfileDetailComponent;
+    const dragEvent = fakeDragEvent();
+    component.onTreeNodeDragStart(dragEvent as any, "$.customer.email");
+    expect(dragEvent.dataTransfer.setData).toHaveBeenCalledWith('text/plain', '$.customer.email');
+
+    const dropEvent = { ...fakeDragEvent(), preventDefault: vi.fn() };
+    dropEvent.dataTransfer.getData = vi.fn(() => '$.customer.email');
+    component.onSourcePathDrop(0, dropEvent as any);
+    fixture.detectChanges();
+
+    const sourcePathInput = fixture.nativeElement.querySelector('[data-testid="mapping-row-source-path"]') as HTMLInputElement;
+    expect(sourcePathInput.value).toBe('$.customer.email');
+    expect(dropEvent.preventDefault).toHaveBeenCalled();
+  });
+
+  it('collapses and expands a branch node in the source tree', () => {
+    const fixture = TestBed.createComponent(IntegrationProfileDetailComponent);
+    openMapTab(fixture, { engine: 'FIELD_MAPPING', fields: [] });
+    setSamplePayload(fixture, JSON.stringify({ customer: { email: 'a@b.com' } }));
+
+    (fixture.nativeElement.querySelector('[data-testid="payload-view-tree"]') as HTMLButtonElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="source-tree-node-$.customer.email"]')).not.toBeNull();
+
+    (fixture.nativeElement.querySelector('.source-tree-caret') as HTMLElement).click();
+    fixture.detectChanges();
+    expect(fixture.nativeElement.querySelector('[data-testid="source-tree-node-$.customer.email"]')).toBeNull();
+  });
 });

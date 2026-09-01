@@ -4,6 +4,7 @@ import com.cl2.integration.infrastructure.tenant.TenantContext;
 import com.cl2.integration.integration.monitor.MessageDetail;
 import com.cl2.integration.integration.monitor.MessageMonitorService;
 import com.cl2.integration.integration.monitor.MessageSummary;
+import java.time.Instant;
 import java.util.List;
 import java.util.UUID;
 import org.springframework.web.bind.annotation.GetMapping;
@@ -24,9 +25,13 @@ public class MessageMonitorController {
     }
 
     @GetMapping
-    public List<MessageSummary> list(@RequestParam(required = false, defaultValue = "ALL") String status) {
+    public List<MessageSummary> list(
+            @RequestParam(required = false, defaultValue = "ALL") String status,
+            @RequestParam(required = false) String domain,
+            @RequestParam(required = false) Instant from,
+            @RequestParam(required = false) Instant to) {
         UUID tenantId = TenantContext.requireTenantId();
-        return service.list(tenantId, status);
+        return service.list(tenantId, status, domain, from, to);
     }
 
     @GetMapping("/{direction}/{id}")

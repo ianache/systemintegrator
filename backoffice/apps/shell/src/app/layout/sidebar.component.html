@@ -25,7 +25,9 @@
         ariaCurrentWhenActive="page"
         class="nav-item"
       >
-        <span class="nav-icon mono">{{ item.code }}</span>
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" [innerHTML]="iconHtml(item.icon)"></svg>
+        </span>
         <span class="nav-label">{{ item.label }}</span>
       </a>
     }
@@ -38,7 +40,9 @@
         ariaCurrentWhenActive="page"
         class="nav-item"
       >
-        <span class="nav-icon mono">{{ item.code }}</span>
+        <span class="nav-icon">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" [innerHTML]="iconHtml(item.icon)"></svg>
+        </span>
         <span class="nav-label">{{ item.label }}</span>
       </a>
     }

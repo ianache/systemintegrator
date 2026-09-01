@@ -4,6 +4,9 @@
 
 .toolbar { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .message-count { margin-left: auto; font-size: 11.5px; color: var(--text-dim); }
+.filter-field { display: flex; align-items: center; gap: 7px; }
+.filter-label { font-size: 10px; letter-spacing: .07em; color: var(--text-dim); white-space: nowrap; }
+.filter-field select, .filter-field input { border: 1px solid var(--border); border-radius: 5px; padding: 6px 9px; font-size: 12px; background: var(--surface); }
 
 .messages-card { overflow: hidden; }
 
