@@ -1,0 +1,29 @@
+sequenceDiagram
+    autonumber
+    actor U as Administrador
+    participant SH as backoffice-shell (nginx + authGuard)
+    participant BFF as ★ backoffice-bff (AuthController/AuthService)
+    participant R as integration-redis
+    participant KC as Keycloak (realm Apps)
+    U->>SH: GET / (ruta integration)
+    SH->>BFF: GET /auth/session
+    BFF-->>SH: authenticated=false
+    SH->>BFF: GET /auth/login
+    BFF->>R: guarda session.oidc {codeVerifier, state}
+    BFF-->>U: 302 a Keycloak (code_challenge S256, scope openid profile)
+    U->>KC: login
+    KC-->>U: 302 /auth/callback?code&state
+    U->>BFF: GET /auth/callback
+    BFF->>KC: authorizationCodeGrant (code + codeVerifier)
+    alt invalid_grant (código reutilizado)
+        KC-->>BFF: 400 Code not valid
+        BFF-->>U: 500
+    else token válido
+        KC-->>BFF: access_token, id_token, refresh_token
+        alt falta tenant_id/exp en claims
+            BFF-->>U: 500 missing required session claims
+        else claims completos
+            BFF->>R: session.tokens {access, id, refresh, tenantId, expiresAt}
+            BFF-->>U: 302 /
+        end
+    end

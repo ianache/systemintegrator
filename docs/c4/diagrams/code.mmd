@@ -1,0 +1,37 @@
+classDiagram
+    class IntegrationSyncOrchestrator {
+        +run(IntegrationProfile profile) void
+        -readExtractionConfig(IntegrationProfile) ExtractionConfig
+        -extractRows(profile, config, secret, watermark, protocol) List
+        -extractJdbcRows(profile, config, secret, watermark) List
+        -findMaxRowTimestamp(rows, column, watermark) Instant
+        -readWatermarkTimestamp(row, column) Instant
+    }
+    class SecretResolver { <<interface>> +resolve(credentialRef, tenantId) ResolvedSecret }
+    class JdbcDataSourceFactory
+    class GenericJdbcAdapter
+    class TransformationService { +transform(json, profile) String }
+    class OutboxRepository { <<interface>> }
+    class SyncStateRepository { <<interface>> +find(profileId) +upsert(SyncState) }
+    class SyncStateRecorder { +recordFailure() +recordCancelled() }
+    class VaultSecretResolver
+    class InMemorySecretResolver
+    IntegrationSyncOrchestrator --> SecretResolver
+    IntegrationSyncOrchestrator --> JdbcDataSourceFactory
+    IntegrationSyncOrchestrator --> GenericJdbcAdapter
+    IntegrationSyncOrchestrator --> TransformationService
+    IntegrationSyncOrchestrator --> OutboxRepository
+    IntegrationSyncOrchestrator --> SyncStateRepository
+    IntegrationSyncOrchestrator --> SyncStateRecorder
+    SecretResolver <|.. VaultSecretResolver
+    SecretResolver <|.. InMemorySecretResolver
+    style IntegrationSyncOrchestrator stroke:#B71C1C,stroke-width:4px
+    style SecretResolver stroke:#616161,stroke-width:2px
+    style JdbcDataSourceFactory stroke:#616161,stroke-width:2px
+    style GenericJdbcAdapter stroke:#616161,stroke-width:2px
+    style TransformationService stroke:#616161,stroke-width:2px
+    style OutboxRepository stroke:#616161,stroke-width:2px
+    style SyncStateRepository stroke:#616161,stroke-width:2px
+    style SyncStateRecorder stroke:#616161,stroke-width:2px
+    style VaultSecretResolver stroke:#616161,stroke-width:2px
+    style InMemorySecretResolver stroke:#616161,stroke-width:2px

@@ -1,0 +1,37 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant F as TenantFilter
+    participant K as ★ ValueLookupController
+    participant S as ValueLookupService
+    participant P as ValueLookupPersistenceAdapter
+    participant DB as MySQL integration_value_lookup
+
+    C->>F: POST /api/v1/lookups/batch (X-Tenant-ID, List<CreateValueLookupRequest>)
+    alt header ausente o no UUID
+        F-->>C: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        F->>F: TenantContext.set(tenantId)
+        F->>K: createBatch(@Valid List<@Valid ...>)
+        alt algun elemento invalido o JSON ilegible
+            K-->>C: 400 (validacion / HttpMessageNotReadable)
+        else lista valida
+            K->>K: TenantContext.requireTenantId()
+            K->>S: saveBatch(tenantId, requests)
+            Note over S: @Transactional (una sola transaccion para toda la lista)
+            loop por cada request
+                S->>S: save(tenantId, request) -> ValueLookup.create(...)
+                S->>P: save(lookup)
+                P->>DB: INSERT/MERGE
+                S->>S: invalidateCache(clave)
+            end
+            alt cualquier fila viola uq_lookup_tenant_source_catalog_value
+                DB-->>S: DataIntegrityViolationException
+                S-->>C: error no mapeado, rollback total (ver AMBIGUOUS: 500, no 409)
+            else todas ok
+                S-->>K: List<ValueLookup>
+                K-->>C: 201 List<ValueLookupResponse>
+            end
+        end
+    end
+    F->>F: TenantContext.clear() (finally)

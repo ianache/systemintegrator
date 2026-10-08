@@ -1,0 +1,34 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant F as TenantFilter
+    participant K as ★ VehicleController
+    participant S as VehicleService
+    participant P as VehiclePersistenceAdapter
+    participant DB as MySQL vehicle
+
+    C->>F: GET /api/v1/vehicles?activeOnly=true (X-Tenant-ID)
+    alt header ausente o no UUID
+        F-->>C: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        F->>F: TenantContext.set(tenantId)
+        F->>K: list(activeOnly, default true)
+        alt activeOnly no es booleano
+            K-->>C: 400 (MethodArgumentTypeMismatchException, default de Spring)
+        else ok
+            K->>K: TenantContext.requireTenantId()
+            K->>S: list(tenantId, activeOnly)
+            Note over S: @Transactional(readOnly)
+            S->>P: findAll(tenantId, activeOnly)
+            alt activeOnly = true
+                P->>DB: SELECT ... WHERE tenant_id AND active=true ORDER BY created_at DESC
+            else activeOnly = false
+                P->>DB: SELECT ... WHERE tenant_id ORDER BY created_at DESC
+            end
+            DB-->>P: filas
+            P-->>S: List<Vehicle>
+            S-->>K: List<Vehicle>
+            K-->>C: 200 List<VehicleResponse> ([] si no hay)
+        end
+    end
+    F->>F: TenantContext.clear() (finally)

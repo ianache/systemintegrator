@@ -1,0 +1,43 @@
+flowchart LR
+    subgraph web["adapter.in.web / infrastructure.tenant"]
+        tf["TenantFilter + TenantContext<br/>exige X-Tenant-ID (UUID)"]
+        ctl["IntegrationProfileController<br/>/api/v1/integration-profiles"]
+    end
+    subgraph appl["application"]
+        ps["IntegrationProfileService"]
+    end
+    subgraph syncpkg["integration.sync"]
+        iss["IntegrationSyncService"]
+        sch["IntegrationSyncScheduler"]
+        orch["IntegrationSyncOrchestrator<br/>extracción, transformación, watermark"]
+    end
+    subgraph ext["adapters y servicios de soporte"]
+        sec["SecretResolver<br/>(VaultSecretResolver)"]
+        jdbc["GenericJdbcAdapter"]
+        tr["TransformationService"]
+        ob["OutboxRepository / OutboxRelayScheduler / KafkaOutboxPublisher"]
+        kin["KafkaInboxListener + InboxProcessor"]
+        od["OutboundEventDispatcher"]
+        ho["HttpOutboundClient"]
+    end
+    repo["IntegrationProfileRepository (port)<br/>IntegrationProfilePersistenceAdapter"]
+
+    tf --> ctl --> ps --> repo
+    ctl --> iss
+    sch --> iss
+    iss --> orch
+    orch --> sec
+    orch --> jdbc
+    orch --> tr
+    orch --> ob
+    ob -. "Kafka" .-> kin
+    kin --> od
+    od --> repo
+    od --> sec
+    od --> tr
+    od --> ho
+
+    classDef focus stroke:#B71C1C,stroke-width:4px,fill:#ffffff,color:#212121;
+    classDef other stroke:#616161,stroke-width:2px,fill:#ffffff,color:#212121;
+    class orch focus;
+    class tf,ctl,ps,iss,sch,sec,jdbc,tr,ob,kin,od,ho,repo other;

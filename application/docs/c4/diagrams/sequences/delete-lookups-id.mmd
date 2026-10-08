@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant F as TenantFilter
+    participant K as ★ ValueLookupController
+    participant S as ValueLookupService
+    participant P as ValueLookupPersistenceAdapter
+    participant DB as MySQL integration_value_lookup
+
+    C->>F: DELETE /api/v1/lookups/{id} (X-Tenant-ID)
+    alt header ausente o no UUID
+        F-->>C: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        F->>F: TenantContext.set(tenantId)
+        F->>K: delete(@PathVariable UUID id)
+        alt id no es UUID
+            K-->>C: 400 (MethodArgumentTypeMismatchException, default de Spring)
+        else id valido
+            K->>K: TenantContext.requireTenantId()
+            K->>S: deleteById(tenantId, id)
+            Note over S: @Transactional
+            S->>P: deleteById(tenantId, id)
+            P->>DB: DELETE WHERE tenant_id = ? AND id = ?
+            Note over DB: filtra por tenant; id de otro tenant o inexistente borra 0 filas
+            DB-->>P: n filas (no se evalua)
+            P-->>S: void
+            S->>S: invalidateTenantCache(tenantId)
+            S-->>K: void
+            K-->>C: 204 No Content (tambien si no existia; no hay 404)
+        end
+    end
+    F->>F: TenantContext.clear() (finally)

@@ -1,0 +1,66 @@
+sequenceDiagram
+    autonumber
+    actor Cli as Cliente HTTP
+    participant TF as TenantFilter / TenantContext
+    participant C as ★ IntegrationProfileController
+    participant EH as ApiExceptionHandler
+    participant S as IntegrationProfileService
+    participant D as IntegrationProfile (dominio)
+    participant P as IntegrationProfileRepository (puerto)
+    participant A as IntegrationProfilePersistenceAdapter
+    participant DB as MySQL (integration_profile)
+    participant EV as ApplicationEventPublisher
+    participant L as IntegrationProfileEventListener
+    participant K as Kafka (integration-profile.events)
+    participant H as ProfileDeactivationHandler
+    participant SS as IntegrationSyncService
+    participant OBX as SpringDataOutboxRepository / SyncStateRecorder (MySQL)
+
+    Cli->>TF: DELETE /api/v1/integration-profiles/{profileId} (X-Tenant-ID)
+    alt X-Tenant-ID ausente
+        TF-->>Cli: 400 TENANT_HEADER_MISSING
+    else X-Tenant-ID no es UUID
+        TF-->>Cli: 400 TENANT_HEADER_MALFORMED
+    else header valido
+        TF->>TF: TenantContext.set(tenantId)
+        TF->>C: deactivate(profileId)
+        alt profileId no es UUID
+            C-->>EH: MethodArgumentTypeMismatchException
+            EH-->>Cli: 400 BAD_REQUEST
+        else profileId valido
+            C->>S: deactivate(TenantContext.requireTenantId(), profileId)
+            S->>P: findById(tenantId, profileId)
+            P->>A: findById(...)
+            A->>DB: SELECT por tenant_id + id
+            alt no existe
+                A-->>EH: IntegrationProfileNotFoundException
+                EH-->>Cli: 404 INTEGRATION_PROFILE_NOT_FOUND
+            else existe
+                DB-->>A: fila
+                A-->>S: IntegrationProfile
+                S->>D: profile.deactivate()
+                Note over D: Baja logica (active=false), no borra la fila. Si ya inactivo devuelve this
+                D-->>S: IntegrationProfile active=false, version+1
+                S->>P: save(tenantId, deactivated)
+                P->>A: save(...)
+                A->>DB: UPDATE ... WHERE tenant_id, id, version = version-1
+                alt 0 filas (version obsoleta) o violacion de integridad
+                    A-->>EH: IntegrationProfileConflictException
+                    EH-->>Cli: 409 INTEGRATION_PROFILE_CONFLICT (AMBIGUOUS: tambien al desactivar uno ya inactivo)
+                else 1 fila
+                    A-->>S: IntegrationProfile
+                    S->>EV: publishEvent(IntegrationProfileEvent "IntegrationProfileDeactivated")
+                    S-->>C: void
+                    C-->>Cli: 204 No Content
+                    Note over EV,H: Tras COMMIT (AFTER_COMMIT, fallbackExecution)
+                    EV->>L: publishAfterCommit(event)
+                    L->>K: IntegrationProfileEventPublisher.publish
+                    EV->>H: onProfileDeactivated(event) en REQUIRES_NEW
+                    H->>SS: cancelRunningExecution(profileId)
+                    H->>OBX: cancelPendingByTenantAndTopic(tenantId, "integration.{dominio}.events")
+                    H->>OBX: recordCancelled(profileId, "Profile deactivated")
+                end
+            end
+        end
+    end
+    TF->>TF: TenantContext.clear() (finally)

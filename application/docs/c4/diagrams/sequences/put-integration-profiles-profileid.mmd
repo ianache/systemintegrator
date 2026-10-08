@@ -1,0 +1,74 @@
+sequenceDiagram
+    autonumber
+    actor Cli as Cliente HTTP
+    participant TF as TenantFilter / TenantContext
+    participant C as ★ IntegrationProfileController
+    participant EH as ApiExceptionHandler
+    participant S as IntegrationProfileService
+    participant D as IntegrationProfile (dominio)
+    participant P as IntegrationProfileRepository (puerto)
+    participant A as IntegrationProfilePersistenceAdapter
+    participant DB as MySQL (integration_profile)
+    participant EV as ApplicationEventPublisher
+    participant L as IntegrationProfileEventListener
+    participant K as Kafka (integration-profile.events)
+
+    Cli->>TF: PUT /api/v1/integration-profiles/{profileId} (X-Tenant-ID, body con expectedVersion)
+    alt X-Tenant-ID ausente
+        TF-->>Cli: 400 TENANT_HEADER_MISSING
+    else X-Tenant-ID no es UUID
+        TF-->>Cli: 400 TENANT_HEADER_MALFORMED
+    else header valido
+        TF->>TF: TenantContext.set(tenantId)
+        TF->>C: update(profileId, @Valid UpdateIntegrationProfileRequest)
+        alt Validacion falla (campos en blanco, expectedVersion nulo o negativo) / JSON ilegible / profileId no UUID
+            C-->>EH: MethodArgumentNotValidException / HttpMessageNotReadable / TypeMismatch
+            EH-->>Cli: 400 VALIDATION_FAILED / BAD_REQUEST
+        else request valido
+            C->>C: configurationRequest().toDomain(objectMapper)
+            C->>S: update(TenantContext.requireTenantId(), profileId, UpdateIntegrationProfileCommand)
+            S->>P: findById(tenantId, profileId)
+            P->>A: findById(...)
+            A->>DB: SELECT por tenant_id + id
+            alt no existe
+                A-->>EH: IntegrationProfileNotFoundException
+                EH-->>Cli: 404 INTEGRATION_PROFILE_NOT_FOUND
+            else existe
+                DB-->>A: fila
+                A-->>S: IntegrationProfile
+                opt perfil activo y cambia businessDomain o externalSource
+                    S->>P: existsActive(tenantId, nuevoDominio, nuevaFuente)
+                    P->>A: existsActive(...)
+                    A->>DB: SELECT exists
+                    alt ya existe otro perfil activo con esa clave
+                        S-->>EH: IntegrationProfileConflictException
+                        EH-->>Cli: 409 INTEGRATION_PROFILE_CONFLICT
+                    end
+                end
+                S->>D: profile.update(..., expectedVersion)
+                alt version actual != expectedVersion
+                    D-->>EH: IntegrationProfileConflictException
+                    EH-->>Cli: 409 INTEGRATION_PROFILE_CONFLICT
+                else version coincide
+                    D-->>S: IntegrationProfile (version+1)
+                    S->>P: save(tenantId, updated)
+                    P->>A: save(...)
+                    A->>DB: UPDATE ... WHERE tenant_id, id, version = version-1
+                    alt 0 filas actualizadas (version obsoleta) o violacion de integridad
+                        A-->>EH: IntegrationProfileConflictException
+                        EH-->>Cli: 409 INTEGRATION_PROFILE_CONFLICT
+                    else 1 fila
+                        A-->>S: IntegrationProfile
+                        S->>EV: publishEvent(IntegrationProfileEvent "IntegrationProfileUpdated")
+                        S-->>C: IntegrationProfileView
+                        C->>C: toResponse(view): SyncStateRepository.find(profileId)
+                        C-->>Cli: 200 OK IntegrationProfileResponse
+                        Note over EV,K: Tras COMMIT (AFTER_COMMIT)
+                        EV->>L: publishAfterCommit(event)
+                        L->>K: IntegrationProfileEventPublisher.publish
+                    end
+                end
+            end
+        end
+    end
+    TF->>TF: TenantContext.clear() (finally)

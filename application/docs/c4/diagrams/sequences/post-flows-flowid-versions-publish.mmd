@@ -1,0 +1,51 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant TF as TenantFilter
+    participant C as FlowController ★
+    participant S as FlowService
+    participant R as FlowPersistenceAdapter
+    participant VR as FlowVersionPersistenceAdapter
+    participant DB as MySQL (flow, flow_version)
+    participant AH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/flows/{flowId}/versions/publish (X-Tenant-ID)
+    alt X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>C: publishedBy = principal?.getName() ?: "unknown"
+        C->>S: publish(tenantId, flowId, publishedBy)
+        S->>R: findById(tenantId, flowId)
+        R->>DB: SELECT flow WHERE tenant_id AND id
+        alt flow no existe / otro tenant
+            R-->>AH: FlowNotFoundException
+            AH-->>Client: 404 FLOW_NOT_FOUND
+        else existe
+            R-->>S: Flow
+            alt draftGraph nulo o vacio
+                S-->>AH: FlowNotPublishableException
+                AH-->>Client: 422 FLOW_NOT_PUBLISHABLE
+            else draft con contenido
+                S->>VR: findActiveByFlowId(tenantId, flowId)
+                VR->>DB: SELECT flow_version WHERE state=ACTIVE
+                opt existe version ACTIVE
+                    S->>VR: save(active.withState(PUBLISHED))
+                    VR->>DB: UPDATE flow_version SET state=PUBLISHED
+                end
+                S->>VR: nextVersionNumber(tenantId, flowId)
+                VR->>DB: COUNT flow_version (+1)
+                S->>VR: save(FlowVersion.publish(... graph=draftGraph, publishedBy))
+                VR->>DB: INSERT flow_version (state ACTIVE)
+                S->>R: save(tenantId, flow.withActiveVersion(n))
+                R->>DB: UPDATE flow SET active_version_number, version+1 WHERE version=expected
+                alt 0 filas (version obsoleta) o violacion de integridad
+                    R-->>AH: FlowConflictException
+                    AH-->>Client: 409 FLOW_CONFLICT (rollback de la transaccion)
+                else ok
+                    S-->>C: FlowVersionView
+                    C-->>Client: 201 FlowVersionResponse
+                end
+            end
+        end
+    end

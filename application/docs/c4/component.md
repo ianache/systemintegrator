@@ -1,0 +1,76 @@
+---
+okf_version: "0.2"
+title: C4 Component - integration-app
+c4_level: Component
+focus_id: IntegrationProfileController
+focus_kind: component
+focus_highlight: dark-red-700-border
+status: REQUIRES_REVIEW
+human-reviewed: false
+---
+
+# Component
+
+Arquitectura hexagonal: `adapter/in/web` → `application` → `domain/port` → `adapter/out`, más el paquete `integration/*`.
+
+```mermaid
+flowchart LR
+    subgraph inweb["adapter.in.web y por dominio"]
+        tf["TenantFilter + TenantContext"]
+        eh["ApiExceptionHandler"]
+        cprof["IntegrationProfileController"]
+        cflow["FlowController"]
+        cmsg["MessageMonitorController"]
+        cdlq["DeadLetterQueueController"]
+        ccred["CredentialCatalogController"]
+        ctr["TransformationController"]
+        clk["ValueLookupController"]
+        cveh["VehicleController"]
+    end
+    subgraph app["application / integration (servicios)"]
+        sprof["IntegrationProfileService"]
+        sflow["FlowService + FlowMetricsService"]
+        smsg["MessageMonitorService"]
+        sdlq["DeadLetterQueueReplayService"]
+        str["TransformationPreviewService / MappingDryRunService / ExtractionDryRunService"]
+        ssync["IntegrationSyncService + Orchestrator"]
+        slk["Servicio de lookup"]
+        sveh["Servicio de vehicle"]
+    end
+    subgraph portsout["domain.port y adapter.out"]
+        pprof["IntegrationProfileRepository"]
+        pflow["FlowRepository, FlowVersionRepository, FlowExecutionRepository"]
+        inbox["InboxStore"]
+        outbox["OutboxRepository + OutboxRelayScheduler + KafkaOutboxPublisher"]
+        sec["SecretResolver (Vault / InMemory)"]
+    end
+    db[("MySQL")]
+    kafka[["Kafka"]]
+
+    tf --> cprof & cflow & cmsg & cdlq & ccred & ctr & clk & cveh
+    cprof --> sprof --> pprof --> db
+    cprof --> ssync
+    cprof --> str
+    cflow --> sflow --> pflow --> db
+    cmsg --> smsg --> inbox --> db
+    smsg --> outbox
+    cdlq --> sdlq --> inbox
+    ccred --> sec
+    ctr --> str
+    clk --> slk --> db
+    cveh --> sveh --> db
+    sveh --> outbox
+    ssync --> outbox --> db
+    outbox -.-> kafka
+
+    classDef focus stroke:#B71C1C,stroke-width:4px,fill:#ffffff,color:#212121;
+    classDef other stroke:#616161,stroke-width:2px,fill:#ffffff,color:#212121;
+    class cprof focus;
+    class tf,eh,cflow,cmsg,cdlq,ccred,ctr,clk,cveh,sprof,sflow,smsg,sdlq,str,ssync,slk,sveh,pprof,pflow,inbox,outbox,sec,db,kafka other;
+```
+
+Procedencia:
+- `EXTRACTED`: los 8 controllers, `TenantFilter`, `IntegrationProfileService`, `FlowService`, los puertos de flow y profile, el outbox y `SecretResolver`.
+- `INFERRED`: las cajas "Servicio de lookup" y "Servicio de vehicle" son genéricas porque no verifiqué sus nombres. Tampoco verifiqué `MessageMonitorService` más allá del informe del agente.
+- Las flechas por endpoint están detalladas en las [secuencias](sequence-e2e.md).
+- `ApiExceptionHandler` solo cubre `adapter.in.web`. Los controllers de lookups y vehicles quedan fuera de su `basePackages`.

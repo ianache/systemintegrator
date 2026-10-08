@@ -1,0 +1,41 @@
+---
+okf_version: "0.2"
+title: C4 Container - integration-app
+c4_level: Container
+focus_id: integration-app-api
+focus_kind: container
+focus_highlight: dark-red-700-border
+status: REQUIRES_REVIEW
+human-reviewed: false
+---
+
+# Container
+
+```mermaid
+flowchart TB
+    gw["integration-middleware<br/>[Spring Cloud Gateway :8081]"]
+    subgraph appc["integration-app [Spring Boot :8080]"]
+        api["API REST /api/v1<br/>8 controllers, 36 endpoints"]
+        eng["Motores internos<br/>sync, outbox relay, inbox listener, outbound"]
+    end
+    mysql[("MySQL")]
+    kafka[["Kafka"]]
+    vault["Vault"]
+    extdb["BD externas"]
+    extapi["APIs REST externas"]
+    gw -->|"HTTP + X-Tenant-ID"| api
+    api --> eng
+    api -->|"JPA/Flyway"| mysql
+    eng -->|"JPA"| mysql
+    eng -->|"produce/consume"| kafka
+    eng --> vault
+    eng -->|"JDBC"| extdb
+    eng -->|"HTTP"| extapi
+
+    classDef focus stroke:#B71C1C,stroke-width:4px,fill:#ffffff,color:#212121;
+    classDef other stroke:#616161,stroke-width:2px,fill:#ffffff,color:#212121;
+    class api focus;
+    class gw,eng,mysql,kafka,vault,extdb,extapi other;
+```
+
+Los motores internos (sync, outbox relay, inbox listener, outbound) corren en el mismo proceso que la API. Se separan aquí solo para mostrar sus dependencias. Fuente: [docker-compose.yaml](../../../docker-compose.yaml), paquetes `integration/*`.

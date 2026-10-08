@@ -1,0 +1,79 @@
+---
+okf_version: "0.2"
+c4_level: Sequence
+endpoint: "POST /api/v1/messages/{direction}/{id}/dlq"
+operation: "MessageMonitorController.moveToDlq"
+status: REQUIRES_REVIEW
+human-reviewed: false
+---
+
+# POST /api/v1/messages/{direction}/{id}/dlq
+
+Mover mensaje a DLQ manualmente. Origen: INFERRED_FROM_CONTROLLER (no existe OpenAPI). Participante foco marcado con ★.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Cliente (UI/BFF)
+    participant TF as TenantFilter
+    participant C as ★ MessageMonitorController
+    participant S as MessageMonitorService
+    participant IR as SpringDataInboxRepository
+    participant OR as SpringDataOutboxRepository
+    participant DB as MySQL
+    participant EH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/messages/{direction}/{id}/dlq + X-Tenant-ID
+    alt Header invalido
+        TF-->>Client: 400 ProblemDetail (TENANT_HEADER_*)
+    else Header valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>S: moveToDlq(tenantId, direction, id) [@Transactional]
+        alt direction == INBOUND
+            S->>IR: findByEventIdAndTenantId(id, tenantId)
+            IR->>DB: SELECT inbox
+            alt No existe
+                S->>EH: MessageNotFoundException
+                EH-->>Client: 404 MESSAGE_NOT_FOUND
+            else Existe
+                S->>S: entity.markDeadLetter("Movido manualmente a DLQ por el operador")
+                S->>IR: save(entity)
+                IR->>DB: UPDATE inbox (DEAD_LETTER)
+                S-->>C: MessageDetail (estado DLQ)
+                C-->>Client: 200 JSON
+            end
+        else direction == OUTBOUND
+            S->>OR: findByIdAndTenantId(id, tenantId)
+            OR->>DB: SELECT outbox
+            alt No existe
+                S->>EH: MessageNotFoundException
+                EH-->>Client: 404 MESSAGE_NOT_FOUND
+            else Existe
+                S->>S: entity.markFailed(motivo, null, terminal=true)
+                S->>OR: save(entity)
+                OR->>DB: UPDATE outbox (FAILED)
+                S-->>C: MessageDetail (estado DLQ)
+                C-->>Client: 200 JSON
+            end
+        else otro valor
+            S->>EH: IllegalArgumentException
+            EH-->>Client: 400 BAD_REQUEST
+        end
+    end
+```
+
+## Archivos fuente
+
+- [MessageMonitorController](../../../src/main/java/com/cl2/integration/adapter/in/web/MessageMonitorController.java)
+- [MessageMonitorService](../../../src/main/java/com/cl2/integration/integration/monitor/MessageMonitorService.java)
+- [SpringDataInboxRepository](../../../src/main/java/com/cl2/integration/integration/inbox/SpringDataInboxRepository.java)
+- [SpringDataOutboxRepository](../../../src/main/java/com/cl2/integration/integration/outbox/SpringDataOutboxRepository.java)
+- [TenantFilter](../../../src/main/java/com/cl2/integration/infrastructure/tenant/TenantFilter.java)
+- [TenantContext](../../../src/main/java/com/cl2/integration/infrastructure/tenant/TenantContext.java)
+- [ApiExceptionHandler](../../../src/main/java/com/cl2/integration/adapter/in/web/ApiExceptionHandler.java)
+
+## Procedencia
+
+- Contrato del endpoint: INFERRED_FROM_CONTROLLER.
+- EXTRACTED: service y metodos de entidad. INFERRED: tablas MySQL.
+- Todas las rutas (excepto /actuator) exigen cabecera X-Tenant-ID (TenantFilter).

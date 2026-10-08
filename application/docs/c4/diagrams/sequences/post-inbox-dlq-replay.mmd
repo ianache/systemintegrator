@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    actor Client as Cliente (UI/BFF)
+    participant TF as TenantFilter
+    participant C as ★ DeadLetterQueueController
+    participant S as DeadLetterQueueReplayService
+    participant R as SpringDataInboxRepository
+    participant D as OutboundEventDispatcher
+    participant X as Perfiles/Vault/HttpOutboundClient
+    participant DB as MySQL
+    participant EH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/inbox/dlq/replay + X-Tenant-ID
+    alt Header invalido
+        TF-->>Client: 400 ProblemDetail (TENANT_HEADER_*)
+    else Header valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>C: requireTenantId()
+        C->>S: replay(tenantId) [@Transactional]
+        S->>R: findByTenantIdAndStatus(tenantId, "DEAD_LETTER")
+        R->>DB: SELECT inbox WHERE status = DEAD_LETTER
+        DB-->>R: mensajes DLQ
+        loop cada mensaje DLQ
+            S->>S: batchContextResolver.recoverFromEvent(eventType, payload)
+            S->>D: dispatch(eventId, tenantId, eventType, payload, null, batchContext)
+            D->>X: perfiles activos, resolve secreto, transformar, HTTP send (ver post-messages-direction-id-retry)
+            alt dispatch OK
+                S->>S: entity.markProcessed(now)
+                S->>R: save(entity)
+                R->>DB: UPDATE inbox (PROCESSED)
+            else Excepcion
+                S->>S: entity.markDeadLetter(ex.getMessage()) y log.warn
+                S->>R: save(entity)
+                R->>DB: UPDATE inbox (DEAD_LETTER)
+            end
+        end
+        S-->>C: ReplaySummary(total, success, failed)
+        C-->>Client: 200 JSON
+    end
+    opt Error inesperado (p.ej. fallo de BD)
+        S->>EH: Exception
+        EH-->>Client: 500 INTERNAL_ERROR
+    end

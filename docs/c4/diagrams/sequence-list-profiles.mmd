@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor U as Administrador
+    participant MFE as integration-mfe (IntegrationProfileService)
+    participant SH as backoffice-shell (nginx /bff/)
+    participant BFF as backoffice-bff (SessionAccessTokenGuard + GatewayProxyService)
+    participant GW as integration-middleware (JWT + TenantClaimGatewayFilter)
+    participant TF as integration-app TenantFilter
+    participant C as ★ IntegrationProfileController
+    participant S as IntegrationProfileService
+    participant P as IntegrationProfileRepository (port, PersistenceAdapter)
+    participant DB as MySQL
+    U->>MFE: abre /integration
+    MFE->>SH: GET /bff/api/v1/integration-profiles?activeOnly=false
+    SH->>BFF: proxy_pass
+    alt sin sesión
+        BFF-->>MFE: 401 Authentication required
+    else sesión válida
+        BFF->>BFF: refresca access token si corresponde (refresh_token)
+        BFF->>GW: GET /api/v1/integration-profiles + Bearer JWT
+        GW->>GW: valida JWT (issuer microservicios o Apps)
+        alt tenant_id ausente o no UUID
+            GW-->>BFF: 403
+            BFF-->>MFE: 403 Gateway denied access
+        else tenant_id UUID
+            GW->>TF: GET + X-Tenant-ID
+            TF->>C: TenantContext.set(tenantId)
+            C->>S: list(tenantId, activeOnly)
+            S->>P: findAll(tenantId, activeOnly)
+            P->>DB: SELECT integration_profile
+            DB-->>P: filas
+            P-->>S: IntegrationProfile[]
+            S-->>C: IntegrationProfileView[]
+            C-->>MFE: 200 IntegrationProfileResponse[] (vía GW y BFF)
+        end
+    end

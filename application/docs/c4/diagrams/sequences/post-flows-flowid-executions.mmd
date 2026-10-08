@@ -1,0 +1,46 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant TF as TenantFilter
+    participant C as FlowController ★
+    participant M as FlowMetricsService
+    participant R as FlowPersistenceAdapter
+    participant ER as FlowExecutionPersistenceAdapter
+    participant DB as MySQL (flow, flow_execution, flow_execution_step)
+    participant AH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/flows/{flowId}/executions (X-Tenant-ID, body flowVersionNumber, status, startedAt, finishedAt, errorMessage, steps)
+    alt X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        TF->>C: TenantContext.set(tenantId)
+        alt body invalido (@NotNull) / JSON o enum status ilegible
+            C-->>AH: MethodArgumentNotValidException / HttpMessageNotReadableException
+            AH-->>Client: 400 VALIDATION_FAILED / BAD_REQUEST
+        else body valido
+            C->>C: mapea steps a ReportFlowExecutionStepCommand (lista vacia si null)
+            C->>M: report(tenantId, flowId, command)
+            M->>R: findById(tenantId, flowId)
+            R->>DB: SELECT flow WHERE tenant_id AND id
+            alt flow no existe / otro tenant
+                R-->>AH: FlowNotFoundException
+                AH-->>Client: 404 FLOW_NOT_FOUND
+            else existe
+                R-->>M: Flow
+                M->>M: FlowExecution.report(...) valida finishedAt >= startedAt
+                alt finishedAt anterior a startedAt
+                    M-->>AH: FlowExecutionInvalidException
+                    AH-->>Client: 422 FLOW_EXECUTION_INVALID
+                else valido
+                    M->>ER: save(tenantId, execution)
+                    ER->>DB: INSERT flow_execution
+                    opt hay steps
+                        M->>ER: saveSteps(executionId, steps)
+                        ER->>DB: INSERT flow_execution_step (por paso, step_order)
+                    end
+                    M-->>C: FlowExecution
+                    C-->>Client: 201 FlowExecutionResponse
+                end
+            end
+        end
+    end

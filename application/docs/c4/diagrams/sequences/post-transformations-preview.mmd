@@ -1,0 +1,39 @@
+sequenceDiagram
+    autonumber
+    actor Client as Cliente (UI/BFF)
+    participant TF as TenantFilter
+    participant C as ★ TransformationController
+    participant E as TransformationEngineType
+    participant S as TransformationPreviewService
+    participant T as PayloadTransformer (Passthrough/Field/Jslt/Mustache/Velocity)
+    participant EH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/transformations/preview {engine, script, payload} + X-Tenant-ID
+    alt Header invalido
+        TF-->>Client: 400 ProblemDetail (TENANT_HEADER_*)
+    else Header valido
+        TF->>C: TenantContext.set(tenantId)
+        alt Body ilegible
+            C->>EH: HttpMessageNotReadableException
+            EH-->>Client: 400 BAD_REQUEST
+        else Body valido
+            C->>C: requireTenantId() (solo valida, no usa el valor)
+            C->>E: fromString(request.engine())
+            E-->>C: motor (PASSTHROUGH si nulo, vacio o desconocido)
+            C->>S: preview(engine, script, payload)
+            alt No hay transformer registrado para el motor
+                S-->>C: TransformationPreviewResult.failure("No hay un motor ...")
+            else Motor registrado
+                S->>S: construir configJson {engine, script}
+                S->>T: transform(payload, configJson)
+                alt Transformacion OK
+                    T-->>S: output
+                    S-->>C: TransformationPreviewResult.success(output)
+                else Excepcion del motor
+                    T-->>S: Exception
+                    S-->>C: TransformationPreviewResult.failure(mensaje)
+                end
+            end
+            C-->>Client: 200 JSON (los fallos de transformacion se devuelven en el resultado, no como HTTP error)
+        end
+    end

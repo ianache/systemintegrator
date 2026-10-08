@@ -1,0 +1,43 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant TF as TenantFilter
+    participant C as FlowController ★
+    participant S as FlowService
+    participant R as FlowPersistenceAdapter
+    participant DB as MySQL (tabla flow)
+    participant AH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/flows (X-Tenant-ID, body code+name)
+    alt X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>C: @Valid CreateFlowRequest (code, name @NotBlank)
+        alt validacion falla
+            C-->>AH: MethodArgumentNotValidException
+            AH-->>Client: 400 VALIDATION_FAILED
+        else body valido
+            C->>S: create(tenantId, CreateFlowCommand)
+            S->>R: existsActive(tenantId, code)
+            R->>DB: SELECT exists (tenant_id, code, archived=false)
+            DB-->>R: boolean
+            alt ya existe flow activo con ese code
+                S-->>AH: FlowConflictException
+                AH-->>Client: 409 FLOW_CONFLICT
+            else code libre
+                S->>S: Flow.create(UUID, tenantId, code, name) version=0
+                S->>R: save(tenantId, flow)
+                R->>DB: INSERT flow (persist + flush)
+                alt violacion de integridad (carrera)
+                    R-->>AH: FlowConflictException
+                    AH-->>Client: 409 FLOW_CONFLICT
+                else ok
+                    DB-->>R: fila
+                    R-->>S: Flow
+                    S-->>C: FlowView
+                    C-->>Client: 201 FlowResponse
+                end
+            end
+        end
+    end

@@ -1,0 +1,37 @@
+flowchart TB
+    user["Administrador<br/>[Persona]"]
+    subgraph backoffice["Backoffice"]
+        shell["backoffice-shell<br/>[Angular + Native Federation, nginx :4200]<br/>Application Shell, authGuard, proxy /bff y /auth"]
+        mfe["backoffice-microui (integration-mfe)<br/>[Angular remote, nginx :4202]<br/>Consola: perfiles, flujos, monitor, credenciales, DLQ"]
+        bff["backoffice-bff<br/>[NestJS :4000]<br/>OIDC code+PKCE, sesión, proxy al Gateway"]
+    end
+    subgraph core["Plataforma de integración"]
+        gw["integration-middleware<br/>[Spring Cloud Gateway :8081]<br/>JWT multi-issuer, claim tenant_id a X-Tenant-ID"]
+        app["integration-app<br/>[Spring Boot :8080, hexagonal]<br/>API /api/v1, sync, outbox/inbox, outbound"]
+    end
+    redis[("integration-redis<br/>[Redis 7.4]<br/>Sesiones BFF, rate limiter")]
+    mysql[("integration-mysql<br/>[MySQL 8.4]<br/>Perfiles, flujos, outbox, inbox, sync_state, shedlock")]
+    kafka[["integration-kafka<br/>[Kafka KRaft]<br/>integration.dominio.events, DLQ"]]
+    vault["integration-vault<br/>[Vault KV v2]"]
+    kc["Keycloak<br/>[Externo]"]
+    extdb["BD externas<br/>[Externo]"]
+    extapi["APIs REST externas<br/>[Externo]"]
+
+    user -->|"HTTPS"| shell
+    shell -->|"Carga remoteEntry.json"| mfe
+    shell -->|"/auth/*, /bff/* (proxy_pass)"| bff
+    bff -->|"Sesión (connect-redis)"| redis
+    bff -->|"Authorization Code + PKCE"| kc
+    bff -->|"HTTP + Bearer JWT"| gw
+    gw -->|"JWKS"| kc
+    gw -->|"HTTP + X-Tenant-ID, /api/**"| app
+    app -->|"JPA/Flyway"| mysql
+    app -->|"Produce/consume eventos"| kafka
+    app -->|"Secretos"| vault
+    app -->|"JDBC"| extdb
+    app -->|"HTTP"| extapi
+
+    classDef focus stroke:#B71C1C,stroke-width:4px,fill:#ffffff,color:#212121;
+    classDef other stroke:#616161,stroke-width:2px,fill:#ffffff,color:#212121;
+    class app focus;
+    class user,shell,mfe,bff,gw,redis,mysql,kafka,vault,kc,extdb,extapi other;

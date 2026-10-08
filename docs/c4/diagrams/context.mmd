@@ -1,0 +1,18 @@
+flowchart TB
+    admin["Administrador de integración<br/>[Persona]<br/>Configura perfiles, flujos y monitorea mensajes"]
+    platform["Plataforma Multitenant de Integración<br/>[Sistema foco]<br/>Integraciones inbound/outbound JDBC y REST"]
+    kc["Keycloak<br/>[Sistema externo]<br/>Realms Apps y microservicios (OIDC/JWKS)"]
+    vault["HashiCorp Vault<br/>[Sistema externo]<br/>Credenciales de integración (KV v2)"]
+    extdb["Bases de datos externas<br/>[Sistema externo]<br/>MySQL, SAP HANA, Oracle, PostgreSQL, SQL Server"]
+    extapi["APIs REST externas<br/>[Sistema externo]<br/>Destinos outbound"]
+
+    admin -->|"Usa la consola web (HTTPS/OIDC)"| platform
+    platform -->|"Autentica usuarios y valida JWT"| kc
+    platform -->|"Resuelve secretos por credentialRef"| vault
+    platform -->|"Extrae filas (JDBC, solo SELECT)"| extdb
+    platform -->|"Entrega eventos transformados (HTTP)"| extapi
+
+    classDef focus stroke:#B71C1C,stroke-width:4px,fill:#ffffff,color:#212121;
+    classDef other stroke:#616161,stroke-width:2px,fill:#ffffff,color:#212121;
+    class platform focus;
+    class admin,kc,vault,extdb,extapi other;

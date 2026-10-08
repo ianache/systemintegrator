@@ -1,0 +1,32 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant TF as TenantFilter
+    participant C as FlowController ★
+    participant M as FlowMetricsService
+    participant R as FlowPersistenceAdapter
+    participant ER as FlowExecutionPersistenceAdapter
+    participant DB as MySQL (flow, flow_execution, flow_execution_step)
+
+    Client->>TF: GET /api/v1/flows/metrics/summary (X-Tenant-ID)
+    alt X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>M: summarize(tenantId)
+        M->>R: findAll(tenantId, activeOnly=true)
+        R->>DB: SELECT flow WHERE tenant_id AND archived=false
+        DB-->>R: filas
+        R-->>M: List Flow
+        M->>M: publishedFlowCount = flows con activeVersionNumber != null
+        M->>ER: executionMetrics(tenantId, now-24h)
+        ER->>DB: COUNT ejecuciones, COUNT FAILURE, pasos fallidos
+        alt total == 0
+            ER-->>M: resumen en cero
+        else total > 0
+            ER->>DB: duration_ms en offset p95 y p50, ultima ejecucion y sus pasos
+            ER-->>M: FlowMetricsSummary
+        end
+        M-->>C: summary.withPublishedFlowCount(n)
+        C-->>Client: 200 FlowMetricsSummaryResponse
+    end

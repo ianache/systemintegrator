@@ -1,0 +1,68 @@
+---
+okf_version: "0.2"
+c4_level: Sequence
+endpoint: "GET /api/v1/messages"
+operation: "MessageMonitorController.list"
+status: REQUIRES_REVIEW
+human-reviewed: false
+---
+
+# GET /api/v1/messages
+
+Listar mensajes (inbox + outbox) con filtros. Origen: INFERRED_FROM_CONTROLLER (no existe OpenAPI). Participante foco marcado con ★.
+
+```mermaid
+sequenceDiagram
+    autonumber
+    actor Client as Cliente (UI/BFF)
+    participant TF as TenantFilter
+    participant C as ★ MessageMonitorController
+    participant S as MessageMonitorService
+    participant IR as SpringDataInboxRepository
+    participant OR as SpringDataOutboxRepository
+    participant DB as MySQL
+    participant EH as ApiExceptionHandler
+
+    Client->>TF: GET /api/v1/messages?status&domain&from&to + X-Tenant-ID
+    alt Header X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 ProblemDetail (TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED)
+    else Header valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>C: TenantContext.requireTenantId()
+        alt Tenant no establecido
+            C->>EH: TenantRequiredException
+            EH-->>Client: 400 BAD_REQUEST
+        else OK
+            C->>S: list(tenantId, status="ALL" por defecto, domain, from, to)
+            S->>IR: findByTenantId(tenantId, PageRequest 0..200)
+            IR->>DB: SELECT inbox WHERE tenant_id
+            DB-->>IR: filas inbox
+            S->>OR: findByTenantId(tenantId, PageRequest 0..200)
+            OR->>DB: SELECT outbox WHERE tenant_id
+            DB-->>OR: filas outbox
+            S->>S: map a MessageSummary, normalizar estado, filtrar status/domain/from/to, ordenar por timestamp desc, limit 200
+            S-->>C: List MessageSummary
+            C-->>Client: 200 JSON
+        end
+    end
+    opt Parametro from/to con formato invalido
+        C->>EH: MethodArgumentTypeMismatchException
+        EH-->>Client: 400 BAD_REQUEST
+    end
+```
+
+## Archivos fuente
+
+- [MessageMonitorController](../../../src/main/java/com/cl2/integration/adapter/in/web/MessageMonitorController.java)
+- [MessageMonitorService](../../../src/main/java/com/cl2/integration/integration/monitor/MessageMonitorService.java)
+- [SpringDataInboxRepository](../../../src/main/java/com/cl2/integration/integration/inbox/SpringDataInboxRepository.java)
+- [SpringDataOutboxRepository](../../../src/main/java/com/cl2/integration/integration/outbox/SpringDataOutboxRepository.java)
+- [TenantFilter](../../../src/main/java/com/cl2/integration/infrastructure/tenant/TenantFilter.java)
+- [TenantContext](../../../src/main/java/com/cl2/integration/infrastructure/tenant/TenantContext.java)
+- [ApiExceptionHandler](../../../src/main/java/com/cl2/integration/adapter/in/web/ApiExceptionHandler.java)
+
+## Procedencia
+
+- Contrato del endpoint: INFERRED_FROM_CONTROLLER.
+- EXTRACTED: controller, service, repositorios y manejo de errores. INFERRED: tablas MySQL (se asumen por los repositorios Spring Data JPA); no se abrio SpringDataInboxRepository/OutboxRepository ni las entidades en detalle.
+- Todas las rutas (excepto /actuator) exigen cabecera X-Tenant-ID (TenantFilter).

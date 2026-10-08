@@ -1,0 +1,51 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant TF as TenantFilter
+    participant C as FlowController ★
+    participant S as FlowService
+    participant F as Flow (dominio)
+    participant R as FlowPersistenceAdapter
+    participant DB as MySQL (tabla flow)
+    participant AH as ApiExceptionHandler
+
+    Client->>TF: PUT /api/v1/flows/{flowId} (X-Tenant-ID, body name, triggerSummary, draftGraph, expectedVersion)
+    alt X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        TF->>C: TenantContext.set(tenantId)
+        alt body invalido (name vacio, expectedVersion nulo) o JSON ilegible
+            C-->>AH: MethodArgumentNotValidException / HttpMessageNotReadableException
+            AH-->>Client: 400 VALIDATION_FAILED / BAD_REQUEST
+        else body valido
+            C->>C: draftGraph JsonNode -> String
+            C->>S: updateDraft(tenantId, flowId, UpdateFlowDraftCommand)
+            S->>R: findById(tenantId, flowId)
+            R->>DB: SELECT flow WHERE tenant_id AND id
+            alt flow no existe / otro tenant
+                R-->>AH: FlowNotFoundException
+                AH-->>Client: 404 FLOW_NOT_FOUND
+            else encontrado
+                R-->>S: Flow
+                S->>F: updateDraft(name, triggerSummary, draftGraph, expectedVersion)
+                alt version actual != expectedVersion
+                    F-->>AH: FlowConflictException
+                    AH-->>Client: 409 FLOW_CONFLICT
+                else version coincide
+                    F-->>S: Flow version+1
+                    S->>R: save(tenantId, flow)
+                    R->>DB: UPDATE flow ... WHERE tenant_id AND id AND version = version-1
+                    alt 0 filas actualizadas (concurrencia)
+                        R-->>AH: FlowConflictException
+                        AH-->>Client: 409 FLOW_CONFLICT
+                    else 1 fila
+                        R->>DB: SELECT flow (recarga)
+                        DB-->>R: fila
+                        R-->>S: Flow
+                        S-->>C: FlowView
+                        C-->>Client: 200 FlowResponse
+                    end
+                end
+            end
+        end
+    end

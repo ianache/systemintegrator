@@ -1,0 +1,62 @@
+sequenceDiagram
+    autonumber
+    actor Cli as Cliente HTTP
+    participant TF as TenantFilter / TenantContext
+    participant C as ★ IntegrationProfileController
+    participant EH as ApiExceptionHandler
+    participant S as IntegrationProfileService
+    participant D as IntegrationProfile (dominio)
+    participant P as IntegrationProfileRepository (puerto)
+    participant A as IntegrationProfilePersistenceAdapter
+    participant DB as MySQL (integration_profile)
+    participant EV as ApplicationEventPublisher
+    participant L as IntegrationProfileEventListener
+    participant K as Kafka (integration-profile.events)
+
+    Cli->>TF: POST /api/v1/integration-profiles (X-Tenant-ID, body JSON)
+    alt X-Tenant-ID ausente
+        TF-->>Cli: 400 TENANT_HEADER_MISSING
+    else X-Tenant-ID no es UUID
+        TF-->>Cli: 400 TENANT_HEADER_MALFORMED
+    else header valido
+        TF->>TF: TenantContext.set(tenantId)
+        TF->>C: create(@Valid CreateIntegrationProfileRequest)
+        alt Bean Validation falla (businessDomain/externalSource en blanco, syncDirection/sourceOfTruth nulos) o JSON ilegible
+            C-->>EH: MethodArgumentNotValidException / HttpMessageNotReadableException
+            EH-->>Cli: 400 VALIDATION_FAILED / BAD_REQUEST
+        else request valido
+            C->>C: configurationRequest().toDomain(objectMapper)
+            C->>S: create(TenantContext.requireTenantId(), CreateIntegrationProfileCommand)
+            S->>P: existsActive(tenantId, businessDomain, externalSource)
+            P->>A: existsActive(...)
+            A->>DB: SELECT exists (tenant, dominio, fuente, active=true)
+            DB-->>A: boolean
+            alt ya existe perfil activo
+                S-->>EH: IntegrationProfileConflictException
+                EH-->>Cli: 409 INTEGRATION_PROFILE_CONFLICT
+            else no existe
+                S->>D: IntegrationProfile.create(UUID.randomUUID(), ...) active=true, paused=false, version=0
+                alt dominio invalido (blank)
+                    D-->>EH: IllegalArgumentException
+                    EH-->>Cli: 400 BAD_REQUEST
+                end
+                S->>P: save(tenantId, profile)
+                P->>A: save(...)
+                A->>DB: INSERT integration_profile (persist + flush)
+                alt violacion de unicidad / integridad
+                    A-->>EH: IntegrationProfileConflictException
+                    EH-->>Cli: 409 INTEGRATION_PROFILE_CONFLICT
+                end
+                DB-->>A: fila persistida
+                A-->>S: IntegrationProfile
+                S->>EV: publishEvent(IntegrationProfileEvent "IntegrationProfileCreated")
+                S-->>C: IntegrationProfileView
+                C->>C: toResponse(view): SyncStateRepository.find(profileId) (integration_sync_state)
+                C-->>Cli: 201 Created IntegrationProfileResponse
+                Note over EV,K: Tras COMMIT (AFTER_COMMIT, fallbackExecution)
+                EV->>L: publishAfterCommit(event)
+                L->>K: IntegrationProfileEventPublisher.publish (key=profileId)
+            end
+        end
+    end
+    TF->>TF: TenantContext.clear() (finally)

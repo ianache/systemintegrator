@@ -1,0 +1,36 @@
+sequenceDiagram
+    autonumber
+    actor Client
+    participant TF as TenantFilter
+    participant C as FlowController ★
+    participant M as FlowMetricsService
+    participant ER as FlowExecutionPersistenceAdapter
+    participant DB as MySQL (flow_execution, flow_execution_step)
+    participant AH as ApiExceptionHandler
+
+    Client->>TF: GET /api/v1/flows/{flowId}/executions/{executionId} (X-Tenant-ID)
+    alt X-Tenant-ID ausente o no UUID
+        TF-->>Client: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        TF->>C: TenantContext.set(tenantId)
+        alt flowId o executionId no UUID
+            C-->>AH: MethodArgumentTypeMismatchException
+            AH-->>Client: 400 BAD_REQUEST
+        else ids validos
+            C->>M: getExecution(tenantId, flowId, executionId)
+            M->>ER: findById(tenantId, flowId, executionId)
+            ER->>DB: SELECT flow_execution WHERE tenant_id AND flow_id AND id
+            alt no existe (o de otro tenant/flow)
+                M-->>AH: FlowExecutionNotFoundException
+                AH-->>Client: 404 FLOW_EXECUTION_NOT_FOUND
+            else encontrada
+                ER-->>M: FlowExecution
+                M->>ER: findSteps(executionId)
+                ER->>DB: SELECT flow_execution_step ORDER BY step_order
+                DB-->>ER: filas
+                ER-->>M: List FlowExecutionStep
+                M-->>C: FlowExecutionWithSteps
+                C-->>Client: 200 FlowExecutionDetailResponse
+            end
+        end
+    end

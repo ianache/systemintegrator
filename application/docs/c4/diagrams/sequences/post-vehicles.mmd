@@ -1,0 +1,50 @@
+sequenceDiagram
+    autonumber
+    actor C as Cliente
+    participant F as TenantFilter
+    participant K as ★ VehicleController
+    participant S as VehicleService
+    participant D as Vehicle (domain)
+    participant P as VehiclePersistenceAdapter
+    participant O as OutboxRepository
+    participant DB as MySQL (vehicle, integration_outbox)
+    participant R as OutboxRelayScheduler
+    participant KP as KafkaOutboxPublisher
+    participant KF as Kafka
+
+    C->>F: POST /api/v1/vehicles (X-Tenant-ID, CreateVehicleRequest)
+    alt header ausente o no UUID
+        F-->>C: 400 TENANT_HEADER_MISSING / TENANT_HEADER_MALFORMED
+    else tenant valido
+        F->>F: TenantContext.set(tenantId)
+        F->>K: create(@Valid CreateVehicleRequest)
+        alt vin/brandCode/modelCode en blanco o modelYear fuera de 1886..3000
+            K-->>C: 400 (MethodArgumentNotValidException)
+        else body valido
+            K->>K: TenantContext.requireTenantId()
+            K->>S: create(tenantId, vin, brandCode, modelCode, modelYear)
+            Note over S: @Transactional
+            S->>P: existsByVin(tenantId, vin)
+            P->>DB: SELECT exists (tenant_id, vin)
+            DB-->>S: boolean
+            alt VIN ya existe en el tenant
+                S-->>C: IllegalArgumentException (ver AMBIGUOUS: 500 o 400, no 409)
+            else VIN libre
+                S->>D: Vehicle.create(randomUUID, tenantId, ...)
+                D-->>S: Vehicle (active=true, version=0)
+                S->>P: save(vehicle)
+                P->>DB: INSERT vehicle
+                DB-->>P: fila
+                P-->>S: Vehicle
+                S->>O: save(OutboxEvent.pending(tenant, id, "Vehicle", "vehicle.created", json VehicleEvent.created))
+                O->>DB: INSERT integration_outbox (PENDING, misma tx)
+                S-->>K: Vehicle
+                K-->>C: 201 VehicleResponse
+            end
+        end
+    end
+    F->>F: TenantContext.clear() (finally)
+    R-)DB: poll pendientes (asincrono, fixed-delay 1s)
+    R->>KP: publish(entity)
+    KP->>KF: send(topic o "integration.events", key=outboxId, headers X-Tenant-ID, X-Event-Type, X-Aggregate-ID)
+    R->>DB: marca PUBLISHED, o reintento con backoff si falla

@@ -1,0 +1,47 @@
+sequenceDiagram
+    autonumber
+    participant T as IntegrationSyncScheduler / POST .../sync
+    participant SV as IntegrationSyncService
+    participant O as ★ IntegrationSyncOrchestrator
+    participant V as SecretResolver (Vault)
+    participant SS as SyncStateRepository
+    participant J as GenericJdbcAdapter
+    participant X as BD externa
+    participant TR as TransformationService
+    participant OB as OutboxRepository
+    participant RL as OutboxRelayScheduler / KafkaOutboxPublisher
+    participant K as Kafka integration.dominio.events
+    participant L as KafkaInboxListener + InboxProcessor
+    participant D as OutboundEventDispatcher
+    participant H as HttpOutboundClient
+    participant A as API REST externa
+    T->>SV: triggerSync(tenantId, profileId) / ciclo cron
+    SV->>O: run(profile)
+    O->>V: resolve(credentialRef, tenantId)
+    O->>SS: find(profileId) watermark previo
+    O->>J: extractRows(...)
+    J->>X: SELECT parametrizado
+    X-->>O: filas
+    loop por fila/lote
+        O->>TR: transform(json, profile)
+        O->>OB: guarda evento (outbox)
+    end
+    alt éxito
+        O->>SS: upsert(watermark avanzado, SUCCESS)
+    else fallo o cancelación
+        O->>SS: recordFailure / recordCancelled
+    end
+    RL->>OB: pollAndRelay (fixedDelay)
+    RL->>K: publish (confirmación síncrona)
+    K->>L: onMessage(record)
+    L->>D: dispatch(eventId, tenantId, eventType, payload)
+    D->>D: busca perfiles outbound activos (anti-loop por origen)
+    alt sin perfiles coincidentes
+        D-->>L: sin entrega (log INFO)
+    else perfil coincide
+        D->>V: resolve(credentialRef)
+        D->>TR: transform
+        D->>H: enviar
+        H->>A: HTTP
+        A-->>H: 2xx / error
+    end

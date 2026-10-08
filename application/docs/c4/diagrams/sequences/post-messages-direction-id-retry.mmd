@@ -1,0 +1,68 @@
+sequenceDiagram
+    autonumber
+    actor Client as Cliente (UI/BFF)
+    participant TF as TenantFilter
+    participant C as ★ MessageMonitorController
+    participant S as MessageMonitorService
+    participant IR as SpringDataInboxRepository
+    participant OR as SpringDataOutboxRepository
+    participant D as OutboundEventDispatcher
+    participant P as IntegrationProfileRepository
+    participant V as SecretResolver (Vault)
+    participant T as TransformationService
+    participant H as HttpOutboundClient
+    participant X as Sistema externo REST
+    participant DB as MySQL
+    participant EH as ApiExceptionHandler
+
+    Client->>TF: POST /api/v1/messages/{direction}/{id}/retry + X-Tenant-ID
+    alt Header invalido
+        TF-->>Client: 400 ProblemDetail (TENANT_HEADER_*)
+    else Header valido
+        TF->>C: TenantContext.set(tenantId)
+        C->>S: retry(tenantId, direction, id) [@Transactional]
+        alt direction == INBOUND
+            S->>IR: findByEventIdAndTenantId(id, tenantId)
+            IR->>DB: SELECT inbox
+            alt No existe
+                S->>EH: MessageNotFoundException
+                EH-->>Client: 404 MESSAGE_NOT_FOUND
+            else Existe
+                S->>D: dispatch(eventId, tenantId, eventType, payload, null, batchContext)
+                D->>P: findAll(tenantId, activos)
+                P->>DB: SELECT integration_profile
+                opt Hay perfiles OUTBOUND/BIDIRECTIONAL REST que coinciden con el dominio
+                    D->>V: resolve(credentialRef, tenantId)
+                    D->>T: transform(payload, profile) (omitido si batch)
+                    D->>H: send(endpoint, secret, payload, tenantId) via ResilienceExecutor
+                    H->>X: HTTP request
+                    X-->>H: respuesta
+                end
+                alt dispatch OK
+                    S->>S: entity.markProcessed(now)
+                else Excepcion en dispatch
+                    S->>S: entity.markDeadLetter(ex.getMessage())
+                end
+                S->>IR: save(entity)
+                IR->>DB: UPDATE inbox
+                S-->>C: MessageDetail
+                C-->>Client: 200 JSON (estado PROCESSED o DLQ)
+            end
+        else direction == OUTBOUND
+            S->>OR: findByIdAndTenantId(id, tenantId)
+            OR->>DB: SELECT outbox
+            alt No existe
+                S->>EH: MessageNotFoundException
+                EH-->>Client: 404 MESSAGE_NOT_FOUND
+            else Existe
+                S->>S: entity.retryNow(now) (PENDING, attempts=0)
+                S->>OR: save(entity)
+                OR->>DB: UPDATE outbox
+                S-->>C: MessageDetail
+                C-->>Client: 200 JSON (el OutboxRelayScheduler lo publica despues)
+            end
+        else otro valor
+            S->>EH: IllegalArgumentException
+            EH-->>Client: 400 BAD_REQUEST
+        end
+    end
